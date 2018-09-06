@@ -2,15 +2,14 @@ package chain
 
 import (
 	"bytes"
-	"frigate/rank"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
+	"git.fleta.io/fleta/common/rank"
 	"git.fleta.io/fleta/common/store"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/amount"
@@ -21,6 +20,8 @@ import (
 
 // Provider TODO
 type Provider interface {
+	Height() uint32
+	RewardValue() amount.Amount
 	Block(height uint32) (*block.Block, error)
 	BlockByHash(h hash.Hash256) (*block.Block, error)
 	BlockHash(height uint32) (hash.Hash256, error)
@@ -36,7 +37,7 @@ type Chain interface {
 	Provider
 	Init() error
 	Close()
-	ConnectBlock(b *block.Block, s *block.Signed, rankAddrsSorted []common.Address, getnValue amount.Amount) (map[uint64]bool, error)
+	ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank) (map[uint64]bool, error)
 }
 
 // Base TODO
@@ -119,6 +120,11 @@ func (cn *Base) Init() error {
 		}
 	}()
 	return nil
+}
+
+// RewardValue TODO
+func (cn *Base) RewardValue() amount.Amount {
+	return 1
 }
 
 // Close TODO
@@ -222,7 +228,7 @@ func (p *profile) Print() {
 }
 
 // ConnectBlock TODO
-func (cn *Base) ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank, genValue amount.Amount) (map[uint64]bool, error) {
+func (cn *Base) ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank) (map[uint64]bool, error) {
 	var prevHash hash.Hash256
 	if cn.Height() == 0 {
 		prevHash = GenesisHash
@@ -240,86 +246,33 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank, ge
 	if err := ValidateBlockSigned(b, s, Top); err != nil {
 		return nil, err
 	}
-	addrHashes, txHashes, err := ValidateTransactionSignatures(b.Transactions, b.TransactionSignatures)
-	if err != nil {
-		return nil, err
+	height := cn.Height() + 1
+
+	txHashes := make([]hash.Hash256, 0, len(b.Transactions))
+
+	spentHash := map[uint64]bool{}
+	unspentHash := map[uint64]*transaction.TxOut{}
+	for idx, tx := range b.Transactions {
+		result, err := ValidateTransaction(cn, tx, b.TransactionSignatures[idx], uint16(idx))
+		if err != nil {
+			return nil, err
+		}
+		txHashes = append(txHashes, result.TxHash)
+
+		for k, v := range result.SpentHash {
+			spentHash[k] = v
+		}
+		for k, v := range result.UnspentHash {
+			unspentHash[k] = v
+		}
 	}
 
 	root, err := level.BuildLevelRoot(txHashes)
 	if err != nil {
 		return nil, err
 	}
-
 	if !b.Header.HashLevelRoot.Equal(hash.TwoHash(prevHash, root)) {
 		return nil, ErrMismatchHashLevelRoot
-	}
-
-	height := cn.Height() + 1
-	spentHash := map[uint64]bool{}
-	unspentHash := map[uint64]*transaction.TxOut{}
-	coinbaseCount := 0
-	for idx, tx := range b.Transactions {
-		addrHash := addrHashes[idx]
-		var insum amount.Amount
-		hasCoinbase := false
-		for _, vin := range tx.Vin() {
-			if vin.IsCoinbase() {
-				insum += genValue
-				hasCoinbase = true
-				coinbaseCount++
-			} else {
-				if vin.Height >= height {
-					return nil, ErrExceedTransactionInputHeight
-				}
-				if utxo, err := cn.Unspent(vin.Height, vin.Index, vin.N); err != nil {
-					return nil, err
-				} else {
-					spentHash[vin.ID()] = true
-					insum += utxo.Amount
-
-					if len(addrHash) != len(utxo.Addresses) {
-						return nil, ErrMismatchOwnerCount
-					}
-					for _, addr := range utxo.Addresses {
-						if !addrHash[addr.String()] {
-							return nil, ErrMismatchAddress
-						}
-					}
-				}
-			}
-		}
-
-		if hasCoinbase {
-			if len(tx.Vin()) > 1 {
-				return nil, ErrInvalidCoinbaseTransaction
-			}
-			if coinbaseCount > 1 {
-				return nil, ErrExceedCoinbaseCount
-			}
-		}
-
-		var outsum amount.Amount
-		for n, vout := range tx.Vout() {
-			if vout.Amount == 0 {
-				return nil, ErrInvalidAmount
-			}
-			unspentHash[transaction.MarshalID(height, uint16(idx), uint16(n))] = vout
-			outsum += vout.Amount
-		}
-		if outsum > insum {
-			return nil, ErrExceedTransactionInputValue
-		}
-		if hasCoinbase {
-			if insum != outsum {
-				return nil, ErrInvalidTransactionFee
-			}
-		} else {
-			fee := insum - outsum
-			calcultedFee := amount.CaclulateFee(len(tx.Vin()), len(tx.Vout()))
-			if fee != calcultedFee {
-				return nil, ErrInvalidTransactionFee
-			}
-		}
 	}
 
 	if err := cn.writeBlock(height, b, s); err != nil {

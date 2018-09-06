@@ -8,6 +8,7 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/rank"
+	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/transaction"
 )
@@ -108,4 +109,92 @@ func ValidateTransactionSignatures(transactions []transaction.Transaction, signa
 	}
 	wg.Wait()
 	return addrHashes, txHashes, nil
+}
+
+// ValidateResult TODO
+type ValidateResult struct {
+	TxHash      hash.Hash256
+	SpentHash   map[uint64]bool
+	UnspentHash map[uint64]*transaction.TxOut
+}
+
+// ValidateTransaction TODO
+func ValidateTransaction(cn Chain, tx transaction.Transaction, sigs []common.Signature, idx uint16) (*ValidateResult, error) {
+	height := cn.Height() + 1
+
+	spentHash := map[uint64]bool{}
+	unspentHash := map[uint64]*transaction.TxOut{}
+
+	txHash, err := tx.Hash()
+	if err != nil {
+		return nil, err
+	}
+	addrs := make([]common.Address, 0, len(sigs))
+	var insum amount.Amount
+	hasCoinbase := false
+	for _, vin := range tx.Vin() {
+		if vin.IsCoinbase() {
+			insum += cn.RewardValue()
+			hasCoinbase = true
+		} else {
+			if vin.Height >= height {
+				return nil, ErrExceedTransactionInputHeight
+			}
+			if utxo, err := cn.Unspent(vin.Height, vin.Index, vin.N); err != nil {
+				return nil, err
+			} else {
+				spentHash[vin.ID()] = true
+				insum += utxo.Amount
+
+				for i, addr := range utxo.Addresses {
+					if i >= len(addrs) {
+						sig := sigs[i]
+						pubkey, err := common.RecoverPubkey(txHash, sig)
+						if err != nil {
+							return nil, err
+						}
+						addrs = append(addrs, common.AddressFromPubkey(pubkey))
+					}
+					sigAddr := addrs[i]
+					if !addr.Equal(sigAddr) {
+						return nil, ErrMismatchAddress
+					}
+				}
+			}
+		}
+	}
+
+	if hasCoinbase {
+		if len(tx.Vin()) > 1 {
+			return nil, ErrInvalidCoinbaseTransaction
+		}
+	}
+	var outsum amount.Amount
+	for n, vout := range tx.Vout() {
+		if vout.Amount == 0 {
+			return nil, ErrInvalidAmount
+		}
+		unspentHash[transaction.MarshalID(height, idx, uint16(n))] = vout
+		outsum += vout.Amount
+	}
+	if outsum > insum {
+		return nil, ErrExceedTransactionInputValue
+	}
+	if hasCoinbase {
+		if insum != outsum {
+			return nil, ErrInvalidTransactionFee
+		}
+	} else {
+		fee := insum - outsum
+		calcultedFee := amount.CaclulateFee(len(tx.Vin()), len(tx.Vout()))
+		if fee != calcultedFee {
+			return nil, ErrInvalidTransactionFee
+		}
+	}
+	result := &ValidateResult{
+		TxHash:      txHash,
+		SpentHash:   spentHash,
+		UnspentHash: unspentHash,
+	}
+	return result, nil
 }
