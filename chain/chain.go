@@ -20,10 +20,9 @@ import (
 
 // Provider TODO
 type Provider interface {
+	Config() Config
 	Genesis() hash.Hash256
-	Version() uint16
 	Height() uint32
-	FormulationAmount() amount.Amount
 	HashCurrentBlock() (hash.Hash256, error)
 	RewardValue() amount.Amount
 	Block(height uint32) (*block.Block, error)
@@ -46,6 +45,7 @@ type Chain interface {
 
 // Base TODO
 type Base struct {
+	genesisHash       hash.Hash256
 	blockStore        store.Store
 	utxoStore         store.Store
 	height            uint32
@@ -59,7 +59,7 @@ type Base struct {
 }
 
 // NewBase TODO
-func NewBase(config *Config, blockStore store.Store, utxoStore store.Store, cacheCount int) (*Base, error) {
+func NewBase(config *Config, GenesisHash hash.Hash256, blockStore store.Store, utxoStore store.Store, cacheCount int) (*Base, error) {
 	var height uint32
 	if bh, err := blockStore.Get([]byte("height")); err != nil {
 	} else {
@@ -87,6 +87,7 @@ func NewBase(config *Config, blockStore store.Store, utxoStore store.Store, cach
 		processedHeight:   processedHeight,
 		utxoCache:         map[uint64]*transaction.TxOut{},
 		maxUTXOCacheCount: cacheCount,
+		genesisHash:       GenesisHash,
 		config:            config,
 	}
 	return cn, nil
@@ -132,18 +133,13 @@ func (cn *Base) Init() error {
 // Genesis TODO
 func (cn *Base) Genesis() hash.Hash256 {
 	var h hash.Hash256
-	copy(h[:], cn.config.GenesisHash[:])
+	copy(h[:], cn.genesisHash[:])
 	return h
 }
 
-// Version TODO
-func (cn *Base) Version() uint16 {
-	return cn.config.Version
-}
-
-// FormulationAmount TODO
-func (cn *Base) FormulationAmount() amount.Amount {
-	return cn.config.FormulationAmount
+// Config TODO
+func (cn *Base) Config() Config {
+	return (*cn.config)
 }
 
 // HashCurrentBlock TODO

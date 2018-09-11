@@ -116,6 +116,9 @@ func validateTransaction(ctx *ValidationContext, cn Chain, t transaction.Transac
 			if vout.Amount == 0 {
 				return ErrInvalidAmount
 			}
+			if vout.Amount < cn.Config().DustAmount {
+				return ErrTooSmallAmount
+			}
 			ctx.UnspentHash[transaction.MarshalID(height, idx, uint16(n))] = vout
 			outsum += vout.Amount
 		}
@@ -171,7 +174,7 @@ func validateTransaction(ctx *ValidationContext, cn Chain, t transaction.Transac
 		}
 
 		calcultedFee := amount.CaclulateFee(len(tx.Vin), 1)
-		if insum != cn.FormulationAmount()+calcultedFee {
+		if insum != cn.Config().FormulationAmount+calcultedFee {
 			return ErrInvalidTransactionFee
 		}
 		//TODO : update formulator information

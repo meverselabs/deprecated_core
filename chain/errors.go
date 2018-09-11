@@ -32,5 +32,6 @@ var (
 	ErrMismatchSignedBlockHash       = errors.New("mismatch signed block hash")
 	ErrMismatchSignedTransactionHash = errors.New("mismatch signed transaction hash")
 	ErrInvalidAmount                 = errors.New("invalid amount")
+	ErrTooSmallAmount                = errors.New("too small amount")
 	ErrDoubleSpent                   = errors.New("double spent")
 )
