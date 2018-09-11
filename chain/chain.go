@@ -9,18 +9,21 @@ import (
 	"time"
 
 	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/rank"
 	"git.fleta.io/fleta/common/store"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/block"
+	"git.fleta.io/fleta/core/consensus/rank"
 	"git.fleta.io/fleta/core/level"
 	"git.fleta.io/fleta/core/transaction"
 )
 
 // Provider TODO
 type Provider interface {
+	Genesis() hash.Hash256
+	Version() uint16
 	Height() uint32
+	HashPrevBlock() (hash.Hash256, error)
 	RewardValue() amount.Amount
 	Block(height uint32) (*block.Block, error)
 	BlockByHash(h hash.Hash256) (*block.Block, error)
@@ -50,10 +53,12 @@ type Base struct {
 	cacheStore        store.Store
 	maxUTXOCacheCount int
 	ticker            *time.Ticker
+	hashPrevBlock     hash.Hash256
+	config            *Config
 }
 
 // NewBase TODO
-func NewBase(blockStore store.Store, utxoStore store.Store, cacheCount int) (*Base, error) {
+func NewBase(config *Config, blockStore store.Store, utxoStore store.Store, cacheCount int) (*Base, error) {
 	var height uint32
 	if bh, err := blockStore.Get([]byte("height")); err != nil {
 	} else {
@@ -81,6 +86,7 @@ func NewBase(blockStore store.Store, utxoStore store.Store, cacheCount int) (*Ba
 		processedHeight:   processedHeight,
 		utxoCache:         map[uint64]*transaction.TxOut{},
 		maxUTXOCacheCount: cacheCount,
+		config:            config,
 	}
 	return cn, nil
 }
@@ -110,7 +116,7 @@ func (cn *Base) Init() error {
 		}
 	}
 
-	cn.ticker = time.NewTicker(UTXOCacheWriteOutTime)
+	cn.ticker = time.NewTicker(cn.config.UTXOCacheWriteOutTime)
 	go func() {
 		for {
 			select {
@@ -122,9 +128,34 @@ func (cn *Base) Init() error {
 	return nil
 }
 
+// Genesis TODO
+func (cn *Base) Genesis() hash.Hash256 {
+	return cn.config.GenesisHash
+}
+
+// Version TODO
+func (cn *Base) Version() uint16 {
+	return cn.config.Version
+}
+
+// HashPrevBlock TODO
+func (cn *Base) HashPrevBlock() (hash.Hash256, error) {
+	var prevHash hash.Hash256
+	if cn.Height() == 0 {
+		prevHash = cn.Genesis()
+	} else {
+		h, err := cn.BlockHash(cn.Height())
+		if err != nil {
+			return hash.Hash256{}, err
+		}
+		prevHash = h
+	}
+	return prevHash, nil
+}
+
 // RewardValue TODO
 func (cn *Base) RewardValue() amount.Amount {
-	return 1
+	return 1 //TEMP
 }
 
 // Close TODO
@@ -148,15 +179,18 @@ func (cn *Base) processUTXO(isInit bool) error {
 
 	spentHash := map[uint64]bool{}
 	unspentHash := map[uint64]*transaction.TxOut{}
-	for idx, tx := range b.Transactions {
-		for _, vin := range tx.Vin() {
-			if vin.IsCoinbase() {
-			} else {
-				spentHash[vin.ID()] = true
+	for idx, t := range b.Transactions {
+		switch tx := t.(type) {
+		case *transaction.Base:
+			for _, vin := range tx.Vin {
+				if vin.IsCoinbase() {
+				} else {
+					spentHash[vin.ID()] = true
+				}
 			}
-		}
-		for n, vout := range tx.Vout() {
-			unspentHash[transaction.MarshalID(height, uint16(idx), uint16(n))] = vout
+			for n, vout := range tx.Vout {
+				unspentHash[transaction.MarshalID(height, uint16(idx), uint16(n))] = vout
+			}
 		}
 	}
 	for id, vout := range unspentHash {
@@ -229,15 +263,9 @@ func (p *profile) Print() {
 
 // ConnectBlock TODO
 func (cn *Base) ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank) (map[uint64]bool, error) {
-	var prevHash hash.Hash256
-	if cn.Height() == 0 {
-		prevHash = GenesisHash
-	} else {
-		h, err := cn.BlockHash(cn.Height())
-		if err != nil {
-			return nil, err
-		}
-		prevHash = h
+	prevHash, err := cn.HashPrevBlock()
+	if err != nil {
+		return nil, err
 	}
 	if !b.Header.HashPrevBlock.Equal(prevHash) {
 		return nil, ErrMismatchHashPrevBlock
@@ -253,7 +281,7 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank) (m
 	spentHash := map[uint64]bool{}
 	unspentHash := map[uint64]*transaction.TxOut{}
 	for idx, tx := range b.Transactions {
-		result, err := ValidateTransaction(cn, tx, b.TransactionSignatures[idx], uint16(idx))
+		result, err := validateTransactionWithResult(cn, tx, b.TransactionSignatures[idx], uint16(idx))
 		if err != nil {
 			return nil, err
 		}

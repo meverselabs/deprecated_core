@@ -15,8 +15,6 @@ type Transaction interface {
 	io.ReaderFrom
 	Version() uint16
 	Timestamp() uint64
-	Vin() []*TxIn
-	Vout() []*TxOut
 	Hash() (hash.Hash256, error)
 	Debug() (string, error)
 }
@@ -25,8 +23,8 @@ type Transaction interface {
 type Base struct {
 	Version_   uint16
 	Timestamp_ uint64
-	Vin_       []*TxIn  //MAXLEN : 65535
-	Vout_      []*TxOut //MAXLEN : 65535
+	Vin        []*TxIn  //MAXLEN : 65535
+	Vout       []*TxOut //MAXLEN : 65535
 }
 
 // NewBase TODO
@@ -34,8 +32,8 @@ func NewBase(version uint16, timestamp uint64) *Base {
 	return &Base{
 		Version_:   version,
 		Timestamp_: timestamp,
-		Vin_:       []*TxIn{},
-		Vout_:      []*TxOut{},
+		Vin:        []*TxIn{},
+		Vout:       []*TxOut{},
 	}
 }
 
@@ -54,24 +52,14 @@ func (tx *Base) SetTimestamp(t uint64) {
 	tx.Timestamp_ = t
 }
 
-// Vin TODO
-func (tx *Base) Vin() []*TxIn {
-	return tx.Vin_
-}
-
 // AppendVin TODO
 func (tx *Base) AppendVin(op *TxIn) {
-	tx.Vin_ = append(tx.Vin_, op)
-}
-
-// Vout TODO
-func (tx *Base) Vout() []*TxOut {
-	return tx.Vout_
+	tx.Vin = append(tx.Vin, op)
 }
 
 // AppendVout TODO
 func (tx *Base) AppendVout(out *TxOut) {
-	tx.Vout_ = append(tx.Vout_, out)
+	tx.Vout = append(tx.Vout, out)
 }
 
 // Hash TODO
@@ -85,10 +73,10 @@ func (tx *Base) Hash() (hash.Hash256, error) {
 
 // WriteTo TODO
 func (tx *Base) WriteTo(w io.Writer) (int64, error) {
-	if len(tx.Vin_) > 65535 {
+	if len(tx.Vin) > 65535 {
 		return 0, ErrExceedTransactionCount
 	}
-	if len(tx.Vin_) > 65535 {
+	if len(tx.Vin) > 65535 {
 		return 0, ErrExceedTransactionCount
 	}
 
@@ -99,11 +87,11 @@ func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 
-	if n, err := util.WriteUint16(w, uint16(len(tx.Vin_))); err != nil {
+	if n, err := util.WriteUint16(w, uint16(len(tx.Vin))); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
-		for _, vin := range tx.Vin() {
+		for _, vin := range tx.Vin {
 			if n, err := vin.WriteTo(w); err != nil {
 				return wrote, err
 			} else {
@@ -112,11 +100,11 @@ func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 		}
 	}
 
-	if n, err := util.WriteUint16(w, uint16(len(tx.Vout_))); err != nil {
+	if n, err := util.WriteUint16(w, uint16(len(tx.Vout))); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
-		for _, vout := range tx.Vout() {
+		for _, vout := range tx.Vout {
 			if n, err := vout.WriteTo(w); err != nil {
 				return wrote, err
 			} else {
@@ -141,14 +129,14 @@ func (tx *Base) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		tx.Vin_ = make([]*TxIn, 0, Len)
+		tx.Vin = make([]*TxIn, 0, Len)
 		for i := 0; i < int(Len); i++ {
 			vin := new(TxIn)
 			if n, err := vin.ReadFrom(r); err != nil {
 				return read, err
 			} else {
 				read += n
-				tx.Vin_ = append(tx.Vin_, vin)
+				tx.Vin = append(tx.Vin, vin)
 			}
 		}
 	}
@@ -157,14 +145,14 @@ func (tx *Base) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		tx.Vout_ = make([]*TxOut, 0, Len)
+		tx.Vout = make([]*TxOut, 0, Len)
 		for i := 0; i < int(Len); i++ {
 			vout := new(TxOut)
 			if n, err := vout.ReadFrom(r); err != nil {
 				return read, err
 			} else {
 				read += n
-				tx.Vout_ = append(tx.Vout_, vout)
+				tx.Vout = append(tx.Vout, vout)
 			}
 		}
 	}
@@ -177,8 +165,8 @@ func (tx *Base) MarshalJSON() ([]byte, error) {
 	enc := json.NewEncoder(&buffer)
 	if err := enc.Encode(map[string]interface{}{
 		"Timestamp": tx.Timestamp_,
-		"Vin":       tx.Vin_,
-		"Vout":      tx.Vout_,
+		"Vin":       tx.Vin,
+		"Vout":      tx.Vout,
 	}); err != nil {
 		return nil, err
 	}

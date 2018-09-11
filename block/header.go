@@ -10,6 +10,7 @@ import (
 
 // Header TODO
 type Header struct {
+	Height        uint32
 	Version       uint16
 	HashPrevBlock hash.Hash256
 	HashLevelRoot hash.Hash256
@@ -28,6 +29,12 @@ func (bh *Header) Hash() (hash.Hash256, error) {
 // WriteTo TODO
 func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
+	if n, err := util.WriteUint32(w, bh.Height); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+
 	if n, err := util.WriteUint16(w, bh.Version); err != nil {
 		return wrote, err
 	} else {
@@ -57,6 +64,12 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom TODO
 func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		bh.Height = v
+		read += n
+	}
 	if v, n, err := util.ReadUint16(r); err != nil {
 		return read, err
 	} else {

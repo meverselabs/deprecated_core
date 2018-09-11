@@ -15,8 +15,6 @@ var (
 	ErrExceedTransactionInputHeight = errors.New("exceed transaction input height")
 	// ErrInvalidCoinbaseTransaction TODO
 	ErrInvalidCoinbaseTransaction = errors.New("invalid coinbase transcation")
-	// ErrInvalidBlockSignatureCount TODO
-	ErrInvalidBlockSignatureCount = errors.New("invalid block signature count")
 	// ErrInvalidObserverPubkey TODO
 	ErrInvalidObserverPubkey = errors.New("invalid observer pubkey")
 	// ErrInvalidGeneratorAddress TODO
@@ -55,6 +53,8 @@ var (
 	ErrInvalidTransactionFee = errors.New("invalid transaction fee")
 	// ErrMismatchSignedBlockHash TODO
 	ErrMismatchSignedBlockHash = errors.New("mismatch signed block hash")
+	// ErrMismatchSignedTransactionHash TODO
+	ErrMismatchSignedTransactionHash = errors.New("mismatch signed transaction hash")
 	// ErrInvalidAmount TODO
 	ErrInvalidAmount = errors.New("invalid amount")
 )

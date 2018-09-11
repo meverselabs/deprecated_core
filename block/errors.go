@@ -11,6 +11,8 @@ var (
 	ErrExceedTransactionCount = errors.New("exceed transaction count")
 	// ErrExceedSignatureCount TODO
 	ErrExceedSignatureCount = errors.New("exceed signature count")
-	// ErrMismatchSignaturesPubkeys TODO
+	// ErrMismatchSignaturesCount TODO
 	ErrMismatchSignaturesCount = errors.New("mismatch signatures count")
+	// ErrExceedTimeoutCount TODO
+	ErrExceedTimeoutCount = errors.New("exceed timeout count")
 )
