@@ -47,6 +47,11 @@ func NewRankTable(recentSize int, GenesisTableAppendHash hash.Hash256) *RankTabl
 	return rm
 }
 
+// Height TODO
+func (rt *RankTable) Height() uint32 {
+	return rt.height
+}
+
 // Clone TODO
 func (rt *RankTable) Clone() *RankTable {
 	var rh hash.Hash256

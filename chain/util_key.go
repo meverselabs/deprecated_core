@@ -6,18 +6,18 @@ import (
 )
 
 const (
-	tagHeightBlock      = iota
-	toHeightBlockSigned = iota
-	tagHeightBlockHash  = iota
-	tagHashBlockHeight  = iota
+	tagHeightBlock         = iota
+	toHeightObserverSigned = iota
+	tagHeightBlockHash     = iota
+	tagHashBlockHeight     = iota
 )
 
 func toHeightBlockKey(height uint32) []byte {
 	return append(util.Uint32ToBytes(height), tagHeightBlock)
 }
 
-func toHeightBlockSignedKey(height uint32) []byte {
-	return append(util.Uint32ToBytes(height), toHeightBlockSigned)
+func toHeightObserverSignedKey(height uint32) []byte {
+	return append(util.Uint32ToBytes(height), toHeightObserverSigned)
 }
 
 func toHeightBlockHashKey(height uint32) []byte {

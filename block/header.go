@@ -6,15 +6,19 @@ import (
 
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
+	"git.fleta.io/fleta/core/consensus"
+	"git.fleta.io/fleta/core/consensus/timeout"
 )
 
 // Header TODO
 type Header struct {
-	Height        uint32
-	Version       uint16
-	HashPrevBlock hash.Hash256
-	HashLevelRoot hash.Hash256
-	Timestamp     uint64
+	Height              uint32
+	Version             uint16
+	HashPrevBlock       hash.Hash256
+	HashLevelRoot       hash.Hash256
+	Timestamp           uint64
+	HeadTimeouts        []*timeout.Timeout
+	TableAppendMessages []*consensus.SignedTableAppend
 }
 
 // Hash TODO
@@ -28,6 +32,10 @@ func (bh *Header) Hash() (hash.Hash256, error) {
 
 // WriteTo TODO
 func (bh *Header) WriteTo(w io.Writer) (int64, error) {
+	if len(bh.HeadTimeouts) > 255 {
+		return 0, ErrExceedTimeoutCount
+	}
+
 	var wrote int64
 	if n, err := util.WriteUint32(w, bh.Height); err != nil {
 		return wrote, err
@@ -57,6 +65,32 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 		return wrote, err
 	} else {
 		wrote += n
+	}
+
+	if n, err := util.WriteUint8(w, uint8(len(bh.HeadTimeouts))); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+		for _, to := range bh.HeadTimeouts {
+			if n, err := to.WriteTo(w); err != nil {
+				return wrote, err
+			} else {
+				wrote += n
+			}
+		}
+	}
+
+	if n, err := util.WriteUint8(w, uint8(len(bh.TableAppendMessages))); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+		for _, tm := range bh.TableAppendMessages {
+			if n, err := tm.WriteTo(w); err != nil {
+				return wrote, err
+			} else {
+				wrote += n
+			}
+		}
 	}
 	return wrote, nil
 }
@@ -94,6 +128,38 @@ func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		bh.Timestamp = v
 		read += n
+	}
+
+	if Len, n, err := util.ReadUint8(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		bh.HeadTimeouts = make([]*timeout.Timeout, 0, Len)
+		for i := 0; i < int(Len); i++ {
+			to := new(timeout.Timeout)
+			if n, err := to.ReadFrom(r); err != nil {
+				return read, err
+			} else {
+				read += n
+				bh.HeadTimeouts = append(bh.HeadTimeouts, to)
+			}
+		}
+	}
+
+	if Len, n, err := util.ReadUint8(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		bh.TableAppendMessages = make([]*consensus.SignedTableAppend, 0, Len)
+		for i := 0; i < int(Len); i++ {
+			tm := new(consensus.SignedTableAppend)
+			if n, err := tm.ReadFrom(r); err != nil {
+				return read, err
+			} else {
+				read += n
+				bh.TableAppendMessages = append(bh.TableAppendMessages, tm)
+			}
+		}
 	}
 	return read, nil
 }

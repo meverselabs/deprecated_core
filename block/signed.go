@@ -7,16 +7,12 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/consensus"
-	"git.fleta.io/fleta/core/consensus/timeout"
 )
 
 // Signed TODO
 type Signed struct {
-	BlockHash           hash.Hash256
-	GeneratorSignature  common.Signature
-	HeadTimeouts        []*timeout.Timeout
-	TableAppendMessages []*consensus.SignedTableAppend
+	BlockHash          hash.Hash256
+	GeneratorSignature common.Signature
 }
 
 // Hash TODO
@@ -30,10 +26,6 @@ func (s *Signed) Hash() (hash.Hash256, error) {
 
 // WriteTo TODO
 func (s *Signed) WriteTo(w io.Writer) (int64, error) {
-	if len(s.HeadTimeouts) > 255 {
-		return 0, ErrExceedTimeoutCount
-	}
-
 	var wrote int64
 	if n, err := s.BlockHash.WriteTo(w); err != nil {
 		return wrote, err
@@ -45,32 +37,6 @@ func (s *Signed) WriteTo(w io.Writer) (int64, error) {
 		return wrote, err
 	} else {
 		wrote += n
-	}
-
-	if n, err := util.WriteUint8(w, uint8(len(s.HeadTimeouts))); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-		for _, to := range s.HeadTimeouts {
-			if n, err := to.WriteTo(w); err != nil {
-				return wrote, err
-			} else {
-				wrote += n
-			}
-		}
-	}
-
-	if n, err := util.WriteUint8(w, uint8(len(s.TableAppendMessages))); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-		for _, tm := range s.TableAppendMessages {
-			if n, err := tm.WriteTo(w); err != nil {
-				return wrote, err
-			} else {
-				wrote += n
-			}
-		}
 	}
 	return wrote, nil
 }
@@ -89,38 +55,6 @@ func (s *Signed) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-
-	if Len, n, err := util.ReadUint8(r); err != nil {
-		return read, err
-	} else {
-		read += n
-		s.HeadTimeouts = make([]*timeout.Timeout, 0, Len)
-		for i := 0; i < int(Len); i++ {
-			to := new(timeout.Timeout)
-			if n, err := to.ReadFrom(r); err != nil {
-				return read, err
-			} else {
-				read += n
-				s.HeadTimeouts = append(s.HeadTimeouts, to)
-			}
-		}
-	}
-
-	if Len, n, err := util.ReadUint8(r); err != nil {
-		return read, err
-	} else {
-		read += n
-		s.TableAppendMessages = make([]*consensus.SignedTableAppend, 0, Len)
-		for i := 0; i < int(Len); i++ {
-			tm := new(consensus.SignedTableAppend)
-			if n, err := tm.ReadFrom(r); err != nil {
-				return read, err
-			} else {
-				read += n
-				s.TableAppendMessages = append(s.TableAppendMessages, tm)
-			}
-		}
-	}
 	return read, nil
 }
 
@@ -128,6 +62,15 @@ func (s *Signed) ReadFrom(r io.Reader) (int64, error) {
 type ObserverSigned struct {
 	Signed
 	ObserverSignatures []common.Signature //MAXLEN : 255
+}
+
+// Hash TODO
+func (s *ObserverSigned) Hash() (hash.Hash256, error) {
+	var buffer bytes.Buffer
+	if _, err := s.WriteTo(&buffer); err != nil {
+		return hash.Hash256{}, err
+	}
+	return hash.DoubleHash(buffer.Bytes()), nil
 }
 
 // WriteTo TODO

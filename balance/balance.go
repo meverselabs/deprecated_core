@@ -116,38 +116,41 @@ func (bc *Base) processAddr(cn chain.Chain, isInit bool) error {
 	for _, addr := range bc.addrs {
 		addrHash[addr.String()] = true
 	}
-	for idx, tx := range b.Transactions {
-		for _, vin := range tx.Vin() {
-			for _, addr := range bc.addrs {
-				if addrHash[addr.String()] {
-					bid := util.Uint64ToBytes(vin.ID())
-					key := append(addr[:], bid...)
-					if err := bc.addrStore.Delete(key); err != nil {
-						if err != store.ErrNotExistKey {
-							return err
+	for idx, t := range b.Transactions {
+		switch tx := t.(type) {
+		case *transaction.Base:
+			for _, vin := range tx.Vin {
+				for _, addr := range bc.addrs {
+					if addrHash[addr.String()] {
+						bid := util.Uint64ToBytes(vin.ID())
+						key := append(addr[:], bid...)
+						if err := bc.addrStore.Delete(key); err != nil {
+							if err != store.ErrNotExistKey {
+								return err
+							}
 						}
-					}
-					if isInit {
-						if err := bc.deleteAddressID(key); err != nil {
-							return err
+						if isInit {
+							if err := bc.deleteAddressID(key); err != nil {
+								return err
+							}
 						}
 					}
 				}
 			}
-		}
-		for n, vout := range tx.Vout() {
-			for _, addr := range vout.Addresses {
-				if addrHash[addr.String()] {
-					bid := util.Uint64ToBytes(transaction.MarshalID(height, uint16(idx), uint16(n)))
-					key := append(addr[:], bid...)
-					if err := bc.addrStore.Set(key, []byte{0}); err != nil {
-						if err != store.ErrNotExistKey {
-							return err
+			for n, vout := range tx.Vout {
+				for _, addr := range vout.Addresses {
+					if addrHash[addr.String()] {
+						bid := util.Uint64ToBytes(transaction.MarshalID(height, uint16(idx), uint16(n)))
+						key := append(addr[:], bid...)
+						if err := bc.addrStore.Set(key, []byte{0}); err != nil {
+							if err != store.ErrNotExistKey {
+								return err
+							}
 						}
-					}
-					if isInit {
-						if err := bc.cacheAddressID(key); err != nil {
-							return err
+						if isInit {
+							if err := bc.cacheAddressID(key); err != nil {
+								return err
+							}
 						}
 					}
 				}
@@ -170,25 +173,28 @@ func (bc *Base) ProcessBlock(height uint32, b *block.Block) error {
 	for _, addr := range bc.addrs {
 		addrHash[addr.String()] = true
 	}
-	for idx, tx := range b.Transactions {
-		for _, vin := range tx.Vin() {
-			for _, addr := range bc.addrs {
-				if addrHash[addr.String()] {
-					bid := util.Uint64ToBytes(vin.ID())
-					key := append(addr[:], bid...)
-					if err := bc.deleteAddressID(key); err != nil {
-						return err
+	for idx, t := range b.Transactions {
+		switch tx := t.(type) {
+		case *transaction.Base:
+			for _, vin := range tx.Vin {
+				for _, addr := range bc.addrs {
+					if addrHash[addr.String()] {
+						bid := util.Uint64ToBytes(vin.ID())
+						key := append(addr[:], bid...)
+						if err := bc.deleteAddressID(key); err != nil {
+							return err
+						}
 					}
 				}
 			}
-		}
-		for n, vout := range tx.Vout() {
-			for _, addr := range vout.Addresses {
-				if addrHash[addr.String()] {
-					bid := util.Uint64ToBytes(transaction.MarshalID(height, uint16(idx), uint16(n)))
-					key := append(addr[:], bid...)
-					if err := bc.cacheAddressID(key); err != nil {
-						return err
+			for n, vout := range tx.Vout {
+				for _, addr := range vout.Addresses {
+					if addrHash[addr.String()] {
+						bid := util.Uint64ToBytes(transaction.MarshalID(height, uint16(idx), uint16(n)))
+						key := append(addr[:], bid...)
+						if err := bc.cacheAddressID(key); err != nil {
+							return err
+						}
 					}
 				}
 			}

@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
+	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/store"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/block"
-	"git.fleta.io/fleta/core/consensus/rank"
 	"git.fleta.io/fleta/core/level"
 	"git.fleta.io/fleta/core/transaction"
 )
@@ -23,13 +23,14 @@ type Provider interface {
 	Genesis() hash.Hash256
 	Version() uint16
 	Height() uint32
-	HashPrevBlock() (hash.Hash256, error)
+	FormulationAmount() amount.Amount
+	HashCurrentBlock() (hash.Hash256, error)
 	RewardValue() amount.Amount
 	Block(height uint32) (*block.Block, error)
 	BlockByHash(h hash.Hash256) (*block.Block, error)
 	BlockHash(height uint32) (hash.Hash256, error)
-	BlockSigned(height uint32) (*block.Signed, error)
-	BlockSignedByHash(h hash.Hash256) (*block.Signed, error)
+	ObserverSigned(height uint32) (*block.ObserverSigned, error)
+	ObserverSignedByHash(h hash.Hash256) (*block.ObserverSigned, error)
 	Transactions(height uint32) ([]transaction.Transaction, error)
 	Transaction(height uint32, index uint16) (transaction.Transaction, error)
 	Unspent(height uint32, index uint16, n uint16) (*UTXO, error)
@@ -40,7 +41,7 @@ type Chain interface {
 	Provider
 	Init() error
 	Close()
-	ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank) (map[uint64]bool, error)
+	ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) (map[uint64]bool, error)
 }
 
 // Base TODO
@@ -130,7 +131,9 @@ func (cn *Base) Init() error {
 
 // Genesis TODO
 func (cn *Base) Genesis() hash.Hash256 {
-	return cn.config.GenesisHash
+	var h hash.Hash256
+	copy(h[:], cn.config.GenesisHash[:])
+	return h
 }
 
 // Version TODO
@@ -138,8 +141,13 @@ func (cn *Base) Version() uint16 {
 	return cn.config.Version
 }
 
-// HashPrevBlock TODO
-func (cn *Base) HashPrevBlock() (hash.Hash256, error) {
+// FormulationAmount TODO
+func (cn *Base) FormulationAmount() amount.Amount {
+	return cn.config.FormulationAmount
+}
+
+// HashCurrentBlock TODO
+func (cn *Base) HashCurrentBlock() (hash.Hash256, error) {
 	var prevHash hash.Hash256
 	if cn.Height() == 0 {
 		prevHash = cn.Genesis()
@@ -262,8 +270,8 @@ func (p *profile) Print() {
 }
 
 // ConnectBlock TODO
-func (cn *Base) ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank) (map[uint64]bool, error) {
-	prevHash, err := cn.HashPrevBlock()
+func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) (map[uint64]bool, error) {
+	prevHash, err := cn.HashCurrentBlock()
 	if err != nil {
 		return nil, err
 	}
@@ -271,31 +279,23 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank) (m
 		return nil, ErrMismatchHashPrevBlock
 	}
 
-	if err := ValidateBlockSigned(b, s, Top); err != nil {
+	if err := ValidateBlockGeneratorSignature(b, s.GeneratorSignature, ExpectedPublicKey); err != nil {
 		return nil, err
 	}
 	height := cn.Height() + 1
 
-	txHashes := make([]hash.Hash256, 0, len(b.Transactions))
-
-	spentHash := map[uint64]bool{}
-	unspentHash := map[uint64]*transaction.TxOut{}
+	ctx := NewValidationContext()
 	for idx, tx := range b.Transactions {
-		result, err := validateTransactionWithResult(cn, tx, b.TransactionSignatures[idx], uint16(idx))
+		txHash, err := tx.Hash()
 		if err != nil {
 			return nil, err
 		}
-		txHashes = append(txHashes, result.TxHash)
-
-		for k, v := range result.SpentHash {
-			spentHash[k] = v
-		}
-		for k, v := range result.UnspentHash {
-			unspentHash[k] = v
+		ctx.TxHashes = append(ctx.TxHashes, txHash)
+		if err := validateTransactionWithResult(ctx, cn, tx, b.TransactionSignatures[idx], uint16(idx)); err != nil {
+			return nil, err
 		}
 	}
-
-	root, err := level.BuildLevelRoot(txHashes)
+	root, err := level.BuildLevelRoot(ctx.TxHashes)
 	if err != nil {
 		return nil, err
 	}
@@ -307,12 +307,12 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank) (m
 		return nil, err
 	}
 
-	for id, vout := range unspentHash {
+	for id, vout := range ctx.UnspentHash {
 		if err := cn.cacheUTXO(id, vout); err != nil {
 			return nil, err
 		}
 	}
-	for id := range spentHash {
+	for id := range ctx.SpentHash {
 		if err := cn.deleteUTXO(id); err != nil {
 			return nil, err
 		}
@@ -323,7 +323,7 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.Signed, Top *rank.Rank) (m
 	}
 	cn.height = height
 
-	return spentHash, nil
+	return ctx.SpentHash, nil
 }
 
 // Height TODO
@@ -372,15 +372,15 @@ func (cn *Base) BlockHash(height uint32) (hash.Hash256, error) {
 	}
 }
 
-// BlockSigned TODO
-func (cn *Base) BlockSigned(height uint32) (*block.Signed, error) {
+// ObserverSigned TODO
+func (cn *Base) ObserverSigned(height uint32) (*block.ObserverSigned, error) {
 	if height > cn.Height() {
 		return nil, ErrExceedChainHeight
 	}
-	if v, err := cn.blockStore.Get(toHeightBlockSignedKey(height)); err != nil {
+	if v, err := cn.blockStore.Get(toHeightObserverSignedKey(height)); err != nil {
 		return nil, err
 	} else {
-		s := new(block.Signed)
+		s := new(block.ObserverSigned)
 		if _, err := s.ReadFrom(bytes.NewReader(v)); err != nil {
 			return nil, err
 		}
@@ -388,12 +388,12 @@ func (cn *Base) BlockSigned(height uint32) (*block.Signed, error) {
 	}
 }
 
-// BlockSignedByHash TODO
-func (cn *Base) BlockSignedByHash(h hash.Hash256) (*block.Signed, error) {
+// ObserverSignedByHash TODO
+func (cn *Base) ObserverSignedByHash(h hash.Hash256) (*block.ObserverSigned, error) {
 	if height, err := cn.blockStore.Get(toHashBlockHeightKey(h)); err != nil {
 		return nil, err
 	} else {
-		return cn.BlockSigned(util.BytesToUint32(height))
+		return cn.ObserverSigned(util.BytesToUint32(height))
 	}
 }
 
@@ -483,7 +483,7 @@ func (cn *Base) deleteUTXO(id uint64) error {
 	return nil
 }
 
-func (cn *Base) writeBlock(height uint32, b *block.Block, s *block.Signed) error {
+func (cn *Base) writeBlock(height uint32, b *block.Block, s *block.ObserverSigned) error {
 	{
 		var buffer bytes.Buffer
 		if _, err := b.WriteTo(&buffer); err != nil {
@@ -497,12 +497,12 @@ func (cn *Base) writeBlock(height uint32, b *block.Block, s *block.Signed) error
 		var buffer bytes.Buffer
 		if _, err := s.WriteTo(&buffer); err != nil {
 			return err
-		} else if err := cn.blockStore.Set(toHeightBlockSignedKey(height), buffer.Bytes()); err != nil {
+		} else if err := cn.blockStore.Set(toHeightObserverSignedKey(height), buffer.Bytes()); err != nil {
 			return err
 		}
 	}
 
-	if h, err := b.Header.Hash(); err != nil {
+	if h, err := s.Hash(); err != nil {
 		return err
 	} else if err := cn.blockStore.Set(toHeightBlockHashKey(height), h[:]); err != nil {
 		return err
