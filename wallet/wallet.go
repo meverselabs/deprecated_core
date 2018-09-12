@@ -9,63 +9,63 @@ import (
 
 // Wallet TODO
 type Wallet interface {
-	Accounts() []*Account
-	CreateAccount(name string) (*Account, error)
-	AccountsByName(name string) []*Account
-	AccountByAddress(addr common.Address) (*Account, error)
-	UpdateAccountName(addr common.Address, name string) error
-	DeleteAccount(addr common.Address) error
+	Keys() []*Key
+	CreateKey(name string) (*Key, error)
+	KeysByName(name string) []*Key
+	KeyByPublicKey(pubkey common.PublicKey) (*Key, error)
+	UpdateKeyName(pubkey common.PublicKey, name string) error
+	DeleteKey(pubkey common.PublicKey) error
 }
 
 // Base TODO
 type Base struct {
-	accountStore store.Store
-	accounts     []*Account
+	KeyStore store.Store
+	Keys_    []*Key
 }
 
 // NewBase TODO
-func NewBase(accountStore store.Store) (*Base, error) {
+func NewBase(KeyStore store.Store) (*Base, error) {
 	wa := &Base{
-		accountStore: accountStore,
-		accounts:     []*Account{},
+		KeyStore: KeyStore,
+		Keys_:    []*Key{},
 	}
-	_, values, err := accountStore.Scan(nil)
+	_, values, err := KeyStore.Scan(nil)
 	if err != nil {
 		return nil, err
 	}
 	for _, v := range values {
-		ac := new(Account)
+		ac := new(Key)
 		ac.PrivateKey = new(common.PrivateKey)
 		if _, err := ac.ReadFrom(bytes.NewReader(v)); err != nil {
 			return nil, err
 		}
-		wa.accounts = append(wa.accounts, ac)
+		wa.Keys_ = append(wa.Keys_, ac)
 	}
 	return wa, nil
 }
 
-// Accounts TODO
-func (wa *Base) Accounts() []*Account {
-	return wa.accounts
+// Keys TODO
+func (wa *Base) Keys() []*Key {
+	return wa.Keys_
 }
 
-// CreateAccount TODO
-func (wa *Base) CreateAccount(name string) (*Account, error) {
-	ac, err := NewAccount(name)
+// CreateKey TODO
+func (wa *Base) CreateKey(name string) (*Key, error) {
+	ac, err := NewKey(name)
 	if err != nil {
 		return nil, err
 	}
-	if err := wa.saveAccount(ac); err != nil {
+	if err := wa.saveKey(ac); err != nil {
 		return nil, err
 	}
-	wa.accounts = append(wa.accounts, ac)
+	wa.Keys_ = append(wa.Keys_, ac)
 	return ac, nil
 }
 
-// AccountsByName TODO
-func (wa *Base) AccountsByName(name string) []*Account {
-	list := []*Account{}
-	for _, ac := range wa.accounts {
+// KeysByName TODO
+func (wa *Base) KeysByName(name string) []*Key {
+	list := []*Key{}
+	for _, ac := range wa.Keys_ {
 		if ac.Name == name {
 			list = append(list, ac)
 		}
@@ -73,51 +73,51 @@ func (wa *Base) AccountsByName(name string) []*Account {
 	return list
 }
 
-// AccountByAddress TODO
-func (wa *Base) AccountByAddress(addr common.Address) (*Account, error) {
-	for _, ac := range wa.accounts {
-		if ac.Address().Equal(addr) {
+// KeyByPublicKey TODO
+func (wa *Base) KeyByPublicKey(pubkey common.PublicKey) (*Key, error) {
+	for _, ac := range wa.Keys_ {
+		if ac.PublicKey().Equal(pubkey) {
 			return ac, nil
 		}
 	}
-	return nil, ErrNotExistAccount
+	return nil, ErrNotExistKey
 }
 
-// UpdateAccountName TODO
-func (wa *Base) UpdateAccountName(addr common.Address, name string) error {
-	ac, err := wa.AccountByAddress(addr)
+// UpdateKeyName TODO
+func (wa *Base) UpdateKeyName(pubkey common.PublicKey, name string) error {
+	ac, err := wa.KeyByPublicKey(pubkey)
 	if err != nil {
 		return err
 	}
 	ac.Name = name
-	if err := wa.saveAccount(ac); err != nil {
+	if err := wa.saveKey(ac); err != nil {
 		return err
 	}
 	return nil
 }
 
-// DeleteAccount TODO
-func (wa *Base) DeleteAccount(addr common.Address) error {
-	if err := wa.accountStore.Delete(addr[:]); err != nil {
+// DeleteKey TODO
+func (wa *Base) DeleteKey(pubkey common.PublicKey) error {
+	if err := wa.KeyStore.Delete(pubkey[:]); err != nil {
 		return err
 	}
 
-	accounts := []*Account{}
-	for _, ac := range wa.accounts {
-		if !ac.Address().Equal(addr) {
-			accounts = append(accounts, ac)
+	Keys := []*Key{}
+	for _, ac := range wa.Keys_ {
+		if !ac.PublicKey().Equal(pubkey) {
+			Keys = append(Keys, ac)
 		}
 	}
-	wa.accounts = accounts
+	wa.Keys_ = Keys
 	return nil
 }
 
-func (wa *Base) saveAccount(ac *Account) error {
+func (wa *Base) saveKey(ac *Key) error {
 	var buffer bytes.Buffer
 	if _, err := ac.WriteTo(&buffer); err != nil {
 		return err
 	}
-	if err := wa.accountStore.Set([]byte(ac.Address().String()), buffer.Bytes()); err != nil {
+	if err := wa.KeyStore.Set([]byte(ac.PublicKey().String()), buffer.Bytes()); err != nil {
 		return err
 	}
 	return nil

@@ -7,43 +7,43 @@ import (
 	"git.fleta.io/fleta/common/util"
 )
 
-// Account TODO
-type Account struct {
+// Key TODO
+type Key struct {
 	*common.PrivateKey
 	Name string // MAXLEN : 65535
 }
 
-// NewAccount TODO
-func NewAccount(name string) (*Account, error) {
+// NewKey TODO
+func NewKey(name string) (*Key, error) {
 	privKey, err := common.NewPrivateKey()
 	if err != nil {
 		return nil, err
 	}
 
-	ac := &Account{
+	ac := &Key{
 		Name:       name,
 		PrivateKey: privKey,
 	}
 	return ac, nil
 }
 
-// NewAccountFromPrivateKey TODO
-func NewAccountFromPrivateKey(name string, privKey *common.PrivateKey) (*Account, error) {
-	ac := &Account{
+// NewKeyFromPrivateKey TODO
+func NewKeyFromPrivateKey(name string, privKey *common.PrivateKey) (*Key, error) {
+	ac := &Key{
 		Name:       name,
 		PrivateKey: privKey,
 	}
 	return ac, nil
 }
 
-// NewAccountFromBytes TODO
-func NewAccountFromBytes(name string, pk []byte) (*Account, error) {
+// NewKeyFromBytes TODO
+func NewKeyFromBytes(name string, pk []byte) (*Key, error) {
 	privKey, err := common.NewPrivateKeyFromBytes(pk)
 	if err != nil {
 		return nil, err
 	}
 
-	ac := &Account{
+	ac := &Key{
 		Name:       name,
 		PrivateKey: privKey,
 	}
@@ -51,7 +51,7 @@ func NewAccountFromBytes(name string, pk []byte) (*Account, error) {
 }
 
 // WriteTo TODO
-func (ac *Account) WriteTo(w io.Writer) (int64, error) {
+func (ac *Key) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := util.WriteString(w, ac.Name); err != nil {
 		return wrote, err
@@ -67,7 +67,7 @@ func (ac *Account) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom TODO
-func (ac *Account) ReadFrom(r io.Reader) (int64, error) {
+func (ac *Key) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if str, n, err := util.ReadString(r); err != nil {
 		return read, err

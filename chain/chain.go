@@ -2,17 +2,15 @@ package chain
 
 import (
 	"bytes"
-	"log"
-	"os"
-	"path/filepath"
-	"sync"
-	"time"
+
+	"git.fleta.io/fleta/core/amount"
+	"git.fleta.io/fleta/core/chain/account"
+	"git.fleta.io/fleta/core/transaction/advanced"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/store"
 	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/level"
 	"git.fleta.io/fleta/core/transaction"
@@ -23,8 +21,9 @@ type Provider interface {
 	Config() Config
 	Genesis() hash.Hash256
 	Height() uint32
+	Account(addr common.Address) (*account.Account, error)
+	Fee(tx transaction.Transaction) *amount.Amount
 	HashCurrentBlock() (hash.Hash256, error)
-	RewardValue() amount.Amount
 	Block(height uint32) (*block.Block, error)
 	BlockByHash(h hash.Hash256) (*block.Block, error)
 	BlockHash(height uint32) (hash.Hash256, error)
@@ -32,102 +31,42 @@ type Provider interface {
 	ObserverSignedByHash(h hash.Hash256) (*block.ObserverSigned, error)
 	Transactions(height uint32) ([]transaction.Transaction, error)
 	Transaction(height uint32, index uint16) (transaction.Transaction, error)
-	Unspent(height uint32, index uint16, n uint16) (*UTXO, error)
 }
 
 // Chain TODO
 type Chain interface {
 	Provider
-	Init() error
 	Close()
-	ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) (map[uint64]bool, error)
+	UpdateAccount(acc *account.Account) error
+	ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) error
 }
 
 // Base TODO
 type Base struct {
-	genesisHash       hash.Hash256
-	blockStore        store.Store
-	utxoStore         store.Store
-	height            uint32
-	processedHeight   uint32
-	utxoCache         map[uint64]*transaction.TxOut
-	cacheStore        store.Store
-	maxUTXOCacheCount int
-	ticker            *time.Ticker
-	hashPrevBlock     hash.Hash256
-	config            *Config
+	genesisHash   hash.Hash256
+	blockStore    store.Store
+	accountStore  store.Store
+	height        uint32
+	hashPrevBlock hash.Hash256
+	config        *Config
 }
 
 // NewBase TODO
-func NewBase(config *Config, GenesisHash hash.Hash256, blockStore store.Store, utxoStore store.Store, cacheCount int) (*Base, error) {
+func NewBase(config *Config, GenesisHash hash.Hash256, blockStore store.Store, accountStore store.Store, cacheCount int) (*Base, error) {
 	var height uint32
 	if bh, err := blockStore.Get([]byte("height")); err != nil {
 	} else {
 		height = util.BytesToUint32(bh)
 	}
-	var processedHeight uint32
-	if v, err := utxoStore.Get([]byte("height")); err != nil {
-	} else {
-		processedHeight = util.BytesToUint32(v)
-	}
 
-	tempDir := "./temp"
-	os.MkdirAll(tempDir, os.ModeDir)
-	tempPath := filepath.Join(tempDir, "utxoCache.dat")
-	os.Remove(tempPath)
-	cacheStore, err := store.NewBunt(tempPath)
-	if err != nil {
-		return nil, err
-	}
 	cn := &Base{
-		blockStore:        blockStore,
-		utxoStore:         utxoStore,
-		cacheStore:        cacheStore,
-		height:            height,
-		processedHeight:   processedHeight,
-		utxoCache:         map[uint64]*transaction.TxOut{},
-		maxUTXOCacheCount: cacheCount,
-		genesisHash:       GenesisHash,
-		config:            config,
+		blockStore:   blockStore,
+		accountStore: accountStore,
+		height:       height,
+		genesisHash:  GenesisHash,
+		config:       config,
 	}
 	return cn, nil
-}
-
-// Init load UTXO to cache from store
-func (cn *Base) Init() error {
-	keys, values, err := cn.utxoStore.Scan(nil)
-	if err != nil {
-		return err
-	}
-	for i, k := range keys {
-		v := values[i]
-		if !bytes.Equal(k, []byte("height")) {
-			vout := new(transaction.TxOut)
-			if _, err := vout.ReadFrom(bytes.NewReader(v)); err != nil {
-				return err
-			}
-			id := util.BytesToUint64(k)
-			if err := cn.cacheUTXO(id, vout); err != nil {
-				return err
-			}
-		}
-	}
-	for cn.processedHeight < cn.Height() {
-		if err := cn.processUTXO(true); err != nil {
-			return err
-		}
-	}
-
-	cn.ticker = time.NewTicker(cn.config.UTXOCacheWriteOutTime)
-	go func() {
-		for {
-			select {
-			case <-cn.ticker.C:
-				cn.processUTXO(false)
-			}
-		}
-	}()
-	return nil
 }
 
 // Genesis TODO
@@ -157,169 +96,113 @@ func (cn *Base) HashCurrentBlock() (hash.Hash256, error) {
 	return prevHash, nil
 }
 
-// RewardValue TODO
-func (cn *Base) RewardValue() amount.Amount {
-	return 1 //TEMP
+// Account TODO
+func (cn *Base) Account(addr common.Address) (*account.Account, error) {
+	if v, err := cn.accountStore.Get(addr[:]); err != nil {
+		return nil, err
+	} else {
+		acc := new(account.Account)
+		if _, err := acc.ReadFrom(bytes.NewReader(v)); err != nil {
+			return nil, err
+		}
+		return acc, nil
+	}
+}
+
+// UpdateAccount TODO
+func (cn *Base) UpdateAccount(acc *account.Account) error {
+	var buffer bytes.Buffer
+	if _, err := acc.WriteTo(&buffer); err != nil {
+		return err
+	} else if err := cn.accountStore.Set(acc.Address[:], buffer.Bytes()); err != nil {
+		return err
+	}
+	return nil
+}
+
+var baseFee = amount.COIN.DivC(10)
+
+// Fee TODO TEMP
+func (cn *Base) Fee(t transaction.Transaction) *amount.Amount {
+	switch tx := t.(type) {
+	case *advanced.Trade:
+		return baseFee.MulC(int64(len(tx.Vout)))
+	case *advanced.Formulation:
+		return baseFee.Add(cn.config.FormulationCost)
+	case *advanced.MultiSigAccount:
+		return baseFee.Add(cn.config.MultiSigAccountCost)
+	default:
+		panic("Unknown transaction type fee : " + block.TypeNameOfTransaction(tx))
+	}
 }
 
 // Close TODO
 func (cn *Base) Close() {
-	for cn.processedHeight < cn.Height() {
-		if err := cn.processUTXO(false); err != nil {
-			break
-		}
-	}
 	cn.blockStore.Close()
-	cn.utxoStore.Close()
-	cn.cacheStore.Close()
-}
-
-func (cn *Base) processUTXO(isInit bool) error {
-	height := cn.processedHeight + 1
-	b, err := cn.Block(height)
-	if err != nil {
-		return err
-	}
-
-	spentHash := map[uint64]bool{}
-	unspentHash := map[uint64]*transaction.TxOut{}
-	for idx, t := range b.Transactions {
-		switch tx := t.(type) {
-		case *transaction.Base:
-			for _, vin := range tx.Vin {
-				if vin.IsCoinbase() {
-				} else {
-					spentHash[vin.ID()] = true
-				}
-			}
-			for n, vout := range tx.Vout {
-				unspentHash[transaction.MarshalID(height, uint16(idx), uint16(n))] = vout
-			}
-		}
-	}
-	for id, vout := range unspentHash {
-		bid := util.Uint64ToBytes(id)
-		var buffer bytes.Buffer
-		if _, err := vout.WriteTo(&buffer); err != nil {
-			return err
-		}
-		if err := cn.utxoStore.Set(bid, buffer.Bytes()); err != nil {
-			return err
-		}
-		if isInit {
-			if err := cn.cacheUTXO(id, vout); err != nil {
-				return err
-			}
-		}
-	}
-	for id := range spentHash {
-		bid := util.Uint64ToBytes(id)
-		if err := cn.utxoStore.Delete(bid); err != nil {
-			return err
-		}
-		if isInit {
-			if err := cn.deleteUTXO(id); err != nil {
-				return err
-			}
-		}
-	}
-
-	if err := cn.utxoStore.Set([]byte("height"), util.Uint32ToBytes(height)); err != nil {
-		return err
-	}
-	cn.processedHeight = height
-	return nil
-}
-
-type profile struct {
-	sync.Mutex
-	BeginHash    map[string]time.Time
-	DurationHash map[string]time.Duration
-}
-
-// Begin TODO
-func (p *profile) Begin(name string) {
-	p.Lock()
-	defer p.Unlock()
-
-	p.BeginHash[name] = time.Now()
-	log.Println(name, "BEGIN")
-}
-
-// End TODO
-func (p *profile) End(name string) {
-	p.Lock()
-	defer p.Unlock()
-
-	p.DurationHash[name] = time.Now().Sub(p.BeginHash[name])
-	log.Println(name, "END")
-}
-
-// End TODO
-func (p *profile) Print() {
-	p.Lock()
-	defer p.Unlock()
-
-	for name, t := range p.DurationHash {
-		log.Println(name, t/time.Millisecond)
-	}
+	cn.accountStore.Close()
 }
 
 // ConnectBlock TODO
-func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) (map[uint64]bool, error) {
+func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) error {
 	prevHash, err := cn.HashCurrentBlock()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !b.Header.HashPrevBlock.Equal(prevHash) {
-		return nil, ErrMismatchHashPrevBlock
+		return ErrMismatchHashPrevBlock
 	}
 
 	if err := ValidateBlockGeneratorSignature(b, s.GeneratorSignature, ExpectedPublicKey); err != nil {
-		return nil, err
+		return err
 	}
 	height := cn.Height() + 1
 
 	ctx := NewValidationContext()
+	TxHashes := make([]hash.Hash256, 0, len(b.Transactions))
 	for idx, tx := range b.Transactions {
 		txHash, err := tx.Hash()
 		if err != nil {
-			return nil, err
+			return err
 		}
-		ctx.TxHashes = append(ctx.TxHashes, txHash)
-		if err := validateTransactionWithResult(ctx, cn, tx, b.TransactionSignatures[idx], uint16(idx)); err != nil {
-			return nil, err
+		TxHashes = append(TxHashes, txHash)
+
+		sigs := b.TransactionSignatures[idx]
+		pubkeys := make([]common.PublicKey, 0, len(sigs))
+		for _, sig := range sigs {
+			if pubkey, err := common.RecoverPubkey(txHash, sig); err != nil {
+				return err
+			} else {
+				pubkeys = append(pubkeys, pubkey)
+			}
+		}
+		if err := validateTransactionWithResult(ctx, cn, tx, pubkeys, uint16(idx)); err != nil {
+			return err
 		}
 	}
-	root, err := level.BuildLevelRoot(ctx.TxHashes)
+	root, err := level.BuildLevelRoot(TxHashes)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !b.Header.HashLevelRoot.Equal(hash.TwoHash(prevHash, root)) {
-		return nil, ErrMismatchHashLevelRoot
+		return ErrMismatchHashLevelRoot
+	}
+
+	for _, acc := range ctx.AccountHash {
+		if err := cn.UpdateAccount(acc); err != nil {
+			return err
+		}
 	}
 
 	if err := cn.writeBlock(height, b, s); err != nil {
-		return nil, err
-	}
-
-	for id, vout := range ctx.UnspentHash {
-		if err := cn.cacheUTXO(id, vout); err != nil {
-			return nil, err
-		}
-	}
-	for id := range ctx.SpentHash {
-		if err := cn.deleteUTXO(id); err != nil {
-			return nil, err
-		}
+		return err
 	}
 
 	if err := cn.blockStore.Set([]byte("height"), util.Uint32ToBytes(height)); err != nil {
-		return nil, err
+		return err
 	}
 	cn.height = height
 
-	return ctx.SpentHash, nil
+	return nil
 }
 
 // Height TODO
@@ -418,65 +301,6 @@ func (cn *Base) Transaction(height uint32, index uint16) (transaction.Transactio
 		}
 		return txs[index], nil
 	}
-}
-
-// Unspent TODO
-func (cn *Base) Unspent(height uint32, index uint16, n uint16) (*UTXO, error) {
-	if height > cn.Height() {
-		return nil, ErrExceedChainHeight
-	}
-	id := transaction.MarshalID(height, index, n)
-	utxo := &UTXO{
-		TxIn: transaction.TxIn{
-			Height: height,
-			Index:  index,
-			N:      n,
-		},
-	}
-	if vout, has := cn.utxoCache[id]; !has {
-		if v, err := cn.cacheStore.Get(util.Uint64ToBytes(id)); err != nil {
-			return nil, err
-		} else if _, err := utxo.TxOut.ReadFrom(bytes.NewReader(v)); err != nil {
-			return nil, err
-		}
-	} else {
-		utxo.TxOut = *vout
-	}
-	return utxo, nil
-}
-
-func (cn *Base) cacheUTXO(id uint64, vout *transaction.TxOut) error {
-	if len(cn.utxoCache) >= cn.maxUTXOCacheCount {
-		for id, u := range cn.utxoCache {
-			delete(cn.utxoCache, id)
-
-			bid := util.Uint64ToBytes(id)
-			var buffer bytes.Buffer
-			if _, err := u.WriteTo(&buffer); err != nil {
-				return err
-			}
-			if err := cn.cacheStore.Set(bid, buffer.Bytes()); err != nil {
-				return err
-			}
-			break
-		}
-	}
-	cn.utxoCache[id] = vout
-	return nil
-}
-
-func (cn *Base) deleteUTXO(id uint64) error {
-	if _, has := cn.utxoCache[id]; !has {
-		bid := util.Uint64ToBytes(id)
-		if err := cn.cacheStore.Delete(bid); err != nil {
-			if err != store.ErrNotExistKey {
-				return err
-			}
-		}
-	} else {
-		delete(cn.utxoCache, id)
-	}
-	return nil
 }
 
 func (cn *Base) writeBlock(height uint32, b *block.Block, s *block.ObserverSigned) error {

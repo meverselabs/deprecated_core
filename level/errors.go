@@ -4,7 +4,7 @@ import (
 	"errors"
 )
 
+// level errors
 var (
-	// ErrExceedHashCount TODO
 	ErrExceedHashCount = errors.New("exceed hash count")
 )

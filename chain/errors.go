@@ -29,6 +29,7 @@ var (
 	ErrStoreCorrupted                = errors.New("store corrupted")
 	ErrExceedCoinbaseCount           = errors.New("exceed coinbase count")
 	ErrInvalidTransactionFee         = errors.New("invalid transaction fee")
+	ErrInvalidTransactionSignature   = errors.New("invalid transaction signature")
 	ErrMismatchSignedBlockHash       = errors.New("mismatch signed block hash")
 	ErrMismatchSignedTransactionHash = errors.New("mismatch signed transaction hash")
 	ErrInvalidAmount                 = errors.New("invalid amount")

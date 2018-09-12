@@ -4,7 +4,7 @@ import (
 	"errors"
 )
 
+// wallet errors
 var (
-	// ErrNotExistAccount TODO
-	ErrNotExistAccount = errors.New("not exist account")
+	ErrNotExistKey = errors.New("not exist key")
 )

@@ -26,6 +26,10 @@ func (s *Signed) Hash() (hash.Hash256, error) {
 
 // WriteTo TODO
 func (s *Signed) WriteTo(w io.Writer) (int64, error) {
+	if len(s.Signatures) > 255 {
+		return 0, ErrExceedSignatureCount
+	}
+
 	var wrote int64
 	if n, err := s.TransactionHash.WriteTo(w); err != nil {
 		return wrote, err

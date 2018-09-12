@@ -1,12 +1,8 @@
 package transaction
 
-import (
-	"errors"
-)
+import "errors"
 
+// transaction errors
 var (
-	// ErrExceedTransactionCount TODO
-	ErrExceedTransactionCount = errors.New("exceed transaction count")
-	// ErrExceedSignitureCount TODO
-	ErrExceedSignitureCount = errors.New("exceed signiture count")
+	ErrExceedSignatureCount = errors.New("exceed signature count")
 )

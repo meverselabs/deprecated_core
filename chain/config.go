@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Version               uint16
 	UTXOCacheWriteOutTime time.Duration
-	FormulationAmount     amount.Amount
-	DustAmount            amount.Amount
+	FormulationCost       *amount.Amount
+	MultiSigAccountCost   *amount.Amount
+	DustAmount            *amount.Amount
 }

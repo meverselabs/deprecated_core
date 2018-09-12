@@ -1,53 +1,152 @@
 package amount
 
 import (
-	"bytes"
 	"io"
+	"math/big"
 	"strconv"
+	"strings"
 
 	"git.fleta.io/fleta/common/util"
 )
 
 // COIN TODO
-const COIN = Amount(100000000)
+var COIN = NewCoinAmount(1, 0)
+
+// FractionalMax TODO
+const FractionalMax = 1000000000000000000
+
+// FractionalCount TODO
+const FractionalCount = 18
 
 // Amount TODO
-type Amount uint64
+type Amount struct {
+	*big.Int
+}
+
+var zeroInt = big.NewInt(0)
+
+// newAmount TODO
+func newAmount(value int64) *Amount {
+	return &Amount{
+		Int: big.NewInt(value),
+	}
+}
+
+// NewCoinAmount TODO
+func NewCoinAmount(i uint64, f uint64) *Amount {
+	if i == 0 {
+		return newAmount(int64(f))
+	} else if f == 0 {
+		bi := newAmount(int64(i))
+		return bi.MulC(FractionalMax)
+	} else {
+		bi := newAmount(int64(i))
+		bf := newAmount(int64(f))
+		return bi.MulC(FractionalMax).Add(bf)
+	}
+}
+
+// ParseAmount TODO
+func ParseAmount(str string) (*Amount, error) {
+	ls := strings.SplitN(str, ".", 2)
+	switch len(ls) {
+	case 1:
+		pi, err := strconv.ParseUint(ls[0], 10, 64)
+		if err != nil {
+			return nil, ErrInvalidFormat
+		}
+		return NewCoinAmount(pi, 0), nil
+	case 2:
+		pi, err := strconv.ParseUint(ls[0], 10, 64)
+		if err != nil {
+			return nil, ErrInvalidFormat
+		}
+		pf, err := strconv.ParseUint(padFractional(ls[1]), 10, 64)
+		if err != nil {
+			return nil, ErrInvalidFormat
+		}
+		return NewCoinAmount(pi, pf), nil
+	default:
+		return nil, ErrInvalidFormat
+	}
+}
+
+// Add TODO
+func (am *Amount) Add(b *Amount) *Amount {
+	c := newAmount(0)
+	c.Int.Add(am.Int, b.Int)
+	return c
+}
+
+// Sub TODO
+func (am *Amount) Sub(b *Amount) *Amount {
+	c := newAmount(0)
+	c.Int.Sub(am.Int, b.Int)
+	return c
+}
+
+// DivC TODO
+func (am *Amount) DivC(b int64) *Amount {
+	c := newAmount(0)
+	c.Int.Div(am.Int, big.NewInt(b))
+	return c
+}
+
+// MulC TODO
+func (am *Amount) MulC(b int64) *Amount {
+	c := newAmount(0)
+	c.Int.Mul(am.Int, big.NewInt(b))
+	return c
+}
+
+// IsZero TODO
+func (am *Amount) IsZero() bool {
+	return am.Int.Cmp(zeroInt) == 0
+}
+
+// Less TODO
+func (am *Amount) Less(b *Amount) bool {
+	return am.Int.Cmp(b.Int) < 0
+}
+
+// String TODO
+func (am *Amount) String() string {
+	if am.IsZero() {
+		return "0"
+	}
+	str := am.Int.String()
+	if len(str) < FractionalCount {
+		return "0." + formatFractional(str)
+	} else {
+		si := str[:len(str)-FractionalCount]
+		sf := strings.TrimRight(str[len(str)-FractionalCount:], "0")
+		if len(sf) > 0 {
+			return si + "." + sf
+		} else {
+			return si
+		}
+	}
+}
 
 // WriteTo TODO
-func (amount *Amount) WriteTo(w io.Writer) (int64, error) {
-	return util.WriteUint64(w, uint64(*amount))
+func (am *Amount) WriteTo(w io.Writer) (int64, error) {
+	var wrote int64
+	if n, err := util.WriteBytes(w, am.Int.Bytes()); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	return wrote, nil
 }
 
 // ReadFrom TODO
-func (amount *Amount) ReadFrom(r io.Reader) (int64, error) {
-	if v, n, err := util.ReadUint64(r); err != nil {
-		return n, err
+func (am *Amount) ReadFrom(r io.Reader) (int64, error) {
+	var read int64
+	if bs, n, err := util.ReadBytes(r); err != nil {
+		return read, err
 	} else {
-		(*amount) = Amount(v)
-		return n, nil
+		read += n
+		am.Int.SetBytes(bs)
 	}
-}
-
-// MarshalJSON TODO
-func (amount Amount) MarshalJSON() ([]byte, error) {
-	v := uint64(amount)
-	var buffer bytes.Buffer
-	buffer.WriteString(strconv.FormatUint(v/uint64(COIN), 10))
-	buffer.WriteString(".")
-	p := strconv.FormatUint(v%uint64(COIN), 10)
-	for i := 0; i < 8-len(p); i++ {
-		buffer.WriteString("0")
-	}
-	buffer.WriteString(p)
-	return buffer.Bytes(), nil
-}
-
-// Debug TODO
-func (amount Amount) Debug() (string, error) {
-	if bs, err := amount.MarshalJSON(); err != nil {
-		return "", err
-	} else {
-		return string(bs), err
-	}
+	return read, nil
 }
