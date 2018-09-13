@@ -121,6 +121,7 @@ func (cn *Base) initGenesisAccount() error {
 			}
 			addr := v.KeyAddresses[0]
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
 		case LockedAccountType:
 			if v.UnlockHeight == 0 {
@@ -128,6 +129,7 @@ func (cn *Base) initGenesisAccount() error {
 			}
 			addr := common.AddressFromHash(cn.Coordinate(), v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "UnlockHeight"))] = util.Uint32ToBytes(v.UnlockHeight)
 		case MultiSigAccountType:
@@ -136,10 +138,14 @@ func (cn *Base) initGenesisAccount() error {
 			}
 			addr := common.AddressFromHash(cn.Coordinate(), v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
 		case FormulationAccountType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
+			}
+			if !v.Amount.IsZero() {
+				return ErrInvalidAmount
 			}
 			addr := common.AddressFromHash(cn.Coordinate(), v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
@@ -199,17 +205,17 @@ func (cn *Base) Config() Config {
 
 // HashCurrentBlock TODO
 func (cn *Base) HashCurrentBlock() (hash.Hash256, error) {
-	var prevHash hash.Hash256
+	var curHash hash.Hash256
 	if cn.Height() == 0 {
-		prevHash = cn.GenesisHash()
+		curHash = cn.GenesisHash()
 	} else {
 		h, err := cn.BlockHash(cn.Height())
 		if err != nil {
 			return hash.Hash256{}, err
 		}
-		prevHash = h
+		curHash = h
 	}
-	return prevHash, nil
+	return curHash, nil
 }
 
 // FormulationHash TODO
@@ -322,6 +328,10 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 		return nil, err
 	}
 	height := cn.Height() + 1
+
+	if len(b.Transactions) != len(b.TransactionSignatures) {
+		return nil, ErrMismatchSignaturesCount
+	}
 
 	ctx := NewValidationContext()
 	TxHashes := make([]hash.Hash256, 0, len(b.Transactions))
