@@ -204,7 +204,7 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 		return nil, ErrMismatchHashLevelRoot
 	}
 
-	formulationAcc, err := ctx.LoadAccount(cn, b.Header.FormulationAddress)
+	formulationAcc, err := ctx.LoadAccount(cn, b.Header.FormulationAddress, false)
 	if err != nil {
 		return nil, err
 	}
