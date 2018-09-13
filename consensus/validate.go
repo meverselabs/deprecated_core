@@ -95,9 +95,9 @@ func ValidateTableAppend(rt *RankTable, GroupSize int, msg *SignedTableAppend) e
 
 	for i, r := range msg.Ranks[GroupSize:] {
 		if !r.Equal(mranks[i]) {
-			log.Println(msg.Ranks[GroupSize:])
-			log.Println(mranks)
-			log.Println(Candidates)
+			log.Println("msg.Rk", msg.Ranks[GroupSize:])
+			log.Println("mranks", mranks)
+			log.Println("Candid", Candidates)
 			return ErrWorseRankListOrder
 		}
 	}
@@ -108,7 +108,6 @@ func ValidateTableAppend(rt *RankTable, GroupSize int, msg *SignedTableAppend) e
 	} else if pubkey, err := common.RecoverPubkey(h, msg.Signature); err != nil {
 		return err
 	} else if !pubkey.Equal(joiner.PublicKey) {
-		log.Println(pubkey, joiner.PublicKey, msg.Ranks)
 		return ErrInvalidRankPubkey
 	}
 	return nil

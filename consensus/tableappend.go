@@ -13,7 +13,7 @@ import (
 
 // TableAppend TODO
 type TableAppend struct {
-	Height              uint32
+	Height              uint64
 	PrevTableAppendHash hash.Hash256
 	Ranks               []*rank.Rank
 	TailTimeouts        []*timeout.Timeout
@@ -35,7 +35,7 @@ func (msg *TableAppend) WriteTo(w io.Writer) (int64, error) {
 	}
 
 	var wrote int64
-	if n, err := util.WriteUint32(w, msg.Height); err != nil {
+	if n, err := util.WriteUint64(w, msg.Height); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -75,7 +75,7 @@ func (msg *TableAppend) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom TODO
 func (msg *TableAppend) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if v, n, err := util.ReadUint32(r); err != nil {
+	if v, n, err := util.ReadUint64(r); err != nil {
 		return read, err
 	} else {
 		read += n

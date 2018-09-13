@@ -13,12 +13,12 @@ import (
 var (
 	// ErrInvalidPhase TODO
 	ErrInvalidPhase = errors.New("invalid phase")
-	// ErrExistPublicKey TODO
-	ErrExistPublicKey = errors.New("exist public key")
+	// ErrExistAddress TODO
+	ErrExistAddress = errors.New("exist address")
 	// ErrInsufficientCandidateCount TODO
 	ErrInsufficientCandidateCount = errors.New("insufficient candidate count")
-	// ErrInvalidTimeoutPublicKey TODO
-	ErrInvalidTimeoutPublicKey = errors.New("invalid timeout pubkey")
+	// ErrInvalidTimeoutAddress TODO
+	ErrInvalidTimeoutAddress = errors.New("invalid timeout address")
 	// ErrExceedCandidateCount TODO
 	ErrExceedCandidateCount = errors.New("exceed candidate count")
 )
@@ -29,14 +29,14 @@ type RankTable struct {
 	members             []*rank.Rank
 	candidates          []*rank.Rank
 	rankHash            map[string]*rank.Rank
-	height              uint32
+	height              uint64
 	lastTableAppendHash hash.Hash256
 	recentSize          int
 }
 
 // NewRankTable TODO
 func NewRankTable(recentSize int, GenesisTableAppendHash hash.Hash256) *RankTable {
-	rm := &RankTable{
+	rt := &RankTable{
 		recentGenerators:    []*rank.Rank{},
 		members:             []*rank.Rank{},
 		candidates:          []*rank.Rank{},
@@ -44,11 +44,11 @@ func NewRankTable(recentSize int, GenesisTableAppendHash hash.Hash256) *RankTabl
 		lastTableAppendHash: GenesisTableAppendHash,
 		recentSize:          recentSize,
 	}
-	return rm
+	return rt
 }
 
 // Height TODO
-func (rt *RankTable) Height() uint32 {
+func (rt *RankTable) Height() uint64 {
 	return rt.height
 }
 
@@ -87,24 +87,27 @@ func (rt *RankTable) Add(s *rank.Rank) error {
 			return ErrInvalidPhase
 		}
 	}
-	if rt.Rank(s.PublicKey) != nil {
-		return ErrExistPublicKey
+	if rt.Rank(s.Address) != nil {
+		return ErrExistAddress
 	}
 	rt.candidates = InsertRankToList(rt.candidates, s)
-	rt.rankHash[string(s.PublicKey[:])] = s
+	rt.rankHash[string(s.Address[:])] = s
 	return nil
 }
 
 // Rank TODO
-func (rt *RankTable) Rank(pubkey common.PublicKey) *rank.Rank {
-	return rt.rankHash[string(pubkey[:])]
+func (rt *RankTable) Rank(addr common.Address) *rank.Rank {
+	return rt.rankHash[string(addr[:])]
 }
 
 // Members TODO
 func (rt *RankTable) Members(cnt int) []*rank.Rank {
 	list := make([]*rank.Rank, 0, cnt)
-	for _, m := range rt.members {
+	for i, m := range rt.members {
 		list = append(list, m.Clone())
+		if i >= cnt {
+			break
+		}
 	}
 	return list
 }
@@ -153,8 +156,8 @@ func (rt *RankTable) RankList(GroupSize int, TailTimeouts []*timeout.Timeout) ([
 	candidates := rt.candidates
 	for i, to := range TailTimeouts {
 		m := candidates[i]
-		if !to.PublicKey.Equal(m.PublicKey) {
-			return nil, ErrInvalidTimeoutPublicKey
+		if !to.Address.Equal(m.Address) {
+			return nil, ErrInvalidTimeoutAddress
 		}
 	}
 	candidates = candidates[len(TailTimeouts):]
@@ -205,7 +208,7 @@ func (rt *RankTable) ForwardCandidates(RemoveLen int, LastTableAppendHash hash.H
 	rt.members = append(rt.members, last.Clone())
 	// increase detaches' phase
 	for _, s := range detaches {
-		delete(rt.rankHash, string(s.PublicKey[:]))
+		delete(rt.rankHash, string(s.Address[:]))
 		s.SetPhase(s.Phase() + 1)
 	}
 	// update last's hashSpace
