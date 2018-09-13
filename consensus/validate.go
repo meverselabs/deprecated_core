@@ -11,8 +11,8 @@ import (
 var (
 	// ErrInvalidRanksLength TODO
 	ErrInvalidRanksLength = errors.New("invalid ranks length")
-	// ErrAlreadyAppend TODO
-	ErrAlreadyAppend = errors.New("already appended")
+	// ErrAlreadyAppended TODO
+	ErrAlreadyAppended = errors.New("already appended")
 	// ErrInvalidTableAppendHeight TODO
 	ErrInvalidTableAppendHeight = errors.New("invalid table append height")
 	// ErrInvalidPrevTableAppendHash TODO
@@ -30,23 +30,23 @@ var (
 )
 
 // ValidateTableAppend TODO
-func ValidateTableAppend(rt *RankTable, GroupSize int, msg *SignedTableAppend) error {
+func ValidateTableAppend(rt *RankTable, GroupSize int, msg *SignedTableAppend) ([]*rank.Rank, error) {
 	if msg.Height <= rt.height {
-		return ErrAlreadyAppend
+		return nil, ErrAlreadyAppended
 	}
 	if msg.Height != rt.height+1 {
-		return ErrInvalidTableAppendHeight
+		return nil, ErrInvalidTableAppendHeight
 	}
 	if len(msg.Ranks) != GroupSize*2 {
-		return ErrInvalidRanksLength
+		return nil, ErrInvalidRanksLength
 	}
 	if !rt.lastTableAppendHash.Equal(msg.PrevTableAppendHash) {
-		return ErrInvalidPrevTableAppendHash
+		return nil, ErrInvalidPrevTableAppendHash
 	}
 
 	Ranks, err := rt.RankList(GroupSize, msg.TailTimeouts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var prevRank *rank.Rank
 	for i, rank := range msg.Ranks {
@@ -55,13 +55,13 @@ func ValidateTableAppend(rt *RankTable, GroupSize int, msg *SignedTableAppend) e
 			if !rank.Equal(tableRank) {
 				log.Println(msg.Ranks)
 				log.Println(Ranks)
-				return ErrUnmatchedConfirmedRank
+				return nil, ErrUnmatchedConfirmedRank
 			}
 		}
 		if prevRank != nil && !prevRank.IsZero() {
 			if !prevRank.Less(rank) {
 				log.Println(msg.Ranks)
-				return ErrInvalidRankListOrder
+				return nil, ErrInvalidRankListOrder
 			}
 		}
 		prevRank = rank
@@ -76,7 +76,7 @@ func ValidateTableAppend(rt *RankTable, GroupSize int, msg *SignedTableAppend) e
 		log.Println("Members", rt.Members)
 		log.Println("Candidates", Candidates)
 		log.Println("Top/Joiner", Top, joiner)
-		return ErrInvalidTopPubkey
+		return nil, ErrInvalidTopPubkey
 	}
 
 	// Check suggestion is same or better
@@ -98,17 +98,17 @@ func ValidateTableAppend(rt *RankTable, GroupSize int, msg *SignedTableAppend) e
 			log.Println("msg.Rk", msg.Ranks[GroupSize:])
 			log.Println("mranks", mranks)
 			log.Println("Candid", Candidates)
-			return ErrWorseRankListOrder
+			return nil, ErrWorseRankListOrder
 		}
 	}
 
 	// Process slow signature verification after another fast verifications.
 	if h, err := msg.TableAppend.Hash(); err != nil {
-		return err
+		return nil, err
 	} else if pubkey, err := common.RecoverPubkey(h, msg.Signature); err != nil {
-		return err
+		return nil, err
 	} else if !pubkey.Equal(joiner.PublicKey) {
-		return ErrInvalidRankPubkey
+		return nil, ErrInvalidRankPubkey
 	}
-	return nil
+	return mranks, nil
 }

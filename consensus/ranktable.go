@@ -52,6 +52,13 @@ func (rt *RankTable) Height() uint64 {
 	return rt.height
 }
 
+// LastTableAppendHash TODO
+func (rt *RankTable) LastTableAppendHash() hash.Hash256 {
+	var rh hash.Hash256
+	copy(rh[:], rt.lastTableAppendHash[:])
+	return rh
+}
+
 // Clone TODO
 func (rt *RankTable) Clone() *RankTable {
 	var rh hash.Hash256
