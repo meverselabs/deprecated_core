@@ -13,6 +13,7 @@ import (
 
 // Rank TODO
 type Rank struct {
+	Address   common.Address
 	PublicKey common.PublicKey
 	phase     uint32
 	hashSpace hash.Hash256
@@ -20,11 +21,12 @@ type Rank struct {
 }
 
 // NewRank TODO
-func NewRank(PublicKey common.PublicKey, phase uint32, hashSpace hash.Hash256) *Rank {
+func NewRank(Address common.Address, PublicKey common.PublicKey, phase uint32, hashSpace hash.Hash256) *Rank {
 	m := &Rank{
 		phase:     phase,
 		hashSpace: hashSpace,
 	}
+	copy(m.Address[:], Address[:])
 	copy(m.PublicKey[:], PublicKey[:])
 	m.update()
 	return m
@@ -42,6 +44,11 @@ func (rank *Rank) Hash() (hash.Hash256, error) {
 // WriteTo TODO
 func (rank *Rank) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
+	if n, err := rank.Address.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := rank.PublicKey.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
@@ -63,6 +70,11 @@ func (rank *Rank) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom TODO
 func (rank *Rank) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
+	if n, err := rank.Address.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
 	if n, err := rank.PublicKey.ReadFrom(r); err != nil {
 		return read, err
 	} else {
@@ -85,7 +97,7 @@ func (rank *Rank) ReadFrom(r io.Reader) (int64, error) {
 
 // Clone TODO
 func (rank *Rank) Clone() *Rank {
-	return NewRank(rank.PublicKey, rank.phase, rank.hashSpace)
+	return NewRank(rank.Address, rank.PublicKey, rank.phase, rank.hashSpace)
 }
 
 // Score TODO
@@ -105,18 +117,18 @@ func (rank *Rank) HashSpace() hash.Hash256 {
 
 // Less TODO
 func (rank *Rank) Less(b *Rank) bool {
-	return rank.score < b.score || (rank.score == b.score && bytes.Compare(rank.PublicKey[:], b.PublicKey[:]) < 0)
+	return rank.score < b.score || (rank.score == b.score && bytes.Compare(rank.Address[:], b.Address[:]) < 0)
 }
 
 // Equal TODO
 func (rank *Rank) Equal(b *Rank) bool {
-	return rank.score == b.score && bytes.Equal(rank.PublicKey[:], b.PublicKey[:])
+	return rank.score == b.score && bytes.Equal(rank.Address[:], b.Address[:])
 }
 
 // IsZero TODO
 func (rank *Rank) IsZero() bool {
-	var emptyKey common.PublicKey
-	return rank.score == 0 && bytes.Compare(rank.PublicKey[:], emptyKey[:]) == 0
+	var empty common.Address
+	return rank.score == 0 && bytes.Compare(rank.Address[:], empty[:]) == 0
 }
 
 // Set TODO
@@ -146,16 +158,16 @@ func (rank *Rank) update() {
 func (rank *Rank) Key() string {
 	bs := make([]byte, 8)
 	binary.LittleEndian.PutUint64(bs, rank.score)
-	return string(rank.PublicKey[:]) + "," + string(bs)
+	return string(rank.Address[:]) + "," + string(bs)
 }
 
-// String TODO
+// String TODO TEMP
 func (rank *Rank) String() string {
 	/*
 		bs := make([]byte, 8)
 		binary.LittleEndian.PutUint64(bs, rank.score)
 		return string(rank.PublicKey[:]) + "," + string(bs)
 	*/
-	key := rank.PublicKey.String()
-	return "{" + key[:2] + key[len(key)-2:] + "," + strconv.FormatUint(uint64(rank.phase), 10) + "," + strconv.FormatUint(rank.score, 10) + "}"
+	key := rank.Address.String()
+	return "{" + key + "," + strconv.FormatUint(uint64(rank.phase), 10) + "," + strconv.FormatUint(rank.score, 10) + "}"
 }

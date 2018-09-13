@@ -11,7 +11,7 @@ import (
 
 // Timeout TODO
 type Timeout struct {
-	PublicKey common.PublicKey
+	Address common.Address
 }
 
 // Hash TODO
@@ -26,7 +26,7 @@ func (to *Timeout) Hash() (hash.Hash256, error) {
 // WriteTo TODO
 func (to *Timeout) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := to.PublicKey.WriteTo(w); err != nil {
+	if n, err := to.Address.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -37,7 +37,7 @@ func (to *Timeout) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom TODO
 func (to *Timeout) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if n, err := to.PublicKey.ReadFrom(r); err != nil {
+	if n, err := to.Address.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -47,7 +47,7 @@ func (to *Timeout) ReadFrom(r io.Reader) (int64, error) {
 
 // ReadFrom TODO
 func (to *Timeout) String() string {
-	pubkey := to.PublicKey.String()
+	pubkey := to.Address.String()
 	return pubkey[:2] + pubkey[len(pubkey)-2:]
 }
 
