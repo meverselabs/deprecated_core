@@ -10,28 +10,27 @@ type TransactionType uint8
 
 // transaction_type transaction types
 const (
-	TradeTransctionType       = TransactionType(iota)
-	FormulationTransctionType = TransactionType(iota)
+	TradeTransctionType             = TransactionType(10)
+	BurnTransctionType              = TransactionType(19)
+	MultiSigAccountTransctionType   = TransactionType(20)
+	FormulationTransctionType       = TransactionType(30)
+	RevokeFormulationTransctionType = TransactionType(31)
 )
 
 func (t TransactionType) String() string {
 	switch t {
 	case TradeTransctionType:
 		return "TradeTransctionType"
+	case BurnTransctionType:
+		return "BurnTransctionType"
+	case MultiSigAccountTransctionType:
+		return "MultiSigAccountTransctionType"
 	case FormulationTransctionType:
 		return "FormulationTransctionType"
+	case RevokeFormulationTransctionType:
+		return "RevokeFormulationTransctionType"
 	default:
 		return "UnknownTransactionType"
-	}
-}
-
-// TypeNameOfTransaction TODO
-func TypeNameOfTransaction(tx transaction.Transaction) string {
-	t, err := TypeOfTransaction(tx)
-	if err != nil {
-		return "UnknownTransactionType"
-	} else {
-		return t.String()
 	}
 }
 
@@ -40,8 +39,14 @@ func TypeOfTransaction(tx transaction.Transaction) (TransactionType, error) {
 	switch tx.(type) {
 	case *advanced.Trade:
 		return TradeTransctionType, nil
+	case *advanced.Burn:
+		return BurnTransctionType, nil
+	case *advanced.MultiSigAccount:
+		return MultiSigAccountTransctionType, nil
 	case *advanced.Formulation:
 		return FormulationTransctionType, nil
+	case *advanced.RevokeFormulation:
+		return RevokeFormulationTransctionType, nil
 	default:
 		return 0, ErrUnknownTransactionType
 	}
@@ -52,9 +57,25 @@ func NewTransactionByType(t TransactionType) (transaction.Transaction, error) {
 	switch t {
 	case TradeTransctionType:
 		return new(advanced.Trade), nil
+	case BurnTransctionType:
+		return new(advanced.Burn), nil
+	case MultiSigAccountTransctionType:
+		return new(advanced.MultiSigAccount), nil
 	case FormulationTransctionType:
 		return new(advanced.Formulation), nil
+	case RevokeFormulationTransctionType:
+		return new(advanced.RevokeFormulation), nil
 	default:
 		return nil, ErrUnknownTransactionType
+	}
+}
+
+// TypeNameOfTransaction TODO
+func TypeNameOfTransaction(tx transaction.Transaction) string {
+	t, err := TypeOfTransaction(tx)
+	if err != nil {
+		return "UnknownTransactionType"
+	} else {
+		return t.String()
 	}
 }
