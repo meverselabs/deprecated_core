@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 
+	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/consensus"
@@ -17,6 +18,7 @@ type Header struct {
 	HashPrevBlock       hash.Hash256
 	HashLevelRoot       hash.Hash256
 	Timestamp           uint64
+	FormulationAddress  common.Address
 	HeadTimeouts        []*timeout.Timeout
 	TableAppendMessages []*consensus.SignedTableAppend
 }
@@ -42,26 +44,27 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-
 	if n, err := util.WriteUint16(w, bh.Version); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
-
 	if n, err := bh.HashPrevBlock.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
-
 	if n, err := bh.HashLevelRoot.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
-
 	if n, err := util.WriteUint64(w, bh.Timestamp); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := bh.FormulationAddress.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -110,23 +113,25 @@ func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 		bh.Version = v
 		read += n
 	}
-
 	if n, err := bh.HashPrevBlock.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
 	}
-
 	if n, err := bh.HashLevelRoot.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
 	}
-
 	if v, n, err := util.ReadUint64(r); err != nil {
 		return read, err
 	} else {
 		bh.Timestamp = v
+		read += n
+	}
+	if n, err := bh.FormulationAddress.ReadFrom(r); err != nil {
+		return read, err
+	} else {
 		read += n
 	}
 

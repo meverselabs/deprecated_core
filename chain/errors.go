@@ -35,4 +35,7 @@ var (
 	ErrTooSmallAmount                = errors.New("too small amount")
 	ErrDoubleSpent                   = errors.New("double spent")
 	ErrExistAddress                  = errors.New("exist address")
+	ErrInvalidAccountType            = errors.New("invalid account type")
+	ErrInvalidTransactionSignature   = errors.New("invalid transaction signature")
+	ErrDeletedAccount                = errors.New("deleted account")
 )

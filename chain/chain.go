@@ -19,10 +19,12 @@ import (
 // Provider TODO
 type Provider interface {
 	Config() Config
+	Coordinate() common.Coordinate
 	Genesis() hash.Hash256
 	Height() uint32
 	Account(addr common.Address) (*account.Account, error)
 	Fee(tx transaction.Transaction) *amount.Amount
+	BlockReward(height uint32) *amount.Amount
 	HashCurrentBlock() (hash.Hash256, error)
 	Block(height uint32) (*block.Block, error)
 	BlockByHash(h hash.Hash256) (*block.Block, error)
@@ -44,6 +46,7 @@ type Chain interface {
 // Base TODO
 type Base struct {
 	genesisHash   hash.Hash256
+	coordinate    common.Coordinate
 	blockStore    store.Store
 	accountStore  store.Store
 	height        uint32
@@ -52,7 +55,7 @@ type Base struct {
 }
 
 // NewBase TODO
-func NewBase(config *Config, GenesisHash hash.Hash256, blockStore store.Store, accountStore store.Store) (*Base, error) {
+func NewBase(config *Config, GenesisHash hash.Hash256, Coordinate common.Coordinate, blockStore store.Store, accountStore store.Store) (*Base, error) {
 	var height uint32
 	if bh, err := blockStore.Get([]byte("height")); err != nil {
 	} else {
@@ -63,10 +66,18 @@ func NewBase(config *Config, GenesisHash hash.Hash256, blockStore store.Store, a
 		blockStore:   blockStore,
 		accountStore: accountStore,
 		height:       height,
+		coordinate:   Coordinate,
 		genesisHash:  GenesisHash,
 		config:       config,
 	}
 	return cn, nil
+}
+
+// Coordinate TODO
+func (cn *Base) Coordinate() common.Coordinate {
+	var coord common.Coordinate
+	copy(coord[:], cn.coordinate[:])
+	return coord
 }
 
 // Genesis TODO
@@ -120,15 +131,21 @@ func (cn *Base) UpdateAccount(acc *account.Account) error {
 	return nil
 }
 
-var baseFee = amount.COIN.DivC(10)
+// BlockReward TODO TEMP
+func (cn *Base) BlockReward(height uint32) *amount.Amount {
+	return amount.COIN.MulC(10)
+}
 
 // Fee TODO TEMP
 func (cn *Base) Fee(t transaction.Transaction) *amount.Amount {
+	var baseFee = amount.COIN.DivC(10)
 	switch tx := t.(type) {
 	case *advanced.Trade:
 		return baseFee.MulC(int64(len(tx.Vout)))
 	case *advanced.Formulation:
 		return baseFee.Add(cn.config.FormulationCost)
+	case *advanced.RevokeFormulation:
+		return baseFee
 	case *advanced.MultiSigAccount:
 		return baseFee.Add(cn.config.MultiSigAccountCost)
 	default:
@@ -167,15 +184,15 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 		TxHashes = append(TxHashes, txHash)
 
 		sigs := b.TransactionSignatures[idx]
-		pubkeys := make([]common.PublicKey, 0, len(sigs))
+		addrs := make([]common.Address, 0, len(sigs))
 		for _, sig := range sigs {
 			if pubkey, err := common.RecoverPubkey(txHash, sig); err != nil {
 				return nil, err
 			} else {
-				pubkeys = append(pubkeys, pubkey)
+				addrs = append(addrs, common.AddressFromPubkey(cn.Coordinate(), KeyAccountType, pubkey))
 			}
 		}
-		if err := validateTransactionWithResult(ctx, cn, tx, pubkeys, uint16(idx)); err != nil {
+		if err := validateTransactionWithResult(ctx, cn, tx, addrs, uint16(idx)); err != nil {
 			return nil, err
 		}
 	}
@@ -186,6 +203,12 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 	if !b.Header.HashLevelRoot.Equal(hash.TwoHash(prevHash, root)) {
 		return nil, ErrMismatchHashLevelRoot
 	}
+
+	formulationAcc, err := ctx.LoadAccount(cn, b.Header.FormulationAddress)
+	if err != nil {
+		return nil, err
+	}
+	formulationAcc.Balance = formulationAcc.Balance.Add(cn.BlockReward(height))
 
 	for _, acc := range ctx.AccountHash {
 		if err := cn.UpdateAccount(acc); err != nil {
