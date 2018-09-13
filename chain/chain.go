@@ -127,7 +127,10 @@ func (cn *Base) initGenesisAccount() error {
 			if v.UnlockHeight == 0 {
 				return ErrInvalidUnlockHeight
 			}
-			addr := common.AddressFromHash(cn.Coordinate(), v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
+			if len(v.KeyAddresses) > 1 {
+				return ErrExceedAddressCount
+			}
+			addr := common.ConvertAddressType(v.KeyAddresses[0], v.Type)
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
