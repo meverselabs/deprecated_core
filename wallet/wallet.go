@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"bytes"
+	"strconv"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/store"
@@ -9,116 +10,105 @@ import (
 
 // Wallet TODO
 type Wallet interface {
-	Keys() []*Key
-	CreateKey(name string) (*Key, error)
-	KeysByName(name string) []*Key
-	KeyByPublicKey(pubkey common.PublicKey) (*Key, error)
-	UpdateKeyName(pubkey common.PublicKey, name string) error
-	DeleteKey(pubkey common.PublicKey) error
+	AddKeyHolder(kh *KeyHolder) error
+	KeyHolders() []*KeyHolder
+	KeyHolderByID(UUID string) (*KeyHolder, error)
+	KeyHolderByPublicKey(pubkey common.PublicKey) (*KeyHolder, error)
+	DeleteKeyHolder(UUID string) error
 }
 
 // Base TODO
 type Base struct {
-	KeyStore store.Store
-	Keys_    []*Key
+	KeyStore      store.Store
+	KeyHolderHash map[string]*KeyHolder
+	publicKeyHash map[string]*KeyHolder
+	uuids         []string
 }
 
 // NewBase TODO
 func NewBase(KeyStore store.Store) (*Base, error) {
 	wa := &Base{
-		KeyStore: KeyStore,
-		Keys_:    []*Key{},
+		KeyStore:      KeyStore,
+		KeyHolderHash: map[string]*KeyHolder{},
+		publicKeyHash: map[string]*KeyHolder{},
+		uuids:         []string{},
 	}
 	_, values, err := KeyStore.Scan(nil)
 	if err != nil {
 		return nil, err
 	}
 	for _, v := range values {
-		ac := new(Key)
-		ac.PrivateKey = new(common.PrivateKey)
-		if _, err := ac.ReadFrom(bytes.NewReader(v)); err != nil {
-			return nil, err
+		if len(v) > 0 {
+			kh := new(KeyHolder)
+			if _, err := kh.ReadFrom(bytes.NewReader(v)); err != nil {
+				return nil, err
+			}
+			wa.AddKeyHolder(kh)
 		}
-		wa.Keys_ = append(wa.Keys_, ac)
 	}
 	return wa, nil
 }
 
-// Keys TODO
-func (wa *Base) Keys() []*Key {
-	return wa.Keys_
+// AddKeyHolder TODO
+func (wa *Base) AddKeyHolder(kh *KeyHolder) error {
+	var buffer bytes.Buffer
+	if _, err := kh.WriteTo(&buffer); err != nil {
+		return err
+	}
+	idx := len(wa.KeyHolderHash)
+	id := strconv.Itoa(idx)
+	if err := wa.KeyStore.Set([]byte(id), buffer.Bytes()); err != nil {
+		return err
+	}
+	wa.KeyHolderHash[kh.UUID()] = kh
+	pubkey := kh.PublicKey()
+	wa.publicKeyHash[string(pubkey[:])] = kh
+	wa.uuids = append(wa.uuids, kh.UUID())
+	return nil
 }
 
-// CreateKey TODO
-func (wa *Base) CreateKey(name string) (*Key, error) {
-	ac, err := NewKey(name)
-	if err != nil {
-		return nil, err
-	}
-	if err := wa.saveKey(ac); err != nil {
-		return nil, err
-	}
-	wa.Keys_ = append(wa.Keys_, ac)
-	return ac, nil
-}
-
-// KeysByName TODO
-func (wa *Base) KeysByName(name string) []*Key {
-	list := []*Key{}
-	for _, ac := range wa.Keys_ {
-		if ac.Name == name {
-			list = append(list, ac)
-		}
+// KeyHolders TODO
+func (wa *Base) KeyHolders() []*KeyHolder {
+	list := make([]*KeyHolder, 0, len(wa.KeyHolderHash))
+	for _, UUID := range wa.uuids {
+		list = append(list, wa.KeyHolderHash[UUID])
 	}
 	return list
 }
 
-// KeyByPublicKey TODO
-func (wa *Base) KeyByPublicKey(pubkey common.PublicKey) (*Key, error) {
-	for _, ac := range wa.Keys_ {
-		if ac.PublicKey().Equal(pubkey) {
-			return ac, nil
+// KeyHolderByID TODO
+func (wa *Base) KeyHolderByID(UUID string) (*KeyHolder, error) {
+	if kh, has := wa.KeyHolderHash[UUID]; !has {
+		return nil, ErrNotExistKeyHolder
+	} else {
+		return kh, nil
+	}
+}
+
+// KeyHolderByPublicKey TODO
+func (wa *Base) KeyHolderByPublicKey(pubkey common.PublicKey) (*KeyHolder, error) {
+	if kh, has := wa.publicKeyHash[string(pubkey[:])]; !has {
+		return nil, ErrNotExistKeyHolder
+	} else {
+		return kh, nil
+	}
+}
+
+// DeleteKeyHolder TODO
+func (wa *Base) DeleteKeyHolder(UUID string) error {
+	if kh, err := wa.KeyHolderByID(UUID); err != nil {
+		return err
+	} else {
+		delete(wa.KeyHolderHash, kh.UUID())
+		pubkey := kh.PublicKey()
+		delete(wa.publicKeyHash, string(pubkey[:]))
+		list := make([]string, 0, len(wa.KeyHolderHash))
+		for _, v := range wa.uuids {
+			if v != UUID {
+				list = append(list, v)
+			}
 		}
-	}
-	return nil, ErrNotExistKey
-}
-
-// UpdateKeyName TODO
-func (wa *Base) UpdateKeyName(pubkey common.PublicKey, name string) error {
-	ac, err := wa.KeyByPublicKey(pubkey)
-	if err != nil {
-		return err
-	}
-	ac.Name = name
-	if err := wa.saveKey(ac); err != nil {
-		return err
-	}
-	return nil
-}
-
-// DeleteKey TODO
-func (wa *Base) DeleteKey(pubkey common.PublicKey) error {
-	if err := wa.KeyStore.Delete(pubkey[:]); err != nil {
-		return err
-	}
-
-	Keys := []*Key{}
-	for _, ac := range wa.Keys_ {
-		if !ac.PublicKey().Equal(pubkey) {
-			Keys = append(Keys, ac)
-		}
-	}
-	wa.Keys_ = Keys
-	return nil
-}
-
-func (wa *Base) saveKey(ac *Key) error {
-	var buffer bytes.Buffer
-	if _, err := ac.WriteTo(&buffer); err != nil {
-		return err
-	}
-	if err := wa.KeyStore.Set([]byte(ac.PublicKey().String()), buffer.Bytes()); err != nil {
-		return err
+		wa.uuids = list
 	}
 	return nil
 }
