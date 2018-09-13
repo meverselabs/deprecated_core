@@ -2,6 +2,7 @@ package chain
 
 import (
 	"git.fleta.io/fleta/common"
+	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/store"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/block"
@@ -30,6 +31,7 @@ func ValidateBlockGeneratorSignature(b *block.Block, GeneratorSignature common.S
 
 // ValidationContext TODO
 type ValidationContext struct {
+	CurrentTxHash     hash.Hash256
 	AccountHash       map[string]*account.Account
 	DeleteAccountHash map[string]*account.Account
 	AccountDataHash   map[string][]byte
@@ -92,6 +94,11 @@ func (ctx *ValidationContext) AccountData(cn Provider, addr common.Address, name
 // ValidateTransaction TODO
 func ValidateTransaction(cn Chain, tx transaction.Transaction, signers []common.Address) error {
 	ctx := NewValidationContext()
+	txHash, err := tx.Hash()
+	if err != nil {
+		return err
+	}
+	ctx.CurrentTxHash = txHash
 	return validateTransaction(ctx, cn, tx, signers, 0, false)
 }
 
@@ -142,7 +149,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			toAcc.Balance = toAcc.Balance.Add(vout.Amount)
 		}
 	case *advanced.Burn:
-		fromAcc, err := ctx.LoadAccount(cn, tx.From, true)
+		fromAcc, err := ctx.LoadAccount(cn, tx.From, false)
 		if err != nil {
 			return err
 		}
@@ -181,11 +188,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
 		fromAcc.Seq++
 
-		TxHash, err := tx.Hash()
-		if err != nil {
-			return err
-		}
-		addr := common.AddressFromHash(cn.Coordinate(), MultiSigAccountType, TxHash, common.ChecksumFromAddresses(tx.KeyAddresses))
+		addr := common.AddressFromHash(cn.Coordinate(), MultiSigAccountType, ctx.CurrentTxHash, common.ChecksumFromAddresses(tx.KeyAddresses))
 		if _, err := ctx.LoadAccount(cn, addr, false); err != nil {
 			if err != store.ErrNotExistKey {
 				return err
@@ -214,11 +217,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
 		fromAcc.Seq++
 
-		TxHash, err := tx.Hash()
-		if err != nil {
-			return err
-		}
-		addr := common.AddressFromHash(cn.Coordinate(), FormulationAccountType, TxHash, common.ChecksumFromAddresses(signers))
+		addr := common.AddressFromHash(cn.Coordinate(), FormulationAccountType, ctx.CurrentTxHash, common.ChecksumFromAddresses(signers))
 		if _, err := ctx.LoadAccount(cn, addr, false); err != nil {
 			if err != store.ErrNotExistKey {
 				return err

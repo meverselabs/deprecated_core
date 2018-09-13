@@ -341,6 +341,7 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 				addrs = append(addrs, common.AddressFromPubkey(cn.Coordinate(), KeyAccountType, pubkey))
 			}
 		}
+		ctx.CurrentTxHash = txHash
 		if err := validateTransactionWithResult(ctx, cn, tx, addrs, uint16(idx)); err != nil {
 			return nil, err
 		}
