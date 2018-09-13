@@ -3,6 +3,7 @@ package chain
 import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/store"
+	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/chain/account"
 	"git.fleta.io/fleta/core/transaction"
@@ -29,46 +30,61 @@ func ValidateBlockGeneratorSignature(b *block.Block, GeneratorSignature common.S
 
 // ValidationContext TODO
 type ValidationContext struct {
-	AccountHash map[string]*account.Account
+	AccountHash       map[string]*account.Account
+	DeleteAccountHash map[string]*account.Account
 }
 
 // NewValidationContext TODO
 func NewValidationContext() *ValidationContext {
 	ctx := &ValidationContext{
-		AccountHash: map[string]*account.Account{},
+		AccountHash:       map[string]*account.Account{},
+		DeleteAccountHash: map[string]*account.Account{},
 	}
 	return ctx
 }
 
+// LoadAccount TODO
+func (ctx *ValidationContext) LoadAccount(cn Provider, addr common.Address) (*account.Account, error) {
+	if _, has := ctx.DeleteAccountHash[string(addr[:])]; has {
+		return nil, ErrDeletedAccount
+	}
+
+	targetAcc, has := ctx.AccountHash[string(addr[:])]
+	if !has {
+		acc, err := cn.Account(addr)
+		if err != nil {
+			return nil, err
+		}
+		targetAcc = acc
+		ctx.AccountHash[string(addr[:])] = targetAcc
+	}
+	return targetAcc, nil
+}
+
 // ValidateTransaction TODO
-func ValidateTransaction(cn Chain, tx transaction.Transaction, signers []common.PublicKey) error {
+func ValidateTransaction(cn Chain, tx transaction.Transaction, signers []common.Address) error {
 	ctx := NewValidationContext()
 	return validateTransaction(ctx, cn, tx, signers, 0, false)
 }
 
 // validateTransactionWithResult TODO
-func validateTransactionWithResult(ctx *ValidationContext, cn Chain, tx transaction.Transaction, signers []common.PublicKey, idx uint16) error {
+func validateTransactionWithResult(ctx *ValidationContext, cn Chain, tx transaction.Transaction, signers []common.Address, idx uint16) error {
 	return validateTransaction(ctx, cn, tx, signers, idx, true)
 }
 
 // validateTransaction TODO
-func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Transaction, signers []common.PublicKey, idx uint16, bResult bool) error {
+func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Transaction, signers []common.Address, idx uint16, bResult bool) error {
 	Fee := cn.Fee(t)
 	switch tx := t.(type) {
 	case *advanced.Trade:
-		fromAcc, has := ctx.AccountHash[string(tx.From[:])]
-		if !has {
-			acc, err := cn.Account(tx.From)
-			if err != nil {
-				return err
-			}
-			fromAcc = acc
-			ctx.AccountHash[string(tx.From[:])] = fromAcc
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
 		}
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if err := fromAcc.CheckSigners(signers); err != nil {
+		if err := ValidateSigners(fromAcc, signers); err != nil {
 			return err
 		}
 
@@ -91,31 +107,21 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			}
 			fromAcc.Balance = fromAcc.Balance.Sub(vout.Amount)
 
-			toAcc, has := ctx.AccountHash[string(vout.Address[:])]
-			if !has {
-				acc, err := cn.Account(tx.From)
-				if err != nil {
-					return err
-				}
-				fromAcc = acc
-				ctx.AccountHash[string(tx.From[:])] = fromAcc
+			toAcc, err := ctx.LoadAccount(cn, vout.Address)
+			if err != nil {
+				return err
 			}
 			toAcc.Balance = toAcc.Balance.Add(vout.Amount)
 		}
 	case *advanced.Formulation:
-		fromAcc, has := ctx.AccountHash[string(tx.From[:])]
-		if !has {
-			acc, err := cn.Account(tx.From)
-			if err != nil {
-				return err
-			}
-			fromAcc = acc
-			ctx.AccountHash[string(tx.From[:])] = fromAcc
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
 		}
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if err := fromAcc.CheckSigners(signers); err != nil {
+		if err := ValidateSigners(fromAcc, signers); err != nil {
 			return err
 		}
 
@@ -125,45 +131,109 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
 		fromAcc.Seq++
 
-		//TODO : update formulator information
-	case *advanced.MultiSigAccount:
-		fromAcc, has := ctx.AccountHash[string(tx.From[:])]
-		if !has {
-			acc, err := cn.Account(tx.From)
-			if err != nil {
-				return err
-			}
-			fromAcc = acc
-			ctx.AccountHash[string(tx.From[:])] = fromAcc
-		}
-		if t.Seq() != fromAcc.Seq+1 {
-			return ErrInvalidSequence
-		}
-		if err := fromAcc.CheckSigners(signers); err != nil {
+		TxHash, err := tx.Hash()
+		if err != nil {
 			return err
 		}
-
-		if fromAcc.Balance.Less(Fee) {
-			return ErrInsuffcientBalance
-		}
-		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
-		fromAcc.Seq++
-
-		// TODO : make MultiSigAccountt address
-		var addr common.Address
-		if _, has := ctx.AccountHash[string(addr[:])]; !has {
-			if _, err := cn.Account(addr); err != nil {
-				if err != store.ErrNotExistKey {
-					return err
-				} else {
-					acc := &account.Account{}
-					ctx.AccountHash[string(addr[:])] = acc
-				}
+		addr := common.AddressFromHash(cn.Coordinate(), FormulationAccountType, TxHash, common.ChecksumFromAddresses(signers))
+		if _, err := ctx.LoadAccount(cn, addr); err != nil {
+			if err != store.ErrNotExistKey {
+				return err
 			} else {
-				return ErrExistAddress
+				acc := &account.Account{
+					Address:      addr,
+					ChainCoord:   cn.Coordinate(),
+					Type:         FormulationAccountType,
+					Balance:      amount.NewCoinAmount(0, 0),
+					KeyAddresses: signers,
+				}
+				ctx.AccountHash[string(addr[:])] = acc
 			}
 		} else {
 			return ErrExistAddress
+		}
+	case *advanced.RevokeFormulation:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if t.Seq() != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(fromAcc, signers); err != nil {
+			return err
+		}
+
+		formulationAcc, err := ctx.LoadAccount(cn, tx.FormulationAddress)
+		if err != nil {
+			return err
+		}
+		if err := ValidateSigners(formulationAcc, signers); err != nil {
+			return err
+		}
+
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+		fromAcc.Balance = fromAcc.Balance.Add(formulationAcc.Balance).Add(cn.Config().FormulationCost)
+
+		ctx.DeleteAccountHash[string(tx.FormulationAddress[:])] = formulationAcc
+	case *advanced.MultiSigAccount:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if t.Seq() != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(fromAcc, signers); err != nil {
+			return err
+		}
+
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+
+		TxHash, err := tx.Hash()
+		if err != nil {
+			return err
+		}
+		addr := common.AddressFromHash(cn.Coordinate(), MultiSigAccountType, TxHash, common.ChecksumFromAddresses(tx.Addresses))
+		if _, err := ctx.LoadAccount(cn, addr); err != nil {
+			if err != store.ErrNotExistKey {
+				return err
+			} else {
+				acc := &account.Account{
+					Address:      addr,
+					ChainCoord:   cn.Coordinate(),
+					Type:         MultiSigAccountType,
+					Balance:      amount.NewCoinAmount(0, 0),
+					KeyAddresses: tx.Addresses,
+				}
+				ctx.AccountHash[string(addr[:])] = acc
+			}
+		} else {
+			return ErrExistAddress
+		}
+	}
+	return nil
+}
+
+// ValidateSigners TODO
+func ValidateSigners(acc *account.Account, addrs []common.Address) error {
+	if len(addrs) != len(acc.KeyAddresses) {
+		return ErrMismatchSignaturesCount
+	}
+	for i, addr := range addrs {
+		if addr.Type() != KeyAccountType {
+			return ErrInvalidAccountType
+		}
+		if !addr.Equal(acc.KeyAddresses[i]) {
+			return ErrInvalidTransactionSignature
 		}
 	}
 	return nil
