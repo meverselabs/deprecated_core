@@ -10,10 +10,10 @@ import (
 
 // Account TODO
 type Account struct {
-	Address    common.Address
-	Balance    *amount.Amount
-	Seq        uint64
-	PublicKeys []common.PublicKey
+	Address      common.Address
+	Balance      *amount.Amount
+	Seq          uint64
+	KeyAddresses []common.Address
 }
 
 // WriteTo TODO
@@ -33,6 +33,19 @@ func (acc *Account) WriteTo(w io.Writer) (int64, error) {
 		return wrote, err
 	} else {
 		wrote += n
+	}
+
+	if n, err := util.WriteUint16(w, uint16(len(acc.KeyAddresses))); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+		for _, ka := range acc.KeyAddresses {
+			if n, err := ka.WriteTo(w); err != nil {
+				return wrote, err
+			} else {
+				wrote += n
+			}
+		}
 	}
 	return wrote, nil
 }
@@ -55,6 +68,22 @@ func (acc *Account) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 		acc.Seq = v
+	}
+
+	if Len, n, err := util.ReadUint16(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		acc.KeyAddresses = make([]common.Address, 0, Len)
+		for i := 0; i < int(Len); i++ {
+			var ka common.Address
+			if n, err := ka.ReadFrom(r); err != nil {
+				return read, err
+			} else {
+				read += n
+				acc.KeyAddresses = append(acc.KeyAddresses, ka)
+			}
+		}
 	}
 	return read, nil
 }
