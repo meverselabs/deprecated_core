@@ -13,6 +13,7 @@ type Transaction interface {
 	io.ReaderFrom
 	Version() uint16
 	Timestamp() uint64
+	Seq() uint64
 	Hash() (hash.Hash256, error)
 }
 
@@ -20,14 +21,7 @@ type Transaction interface {
 type Base struct {
 	Version_   uint16
 	Timestamp_ uint64
-}
-
-// NewBase TODO
-func NewBase(version uint16, timestamp uint64) *Base {
-	return &Base{
-		Version_:   version,
-		Timestamp_: timestamp,
-	}
+	Seq_       uint64
 }
 
 // Version TODO
@@ -40,6 +34,11 @@ func (tx *Base) Timestamp() uint64 {
 	return tx.Timestamp_
 }
 
+// Seq TODO
+func (tx *Base) Seq() uint64 {
+	return tx.Seq_
+}
+
 // WriteTo TODO
 func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
@@ -49,6 +48,11 @@ func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 	if n, err := util.WriteUint64(w, tx.Timestamp_); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint64(w, tx.Seq_); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -70,6 +74,12 @@ func (tx *Base) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 		tx.Timestamp_ = v
+	}
+	if v, n, err := util.ReadUint64(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.Seq_ = v
 	}
 	return read, nil
 }

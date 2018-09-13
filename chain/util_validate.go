@@ -65,6 +65,9 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			fromAcc = acc
 			ctx.AccountHash[string(tx.From[:])] = fromAcc
 		}
+		if t.Seq() != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
 		if len(fromAcc.PublicKeys) != len(singers) {
 			return ErrMismatchSignaturesCount
 		}
@@ -78,6 +81,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrInsuffcientBalance
 		}
 		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
 
 		for _, vout := range tx.Vout {
 			if vout.Amount.IsZero() {
@@ -113,6 +117,9 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			fromAcc = acc
 			ctx.AccountHash[string(tx.From[:])] = fromAcc
 		}
+		if t.Seq() != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
 		if len(fromAcc.PublicKeys) != len(singers) {
 			return ErrMismatchSignaturesCount
 		}
@@ -126,6 +133,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrInsuffcientBalance
 		}
 		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
 
 		//TODO : update formulator information
 	case *advanced.MultiSigAccount:
@@ -138,6 +146,9 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			fromAcc = acc
 			ctx.AccountHash[string(tx.From[:])] = fromAcc
 		}
+		if t.Seq() != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
 		if len(fromAcc.PublicKeys) != len(singers) {
 			return ErrMismatchSignaturesCount
 		}
@@ -151,6 +162,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrInsuffcientBalance
 		}
 		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
 
 		// TODO : make MultiSigAccountt address
 		var addr common.Address
