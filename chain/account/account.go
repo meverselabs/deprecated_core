@@ -8,12 +8,6 @@ import (
 	"git.fleta.io/fleta/core/amount"
 )
 
-// account address types
-const (
-	KeyAddress      = common.AddressType(1)
-	MultiSigAddress = common.AddressType(2)
-)
-
 // Account TODO
 type Account struct {
 	Address      common.Address
@@ -22,20 +16,6 @@ type Account struct {
 	Balance      *amount.Amount
 	Seq          uint64
 	KeyAddresses []common.Address
-}
-
-// CheckSigners TODO
-func (acc *Account) CheckSigners(signers []common.PublicKey) error {
-	if len(signers) != len(acc.KeyAddresses) {
-		return ErrMismatchSignaturesCount
-	}
-	for i, signer := range signers {
-		addr := common.AddressFromPubkey(acc.ChainCoord, acc.Type, signer)
-		if !addr.Equal(acc.KeyAddresses[i]) {
-			return ErrInvalidTransactionSignature
-		}
-	}
-	return nil
 }
 
 // WriteTo TODO
