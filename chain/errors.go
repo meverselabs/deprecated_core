@@ -36,6 +36,7 @@ var (
 	ErrDoubleSpent                   = errors.New("double spent")
 	ErrExistAddress                  = errors.New("exist address")
 	ErrInvalidAccountType            = errors.New("invalid account type")
+	ErrInvalidAccountData            = errors.New("invalid account data")
 	ErrInvalidTransactionSignature   = errors.New("invalid transaction signature")
 	ErrDeletedAccount                = errors.New("deleted account")
 	ErrLockedAccount                 = errors.New("locked account")
@@ -44,4 +45,5 @@ var (
 	ErrInvalidUnlockHeight           = errors.New("invalid unlock height")
 	ErrInvalidGenesisAccountType     = errors.New("invalid genesis account type")
 	ErrExceedAddressCount            = errors.New("exceed address count")
+	ErrUnknownAccountDataType        = errors.New("unknown account data type")
 )

@@ -65,6 +65,7 @@ func (tx *Genesis) ReadFrom(r io.Reader) (int64, error) {
 type GenesisAccount struct {
 	Type         common.AddressType
 	Amount       *amount.Amount
+	PublicKey    common.PublicKey
 	UnlockHeight uint32
 	KeyAddresses []common.Address
 }
@@ -91,6 +92,11 @@ func (ga *GenesisAccount) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 	if n, err := ga.Amount.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := ga.PublicKey.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -126,6 +132,11 @@ func (ga *GenesisAccount) ReadFrom(r io.Reader) (int64, error) {
 		ga.Type = common.AddressType(v)
 	}
 	if n, err := ga.Amount.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if n, err := ga.PublicKey.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

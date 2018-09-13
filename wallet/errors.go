@@ -6,5 +6,6 @@ import (
 
 // wallet errors
 var (
-	ErrNotExistKey = errors.New("not exist key")
+	ErrNotExistKeyHolder = errors.New("not exist key holder")
+	ErrUnknownKeyType    = errors.New("unknown key type")
 )
