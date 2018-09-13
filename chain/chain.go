@@ -52,7 +52,7 @@ type Base struct {
 }
 
 // NewBase TODO
-func NewBase(config *Config, GenesisHash hash.Hash256, blockStore store.Store, accountStore store.Store, cacheCount int) (*Base, error) {
+func NewBase(config *Config, GenesisHash hash.Hash256, blockStore store.Store, accountStore store.Store) (*Base, error) {
 	var height uint32
 	if bh, err := blockStore.Get([]byte("height")); err != nil {
 	} else {
