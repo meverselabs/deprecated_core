@@ -8,18 +8,45 @@ import (
 	"git.fleta.io/fleta/core/amount"
 )
 
+// account address types
+const (
+	KeyAddress      = common.AddressType(1)
+	MultiSigAddress = common.AddressType(2)
+)
+
 // Account TODO
 type Account struct {
 	Address      common.Address
+	ChainCoord   common.Coordinate
+	Type         common.AddressType
 	Balance      *amount.Amount
 	Seq          uint64
 	KeyAddresses []common.Address
+}
+
+// CheckSigners TODO
+func (acc *Account) CheckSigners(signers []common.PublicKey) error {
+	if len(signers) != len(acc.KeyAddresses) {
+		return ErrMismatchSignaturesCount
+	}
+	for i, signer := range signers {
+		addr := common.AddressFromPubkey(acc.ChainCoord, acc.Type, signer)
+		if !addr.Equal(acc.KeyAddresses[i]) {
+			return ErrInvalidTransactionSignature
+		}
+	}
+	return nil
 }
 
 // WriteTo TODO
 func (acc *Account) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := acc.Address.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint8(w, uint8(acc.Type)); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -57,6 +84,12 @@ func (acc *Account) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
+	}
+	if v, n, err := util.ReadUint8(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		acc.Type = common.AddressType(v)
 	}
 	if n, err := acc.Balance.ReadFrom(r); err != nil {
 		return read, err
