@@ -6,7 +6,6 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/amount"
-	"git.fleta.io/fleta/core/chain/account/data"
 )
 
 // Account TODO
@@ -17,7 +16,6 @@ type Account struct {
 	Balance      *amount.Amount
 	Seq          uint64
 	KeyAddresses []common.Address
-	Data         data.Data
 }
 
 // WriteTo TODO
@@ -56,12 +54,6 @@ func (acc *Account) WriteTo(w io.Writer) (int64, error) {
 			}
 		}
 	}
-
-	if n, err := acc.Data.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
 	return wrote, nil
 }
 
@@ -79,6 +71,7 @@ func (acc *Account) ReadFrom(r io.Reader) (int64, error) {
 		read += n
 		acc.Type = common.AddressType(v)
 	}
+	acc.Balance = amount.NewCoinAmount(0, 0)
 	if n, err := acc.Balance.ReadFrom(r); err != nil {
 		return read, err
 	} else {
@@ -105,12 +98,6 @@ func (acc *Account) ReadFrom(r io.Reader) (int64, error) {
 				acc.KeyAddresses = append(acc.KeyAddresses, ka)
 			}
 		}
-	}
-
-	if n, err := acc.Data.ReadFrom(r); err != nil {
-		return read, err
-	} else {
-		read += n
 	}
 	return read, nil
 }

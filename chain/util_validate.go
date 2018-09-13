@@ -3,9 +3,9 @@ package chain
 import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/store"
+	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/chain/account"
-	"git.fleta.io/fleta/core/chain/account/data"
 	"git.fleta.io/fleta/core/transaction"
 	"git.fleta.io/fleta/core/transaction/advanced"
 )
@@ -32,6 +32,7 @@ func ValidateBlockGeneratorSignature(b *block.Block, GeneratorSignature common.S
 type ValidationContext struct {
 	AccountHash       map[string]*account.Account
 	DeleteAccountHash map[string]*account.Account
+	AccountDataHash   map[string][]byte
 }
 
 // NewValidationContext TODO
@@ -39,6 +40,7 @@ func NewValidationContext() *ValidationContext {
 	ctx := &ValidationContext{
 		AccountHash:       map[string]*account.Account{},
 		DeleteAccountHash: map[string]*account.Account{},
+		AccountDataHash:   map[string][]byte{},
 	}
 	return ctx
 }
@@ -58,10 +60,12 @@ func (ctx *ValidationContext) LoadAccount(cn Provider, addr common.Address, chec
 		if checkLock {
 			switch acc.Type {
 			case LockedAccountType:
-				if d, is := acc.Data.(*LockedAccountData); is {
-					if cn.Height() < d.UnlockHeight {
-						return nil, ErrLockedAccount
-					}
+				bs, err := ctx.AccountData(cn, acc.Address, "UnlockHeight")
+				if err != nil {
+					return nil, err
+				}
+				if cn.Height() < util.BytesToUint32(bs) {
+					return nil, ErrLockedAccount
 				}
 			}
 		}
@@ -69,6 +73,20 @@ func (ctx *ValidationContext) LoadAccount(cn Provider, addr common.Address, chec
 		ctx.AccountHash[string(addr[:])] = targetAcc
 	}
 	return targetAcc, nil
+}
+
+// AccountData TODO
+func (ctx *ValidationContext) AccountData(cn Provider, addr common.Address, name string) ([]byte, error) {
+	key := toAccountDataKey(addr, name)
+	data, has := ctx.AccountDataHash[string(key)]
+	if !has {
+		bs, err := cn.AccountData(addr, name)
+		if err != nil {
+			return nil, err
+		}
+		data = bs
+	}
+	return data, nil
 }
 
 // ValidateTransaction TODO
@@ -86,71 +104,6 @@ func validateTransactionWithResult(ctx *ValidationContext, cn Chain, tx transact
 func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Transaction, signers []common.Address, idx uint16, bResult bool) error {
 	Fee := cn.Fee(t)
 	switch tx := t.(type) {
-	case *advanced.Genesis:
-		if cn.Height() > 0 {
-			return ErrInvalidHeight
-		}
-		if !tx.Coordinate.Equal(cn.Coordinate()) {
-			return ErrMismatchCoordinate
-		}
-		/*
-			tx.ObserverPubkeys []common.PublicKey
-		*/
-		for _, v := range tx.Accounts {
-			GaHash, err := v.Hash()
-			if err != nil {
-				return nil
-			}
-
-			for _, addr := range v.KeyAddresses {
-				if addr.Type() != KeyAccountType {
-					return ErrInvalidAccountType
-				}
-			}
-
-			switch v.Type {
-			case KeyAccountType:
-				if v.UnlockHeight > 0 {
-					return ErrInvalidUnlockHeight
-				}
-				if len(v.KeyAddresses) > 1 {
-					return ErrExceedAddressCount
-				}
-				d := data.NewBase(0)
-				addr := v.KeyAddresses[0]
-				acc := CreateAccount(cn, addr, v.KeyAddresses, d)
-				ctx.AccountHash[string(addr[:])] = acc
-			case LockedAccountType:
-				if v.UnlockHeight == 0 {
-					return ErrInvalidUnlockHeight
-				}
-				d := &LockedAccountData{
-					Base:         data.NewBase(0),
-					UnlockHeight: v.UnlockHeight,
-				}
-				addr := common.AddressFromHash(cn.Coordinate(), v.Type, GaHash, common.ChecksumFromAddresses(v.KeyAddresses))
-				acc := CreateAccount(cn, addr, v.KeyAddresses, d)
-				ctx.AccountHash[string(addr[:])] = acc
-			case MultiSigAccountType:
-				if v.UnlockHeight > 0 {
-					return ErrInvalidUnlockHeight
-				}
-				d := data.NewBase(0)
-				addr := common.AddressFromHash(cn.Coordinate(), v.Type, GaHash, common.ChecksumFromAddresses(v.KeyAddresses))
-				acc := CreateAccount(cn, addr, v.KeyAddresses, d)
-				ctx.AccountHash[string(addr[:])] = acc
-			case FormulationAccountType:
-				if v.UnlockHeight > 0 {
-					return ErrInvalidUnlockHeight
-				}
-				d := data.NewBase(0)
-				addr := common.AddressFromHash(cn.Coordinate(), v.Type, GaHash, common.ChecksumFromAddresses(v.KeyAddresses))
-				acc := CreateAccount(cn, addr, v.KeyAddresses, d)
-				ctx.AccountHash[string(addr[:])] = acc
-			default:
-				return ErrInvalidGenesisAccountType
-			}
-		}
 	case *advanced.Trade:
 		fromAcc, err := ctx.LoadAccount(cn, tx.From, true)
 		if err != nil {
@@ -237,8 +190,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			if err != store.ErrNotExistKey {
 				return err
 			} else {
-				d := data.NewBase(0)
-				acc := CreateAccount(cn, addr, tx.KeyAddresses, d)
+				acc := CreateAccount(cn, addr, tx.KeyAddresses)
 				ctx.AccountHash[string(addr[:])] = acc
 			}
 		} else {
@@ -271,9 +223,9 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			if err != store.ErrNotExistKey {
 				return err
 			} else {
-				d := data.NewBase(0)
-				acc := CreateAccount(cn, addr, signers, d)
+				acc := CreateAccount(cn, addr, signers)
 				ctx.AccountHash[string(addr[:])] = acc
+				ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = tx.PublicKey[:]
 			}
 		} else {
 			return ErrExistAddress

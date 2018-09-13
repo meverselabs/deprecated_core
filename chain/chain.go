@@ -2,6 +2,7 @@ package chain
 
 import (
 	"bytes"
+	"strconv"
 
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/chain/account"
@@ -19,10 +20,13 @@ import (
 // Provider TODO
 type Provider interface {
 	Config() Config
-	Coordinate() common.Coordinate
-	Genesis() hash.Hash256
 	Height() uint32
+	GenesisHash() hash.Hash256
+	Coordinate() common.Coordinate
+	ObserverPubkeys() []common.PublicKey
+	FormulationHash() map[string]common.PublicKey
 	Account(addr common.Address) (*account.Account, error)
+	AccountData(addr common.Address, name string) ([]byte, error)
 	Fee(tx transaction.Transaction) *amount.Amount
 	BlockReward(height uint32) *amount.Amount
 	HashCurrentBlock() (hash.Hash256, error)
@@ -40,51 +44,152 @@ type Chain interface {
 	Provider
 	Close()
 	UpdateAccount(acc *account.Account) error
+	UpdateAccountData(addr common.Address, name string, data []byte) error
 	ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) ([]hash.Hash256, error)
 }
 
 // Base TODO
 type Base struct {
-	genesisHash   hash.Hash256
-	coordinate    common.Coordinate
-	blockStore    store.Store
-	accountStore  store.Store
-	height        uint32
-	hashPrevBlock hash.Hash256
-	config        *Config
+	coordinate      common.Coordinate
+	blockStore      store.Store
+	accountStore    store.Store
+	dataStore       store.Store
+	height          uint32
+	hashPrevBlock   hash.Hash256
+	genesis         *advanced.Genesis
+	genesisHash     hash.Hash256
+	observerPubkeys []common.PublicKey
+	config          *Config
+	formulationHash map[string]common.PublicKey
 }
 
 // NewBase TODO
-func NewBase(config *Config, GenesisHash hash.Hash256, Coordinate common.Coordinate, blockStore store.Store, accountStore store.Store) (*Base, error) {
-	var height uint32
-	if bh, err := blockStore.Get([]byte("height")); err != nil {
-	} else {
-		height = util.BytesToUint32(bh)
+func NewBase(config *Config, genesis *advanced.Genesis, blockStore store.Store, accountStore store.Store, dataStore store.Store) (*Base, error) {
+	cn := &Base{
+		blockStore:      blockStore,
+		accountStore:    accountStore,
+		dataStore:       dataStore,
+		genesis:         genesis,
+		config:          config,
+		formulationHash: map[string]common.PublicKey{},
 	}
 
-	cn := &Base{
-		blockStore:   blockStore,
-		accountStore: accountStore,
-		height:       height,
-		coordinate:   Coordinate,
-		genesisHash:  GenesisHash,
-		config:       config,
+	cn.coordinate = cn.genesis.Coordinate
+	cn.observerPubkeys = cn.genesis.ObserverPubkeys
+	if h, err := genesis.Hash(); err != nil {
+		return nil, err
+	} else {
+		cn.genesisHash = h
+	}
+
+	if bh, err := blockStore.Get([]byte("height")); err != nil {
+		if err := cn.initGenesisAccount(); err != nil {
+			return nil, err
+		}
+	} else {
+		cn.height = util.BytesToUint32(bh)
 	}
 	return cn, nil
+}
+
+func (cn *Base) initGenesisAccount() error {
+	if cn.Height() > 0 {
+		return ErrInvalidHeight
+	}
+
+	ctx := NewValidationContext()
+	for i, v := range cn.genesis.Accounts {
+		GaHash, err := v.Hash()
+		if err != nil {
+			return nil
+		}
+		h := hash.TwoHash(GaHash, hash.Hash([]byte(strconv.Itoa(i))))
+
+		for _, addr := range v.KeyAddresses {
+			if addr.Type() != KeyAccountType {
+				return ErrInvalidAccountType
+			}
+		}
+
+		switch v.Type {
+		case KeyAccountType:
+			if v.UnlockHeight > 0 {
+				return ErrInvalidUnlockHeight
+			}
+			if len(v.KeyAddresses) > 1 {
+				return ErrExceedAddressCount
+			}
+			addr := v.KeyAddresses[0]
+			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			ctx.AccountHash[string(addr[:])] = acc
+		case LockedAccountType:
+			if v.UnlockHeight == 0 {
+				return ErrInvalidUnlockHeight
+			}
+			addr := common.AddressFromHash(cn.Coordinate(), v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
+			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountDataHash[string(toAccountDataKey(addr, "UnlockHeight"))] = util.Uint32ToBytes(v.UnlockHeight)
+		case MultiSigAccountType:
+			if v.UnlockHeight > 0 {
+				return ErrInvalidUnlockHeight
+			}
+			addr := common.AddressFromHash(cn.Coordinate(), v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
+			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			ctx.AccountHash[string(addr[:])] = acc
+		case FormulationAccountType:
+			if v.UnlockHeight > 0 {
+				return ErrInvalidUnlockHeight
+			}
+			addr := common.AddressFromHash(cn.Coordinate(), v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
+			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = v.PublicKey[:]
+		default:
+			return ErrInvalidGenesisAccountType
+		}
+	}
+
+	for key, data := range ctx.AccountDataHash {
+		if err := cn.updateAccountDataByKey([]byte(key), data); err != nil {
+			return err
+		}
+	}
+	for _, acc := range ctx.AccountHash {
+		if err := cn.UpdateAccount(acc); err != nil {
+			return err
+		}
+	}
+
+	if err := cn.blockStore.Set([]byte("height"), util.Uint32ToBytes(0)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Coordinate TODO
 func (cn *Base) Coordinate() common.Coordinate {
 	var coord common.Coordinate
-	copy(coord[:], cn.coordinate[:])
+	copy(coord[:], cn.genesis.Coordinate[:])
 	return coord
 }
 
-// Genesis TODO
-func (cn *Base) Genesis() hash.Hash256 {
-	var h hash.Hash256
-	copy(h[:], cn.genesisHash[:])
-	return h
+// ObserverPubkeys TODO
+func (cn *Base) ObserverPubkeys() []common.PublicKey {
+	pubkeys := make([]common.PublicKey, 0, len(cn.observerPubkeys))
+	for _, key := range cn.observerPubkeys {
+		var pubkey common.PublicKey
+		copy(pubkey[:], key[:])
+		pubkeys = append(pubkeys, pubkey)
+	}
+	return pubkeys
+}
+
+// GenesisHash TODO
+func (cn *Base) GenesisHash() hash.Hash256 {
+	var genesisHash hash.Hash256
+	copy(genesisHash[:], cn.genesisHash[:])
+	return genesisHash
 }
 
 // Config TODO
@@ -96,7 +201,7 @@ func (cn *Base) Config() Config {
 func (cn *Base) HashCurrentBlock() (hash.Hash256, error) {
 	var prevHash hash.Hash256
 	if cn.Height() == 0 {
-		prevHash = cn.Genesis()
+		prevHash = cn.GenesisHash()
 	} else {
 		h, err := cn.BlockHash(cn.Height())
 		if err != nil {
@@ -105,6 +210,17 @@ func (cn *Base) HashCurrentBlock() (hash.Hash256, error) {
 		prevHash = h
 	}
 	return prevHash, nil
+}
+
+// FormulationHash TODO
+func (cn *Base) FormulationHash() map[string]common.PublicKey {
+	hash := map[string]common.PublicKey{}
+	for k, v := range cn.formulationHash {
+		var pubkey common.PublicKey
+		copy(pubkey[:], v[:])
+		hash[k] = pubkey
+	}
+	return hash
 }
 
 // Account TODO
@@ -125,7 +241,40 @@ func (cn *Base) UpdateAccount(acc *account.Account) error {
 	var buffer bytes.Buffer
 	if _, err := acc.WriteTo(&buffer); err != nil {
 		return err
-	} else if err := cn.accountStore.Set(acc.Address[:], buffer.Bytes()); err != nil {
+	} else {
+		switch acc.Type {
+		case FormulationAccountType:
+			bs, err := cn.AccountData(acc.Address, "PublicKey")
+			if err != nil {
+				return err
+			}
+			var pubkey common.PublicKey
+			copy(pubkey[:], bs)
+			cn.formulationHash[string(acc.Address[:])] = pubkey
+		}
+		if err := cn.accountStore.Set(acc.Address[:], buffer.Bytes()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AccountData TODO
+func (cn *Base) AccountData(addr common.Address, name string) ([]byte, error) {
+	if bs, err := cn.dataStore.Get(toAccountDataKey(addr, name)); err != nil {
+		return nil, err
+	} else {
+		return bs, nil
+	}
+}
+
+// UpdateAccountData TODO
+func (cn *Base) UpdateAccountData(addr common.Address, name string, data []byte) error {
+	return cn.updateAccountDataByKey(toAccountDataKey(addr, name), data)
+}
+
+func (cn *Base) updateAccountDataByKey(key []byte, data []byte) error {
+	if err := cn.dataStore.Set(key, data); err != nil {
 		return err
 	}
 	return nil
@@ -210,6 +359,11 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 	}
 	formulationAcc.Balance = formulationAcc.Balance.Add(cn.BlockReward(height))
 
+	for key, data := range ctx.AccountDataHash {
+		if err := cn.updateAccountDataByKey([]byte(key), data); err != nil {
+			return nil, err
+		}
+	}
 	for _, acc := range ctx.AccountHash {
 		if err := cn.UpdateAccount(acc); err != nil {
 			return nil, err

@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 )
@@ -26,4 +27,11 @@ func toHeightBlockHashKey(height uint32) []byte {
 
 func toHashBlockHeightKey(h hash.Hash256) []byte {
 	return append(h[:], tagHashBlockHeight)
+}
+
+func toAccountDataKey(addr common.Address, name string) []byte {
+	key := make([]byte, len(addr)+len(name))
+	copy(key, addr[:])
+	copy(key[len(addr):], []byte(name))
+	return key
 }
