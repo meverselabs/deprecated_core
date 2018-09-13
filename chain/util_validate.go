@@ -41,18 +41,18 @@ func NewValidationContext() *ValidationContext {
 }
 
 // ValidateTransaction TODO
-func ValidateTransaction(cn Chain, tx transaction.Transaction, singers []common.PublicKey) error {
+func ValidateTransaction(cn Chain, tx transaction.Transaction, signers []common.PublicKey) error {
 	ctx := NewValidationContext()
-	return validateTransaction(ctx, cn, tx, singers, 0, false)
+	return validateTransaction(ctx, cn, tx, signers, 0, false)
 }
 
 // validateTransactionWithResult TODO
-func validateTransactionWithResult(ctx *ValidationContext, cn Chain, tx transaction.Transaction, singers []common.PublicKey, idx uint16) error {
-	return validateTransaction(ctx, cn, tx, singers, idx, true)
+func validateTransactionWithResult(ctx *ValidationContext, cn Chain, tx transaction.Transaction, signers []common.PublicKey, idx uint16) error {
+	return validateTransaction(ctx, cn, tx, signers, idx, true)
 }
 
 // validateTransaction TODO
-func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Transaction, singers []common.PublicKey, idx uint16, bResult bool) error {
+func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Transaction, signers []common.PublicKey, idx uint16, bResult bool) error {
 	Fee := cn.Fee(t)
 	switch tx := t.(type) {
 	case *advanced.Trade:
@@ -68,13 +68,8 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if len(fromAcc.PublicKeys) != len(singers) {
-			return ErrMismatchSignaturesCount
-		}
-		for i, singer := range singers {
-			if !singer.Equal(fromAcc.PublicKeys[i]) {
-				return ErrInvalidTransactionSignature
-			}
+		if err := fromAcc.CheckSigners(signers); err != nil {
+			return err
 		}
 
 		if fromAcc.Balance.Less(Fee) {
@@ -120,13 +115,8 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if len(fromAcc.PublicKeys) != len(singers) {
-			return ErrMismatchSignaturesCount
-		}
-		for i, singer := range singers {
-			if !singer.Equal(fromAcc.PublicKeys[i]) {
-				return ErrInvalidTransactionSignature
-			}
+		if err := fromAcc.CheckSigners(signers); err != nil {
+			return err
 		}
 
 		if fromAcc.Balance.Less(Fee) {
@@ -149,13 +139,8 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if len(fromAcc.PublicKeys) != len(singers) {
-			return ErrMismatchSignaturesCount
-		}
-		for i, singer := range singers {
-			if !singer.Equal(fromAcc.PublicKeys[i]) {
-				return ErrInvalidTransactionSignature
-			}
+		if err := fromAcc.CheckSigners(signers); err != nil {
+			return err
 		}
 
 		if fromAcc.Balance.Less(Fee) {

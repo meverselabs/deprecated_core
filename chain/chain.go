@@ -38,7 +38,7 @@ type Chain interface {
 	Provider
 	Close()
 	UpdateAccount(acc *account.Account) error
-	ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) error
+	ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) ([]hash.Hash256, error)
 }
 
 // Base TODO
@@ -143,17 +143,17 @@ func (cn *Base) Close() {
 }
 
 // ConnectBlock TODO
-func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) error {
+func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPublicKey common.PublicKey) ([]hash.Hash256, error) {
 	prevHash, err := cn.HashCurrentBlock()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !b.Header.HashPrevBlock.Equal(prevHash) {
-		return ErrMismatchHashPrevBlock
+		return nil, ErrMismatchHashPrevBlock
 	}
 
 	if err := ValidateBlockGeneratorSignature(b, s.GeneratorSignature, ExpectedPublicKey); err != nil {
-		return err
+		return nil, err
 	}
 	height := cn.Height() + 1
 
@@ -162,7 +162,7 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 	for idx, tx := range b.Transactions {
 		txHash, err := tx.Hash()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		TxHashes = append(TxHashes, txHash)
 
@@ -170,39 +170,39 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 		pubkeys := make([]common.PublicKey, 0, len(sigs))
 		for _, sig := range sigs {
 			if pubkey, err := common.RecoverPubkey(txHash, sig); err != nil {
-				return err
+				return nil, err
 			} else {
 				pubkeys = append(pubkeys, pubkey)
 			}
 		}
 		if err := validateTransactionWithResult(ctx, cn, tx, pubkeys, uint16(idx)); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	root, err := level.BuildLevelRoot(TxHashes)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !b.Header.HashLevelRoot.Equal(hash.TwoHash(prevHash, root)) {
-		return ErrMismatchHashLevelRoot
+		return nil, ErrMismatchHashLevelRoot
 	}
 
 	for _, acc := range ctx.AccountHash {
 		if err := cn.UpdateAccount(acc); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	if err := cn.writeBlock(height, b, s); err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := cn.blockStore.Set([]byte("height"), util.Uint32ToBytes(height)); err != nil {
-		return err
+		return nil, err
 	}
 	cn.height = height
 
-	return nil
+	return TxHashes, nil
 }
 
 // Height TODO
