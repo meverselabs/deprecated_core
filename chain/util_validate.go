@@ -144,7 +144,12 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 
 			toAcc, err := ctx.LoadAccount(cn, vout.Address, false)
 			if err != nil {
-				return err
+				if err != store.ErrNotExistKey {
+					return err
+				} else {
+					toAcc = CreateAccount(cn, vout.Address, []common.Address{vout.Address})
+					ctx.AccountHash[string(vout.Address[:])] = toAcc
+				}
 			}
 			toAcc.Balance = toAcc.Balance.Add(vout.Amount)
 		}
