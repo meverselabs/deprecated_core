@@ -13,8 +13,8 @@ import (
 // MultiSigAccount TODO
 type MultiSigAccount struct {
 	transaction.Base
-	From      common.Address
-	Addresses []common.Address //MAXLEN : 256
+	From         common.Address
+	KeyAddresses []common.Address //MAXLEN : 256
 }
 
 // NewMultiSigAccount TODO
@@ -24,7 +24,7 @@ func NewMultiSigAccount(version uint16, timestamp uint64) *MultiSigAccount {
 			Version_:   version,
 			Timestamp_: timestamp,
 		},
-		Addresses: []common.Address{},
+		KeyAddresses: []common.Address{},
 	}
 }
 
@@ -39,7 +39,7 @@ func (tx *MultiSigAccount) Hash() (hash.Hash256, error) {
 
 // WriteTo TODO
 func (tx *MultiSigAccount) WriteTo(w io.Writer) (int64, error) {
-	if len(tx.Addresses) > 256 {
+	if len(tx.KeyAddresses) > 256 {
 		return 0, ErrExceedTxOutCount
 	}
 
@@ -55,11 +55,11 @@ func (tx *MultiSigAccount) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 
-	if n, err := util.WriteUint8(w, uint8(len(tx.Addresses))); err != nil {
+	if n, err := util.WriteUint8(w, uint8(len(tx.KeyAddresses))); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
-		for _, addr := range tx.Addresses {
+		for _, addr := range tx.KeyAddresses {
 			if n, err := addr.WriteTo(w); err != nil {
 				return wrote, err
 			} else {
@@ -88,14 +88,14 @@ func (tx *MultiSigAccount) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		tx.Addresses = make([]common.Address, 0, Len)
+		tx.KeyAddresses = make([]common.Address, 0, Len)
 		for i := 0; i < int(Len); i++ {
 			var addr common.Address
 			if n, err := addr.ReadFrom(r); err != nil {
 				return read, err
 			} else {
 				read += n
-				tx.Addresses = append(tx.Addresses, addr)
+				tx.KeyAddresses = append(tx.KeyAddresses, addr)
 			}
 		}
 	}
