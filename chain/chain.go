@@ -98,6 +98,13 @@ func NewBase(config *Config, genesis *Genesis, blockStore store.Store, accountSt
 		}
 	} else {
 		cn.height = util.BytesToUint32(bh)
+		for i, v := range genesis.Accounts {
+			if bs, err := cn.blockStore.Get(toGenesisAccountAddress(uint16(i))); err != nil {
+				return nil, err
+			} else {
+				copy(v.GeneratedAddress[:], bs)
+			}
+		}
 	}
 	return cn, nil
 }
@@ -133,6 +140,7 @@ func (cn *Base) initGenesisAccount() error {
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
+			v.GeneratedAddress = addr
 		case LockedAccountType:
 			if v.UnlockHeight == 0 {
 				return ErrInvalidUnlockHeight
@@ -145,14 +153,20 @@ func (cn *Base) initGenesisAccount() error {
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "UnlockHeight"))] = util.Uint32ToBytes(v.UnlockHeight)
+			v.GeneratedAddress = addr
 		case MultiSigAccountType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
+			}
+			if v.Required == 0 || int(v.Required) > len(v.KeyAddresses) {
+				return ErrInvalidMultiSigRequired
 			}
 			addr := common.AddressFromHash(cn.genesis.Coordinate, v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(v.Required)}
+			v.GeneratedAddress = addr
 		case FormulationAccountType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
@@ -164,8 +178,13 @@ func (cn *Base) initGenesisAccount() error {
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = v.PublicKey[:]
+			v.GeneratedAddress = addr
 		default:
 			return ErrInvalidGenesisAccountType
+		}
+
+		if err := cn.blockStore.Set(toGenesisAccountAddress(uint16(i)), v.GeneratedAddress[:]); err != nil {
+			return err
 		}
 	}
 

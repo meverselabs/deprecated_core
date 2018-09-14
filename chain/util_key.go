@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	tagHeightBlock         = iota
-	toHeightObserverSigned = iota
-	tagHeightBlockHash     = iota
-	tagHashBlockHeight     = iota
+	tagHeightBlock           = 1
+	toHeightObserverSigned   = 2
+	tagHeightBlockHash       = 3
+	tagHashBlockHeight       = 4
+	tagGenesisAccountAddress = 5
 )
 
 func toHeightBlockKey(height uint32) []byte {
@@ -27,6 +28,10 @@ func toHeightBlockHashKey(height uint32) []byte {
 
 func toHashBlockHeightKey(h hash.Hash256) []byte {
 	return append(h[:], tagHashBlockHeight)
+}
+
+func toGenesisAccountAddress(idx uint16) []byte {
+	return append(util.Uint16ToBytes(idx), tagGenesisAccountAddress)
 }
 
 func toAccountDataKey(addr common.Address, name string) []byte {

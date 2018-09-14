@@ -112,11 +112,13 @@ func (gn *Genesis) ReadFrom(r io.Reader) (int64, error) {
 
 // GenesisAccount TODO
 type GenesisAccount struct {
-	Type         common.AddressType
-	Amount       *amount.Amount
-	PublicKey    common.PublicKey
-	UnlockHeight uint32
-	KeyAddresses []common.Address
+	Type             common.AddressType
+	Amount           *amount.Amount
+	PublicKey        common.PublicKey
+	UnlockHeight     uint32
+	Required         uint8
+	KeyAddresses     []common.Address
+	GeneratedAddress common.Address
 }
 
 // Hash TODO
@@ -155,6 +157,11 @@ func (ga *GenesisAccount) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := util.WriteUint8(w, ga.Required); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 
 	if n, err := util.WriteUint8(w, uint8(len(ga.KeyAddresses))); err != nil {
 		return wrote, err
@@ -167,6 +174,12 @@ func (ga *GenesisAccount) WriteTo(w io.Writer) (int64, error) {
 				wrote += n
 			}
 		}
+	}
+
+	if n, err := ga.GeneratedAddress.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
 	}
 	return wrote, nil
 }
@@ -196,6 +209,12 @@ func (ga *GenesisAccount) ReadFrom(r io.Reader) (int64, error) {
 		read += n
 		ga.UnlockHeight = v
 	}
+	if v, n, err := util.ReadUint8(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		ga.Required = v
+	}
 
 	if Len, n, err := util.ReadUint16(r); err != nil {
 		return read, err
@@ -211,6 +230,12 @@ func (ga *GenesisAccount) ReadFrom(r io.Reader) (int64, error) {
 				ga.KeyAddresses = append(ga.KeyAddresses, addr)
 			}
 		}
+	}
+
+	if n, err := ga.GeneratedAddress.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
 	}
 	return read, nil
 }
