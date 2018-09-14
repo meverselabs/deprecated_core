@@ -109,6 +109,17 @@ func validateTransactionWithResult(ctx *ValidationContext, cn Chain, tx transact
 
 // validateTransaction TODO
 func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Transaction, signers []common.Address, idx uint16, bResult bool) error {
+	signerHash := map[string]bool{}
+	for _, signer := range signers {
+		if signer.Type() != KeyAccountType {
+			return ErrInvalidAccountType
+		}
+		signerHash[string(signer[:])] = true
+	}
+	if len(signers) != len(signerHash) {
+		return ErrDuplicatedAddress
+	}
+
 	Fee := cn.Fee(t)
 	switch tx := t.(type) {
 	case *advanced.Trade:
@@ -119,7 +130,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if err := ValidateSigners(fromAcc, signers); err != nil {
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
 			return err
 		}
 
@@ -161,7 +172,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if err := ValidateSigners(fromAcc, signers); err != nil {
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
 			return err
 		}
 
@@ -183,8 +194,12 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if err := ValidateSigners(fromAcc, signers); err != nil {
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
 			return err
+		}
+
+		if tx.Required == 0 || int(tx.Required) > len(tx.KeyAddresses) {
+			return ErrInvalidMultiSigRequired
 		}
 
 		if fromAcc.Balance.Less(Fee) {
@@ -200,6 +215,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			} else {
 				acc := CreateAccount(cn, addr, tx.KeyAddresses)
 				ctx.AccountHash[string(addr[:])] = acc
+				ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(tx.Required)}
 			}
 		} else {
 			return ErrExistAddress
@@ -212,7 +228,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if err := ValidateSigners(fromAcc, signers); err != nil {
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
 			return err
 		}
 
@@ -242,7 +258,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if t.Seq() != fromAcc.Seq+1 {
 			return ErrInvalidSequence
 		}
-		if err := ValidateSigners(fromAcc, signers); err != nil {
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
 			return err
 		}
 
@@ -250,7 +266,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if err != nil {
 			return err
 		}
-		if err := ValidateSigners(formulationAcc, signers); err != nil {
+		if err := ValidateSigners(ctx, cn, formulationAcc, signerHash); err != nil {
 			return err
 		}
 
@@ -267,15 +283,25 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 }
 
 // ValidateSigners TODO
-func ValidateSigners(acc *account.Account, addrs []common.Address) error {
-	if len(addrs) != len(acc.KeyAddresses) {
-		return ErrMismatchSignaturesCount
-	}
-	for i, addr := range addrs {
-		if addr.Type() != KeyAccountType {
-			return ErrInvalidAccountType
+func ValidateSigners(ctx *ValidationContext, cn Provider, acc *account.Account, signerHash map[string]bool) error {
+	matchCount := 0
+	for _, addr := range acc.KeyAddresses {
+		if signerHash[string(addr[:])] {
+			matchCount++
 		}
-		if !addr.Equal(acc.KeyAddresses[i]) {
+	}
+	switch acc.Type {
+	case MultiSigAccountType:
+		bs, err := ctx.AccountData(cn, acc.Address, "Required")
+		if err != nil {
+			return err
+		}
+		Required := int(uint8(bs[0]))
+		if matchCount != Required {
+			return ErrInvalidTransactionSignature
+		}
+	default:
+		if matchCount != len(acc.KeyAddresses) {
 			return ErrInvalidTransactionSignature
 		}
 	}

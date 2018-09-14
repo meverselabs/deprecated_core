@@ -71,7 +71,6 @@ func (acc *Account) ReadFrom(r io.Reader) (int64, error) {
 		read += n
 		acc.Type = common.AddressType(v)
 	}
-	acc.Balance = amount.NewCoinAmount(0, 0)
 	if n, err := acc.Balance.ReadFrom(r); err != nil {
 		return read, err
 	} else {

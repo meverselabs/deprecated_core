@@ -19,16 +19,26 @@ import (
 
 // Provider TODO
 type Provider interface {
-	Config() Config
-	Height() uint32
+	AccountProvider
+	BlockProvider
+	Config() *Config
 	GenesisHash() hash.Hash256
 	Coordinate() common.Coordinate
 	ObserverPubkeys() []common.PublicKey
 	FormulationHash() map[string]common.PublicKey
-	Account(addr common.Address) (*account.Account, error)
-	AccountData(addr common.Address, name string) ([]byte, error)
 	Fee(tx transaction.Transaction) *amount.Amount
 	BlockReward(height uint32) *amount.Amount
+}
+
+// AccountProvider TODO
+type AccountProvider interface {
+	Account(addr common.Address) (*account.Account, error)
+	AccountData(addr common.Address, name string) ([]byte, error)
+}
+
+// BlockProvider TODO
+type BlockProvider interface {
+	Height() uint32
 	HashCurrentBlock() (hash.Hash256, error)
 	Block(height uint32) (*block.Block, error)
 	BlockByHash(h hash.Hash256) (*block.Block, error)
@@ -56,7 +66,7 @@ type Base struct {
 	dataStore       store.Store
 	height          uint32
 	hashPrevBlock   hash.Hash256
-	genesis         *advanced.Genesis
+	genesis         *Genesis
 	genesisHash     hash.Hash256
 	observerPubkeys []common.PublicKey
 	config          *Config
@@ -64,7 +74,7 @@ type Base struct {
 }
 
 // NewBase TODO
-func NewBase(config *Config, genesis *advanced.Genesis, blockStore store.Store, accountStore store.Store, dataStore store.Store) (*Base, error) {
+func NewBase(config *Config, genesis *Genesis, blockStore store.Store, accountStore store.Store, dataStore store.Store) (*Base, error) {
 	cn := &Base{
 		blockStore:      blockStore,
 		accountStore:    accountStore,
@@ -139,7 +149,7 @@ func (cn *Base) initGenesisAccount() error {
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
 			}
-			addr := common.AddressFromHash(cn.Coordinate(), v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
+			addr := common.AddressFromHash(cn.genesis.Coordinate, v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
@@ -150,7 +160,7 @@ func (cn *Base) initGenesisAccount() error {
 			if !v.Amount.IsZero() {
 				return ErrInvalidAmount
 			}
-			addr := common.AddressFromHash(cn.Coordinate(), v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
+			addr := common.AddressFromHash(cn.genesis.Coordinate, v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
 			acc := CreateAccount(cn, addr, v.KeyAddresses)
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = v.PublicKey[:]
@@ -202,8 +212,8 @@ func (cn *Base) GenesisHash() hash.Hash256 {
 }
 
 // Config TODO
-func (cn *Base) Config() Config {
-	return (*cn.config)
+func (cn *Base) Config() *Config {
+	return cn.config.Clone()
 }
 
 // HashCurrentBlock TODO
@@ -237,7 +247,9 @@ func (cn *Base) Account(addr common.Address) (*account.Account, error) {
 	if v, err := cn.accountStore.Get(addr[:]); err != nil {
 		return nil, err
 	} else {
-		acc := new(account.Account)
+		acc := &account.Account{
+			Balance: amount.NewCoinAmount(0, 0),
+		}
 		if _, err := acc.ReadFrom(bytes.NewReader(v)); err != nil {
 			return nil, err
 		}
@@ -351,7 +363,7 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 			if pubkey, err := common.RecoverPubkey(txHash, sig); err != nil {
 				return nil, err
 			} else {
-				addrs = append(addrs, common.AddressFromPubkey(cn.Coordinate(), KeyAccountType, pubkey))
+				addrs = append(addrs, common.AddressFromPubkey(cn.genesis.Coordinate, KeyAccountType, pubkey))
 			}
 		}
 		ctx.CurrentTxHash = txHash

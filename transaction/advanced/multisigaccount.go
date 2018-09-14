@@ -14,6 +14,7 @@ import (
 type MultiSigAccount struct {
 	transaction.Base
 	From         common.Address
+	Required     uint8
 	KeyAddresses []common.Address //MAXLEN : 256
 }
 
@@ -54,6 +55,11 @@ func (tx *MultiSigAccount) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := util.WriteUint8(w, tx.Required); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 
 	if n, err := util.WriteUint8(w, uint8(len(tx.KeyAddresses))); err != nil {
 		return wrote, err
@@ -83,8 +89,14 @@ func (tx *MultiSigAccount) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
+	if v, n, err := util.ReadUint8(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.Required = v
+	}
 
-	if Len, n, err := util.ReadUint16(r); err != nil {
+	if Len, n, err := util.ReadUint8(r); err != nil {
 		return read, err
 	} else {
 		read += n
