@@ -37,6 +37,9 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	if len(bh.HeadTimeouts) > 255 {
 		return 0, ErrExceedTimeoutCount
 	}
+	if len(bh.TableAppendMessages) > 255 {
+		return 0, ErrExceedTableAppendMessageCount
+	}
 
 	var wrote int64
 	if n, err := util.WriteUint32(w, bh.Height); err != nil {
