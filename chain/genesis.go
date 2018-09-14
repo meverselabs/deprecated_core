@@ -1,4 +1,4 @@
-package advanced
+package chain
 
 import (
 	"bytes"
@@ -9,54 +9,103 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/transaction"
 )
 
 // Genesis TODO
 type Genesis struct {
-	transaction.Base
 	Coordinate      common.Coordinate
 	ObserverPubkeys []common.PublicKey
 	Accounts        []*GenesisAccount
 }
 
-// NewGenesis TODO
-func NewGenesis(version uint16, timestamp uint64) *Genesis {
-	return &Genesis{
-		Base: transaction.Base{
-			Version_:   version,
-			Timestamp_: timestamp,
-		},
-	}
-}
-
 // Hash TODO
-func (tx *Genesis) Hash() (hash.Hash256, error) {
+func (gn *Genesis) Hash() (hash.Hash256, error) {
 	var buffer bytes.Buffer
-	if _, err := tx.WriteTo(&buffer); err != nil {
+	if _, err := gn.WriteTo(&buffer); err != nil {
 		return hash.Hash256{}, err
 	}
 	return hash.DoubleHash(buffer.Bytes()), nil
 }
 
 // WriteTo TODO
-func (tx *Genesis) WriteTo(w io.Writer) (int64, error) {
+func (gn *Genesis) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := tx.Base.WriteTo(w); err != nil {
+	if n, err := gn.Coordinate.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
+	}
+
+	if n, err := util.WriteUint8(w, uint8(len(gn.ObserverPubkeys))); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+		for _, ka := range gn.ObserverPubkeys {
+			if n, err := ka.WriteTo(w); err != nil {
+				return wrote, err
+			} else {
+				wrote += n
+			}
+		}
+	}
+
+	if n, err := util.WriteUint16(w, uint16(len(gn.Accounts))); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+		for _, acc := range gn.Accounts {
+			if n, err := acc.WriteTo(w); err != nil {
+				return wrote, err
+			} else {
+				wrote += n
+			}
+		}
 	}
 	return wrote, nil
 }
 
 // ReadFrom TODO
-func (tx *Genesis) ReadFrom(r io.Reader) (int64, error) {
+func (gn *Genesis) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if n, err := tx.Base.ReadFrom(r); err != nil {
+	if n, err := gn.Coordinate.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
+	}
+
+	if Len, n, err := util.ReadUint8(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		gn.ObserverPubkeys = make([]common.PublicKey, 0, Len)
+		for i := 0; i < int(Len); i++ {
+			var pubkey common.PublicKey
+			if n, err := pubkey.ReadFrom(r); err != nil {
+				return read, err
+			} else {
+				read += n
+				gn.ObserverPubkeys = append(gn.ObserverPubkeys, pubkey)
+			}
+		}
+	}
+
+	if Len, n, err := util.ReadUint16(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		gn.Accounts = make([]*GenesisAccount, 0, Len)
+		for i := 0; i < int(Len); i++ {
+			ga := &GenesisAccount{
+				Amount:       amount.NewCoinAmount(0, 0),
+				KeyAddresses: []common.Address{},
+			}
+			if n, err := ga.ReadFrom(r); err != nil {
+				return read, err
+			} else {
+				read += n
+				gn.Accounts = append(gn.Accounts, ga)
+			}
+		}
 	}
 	return read, nil
 }
