@@ -92,16 +92,10 @@ func (ac *FileKey) Verify(h hash.Hash256, sig common.Signature) bool {
 // WriteTo TODO
 func (ac *FileKey) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	bs := ac.privkey.D.Bytes()
-	if n, err := util.WriteUint16(w, uint16(len(bs))); err != nil {
+	if n, err := util.WriteBytes(w, ac.privkey.D.Bytes()); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
-	}
-	if n, err := w.Write(bs); err != nil {
-		return wrote, err
-	} else {
-		wrote += int64(n)
 	}
 	return wrote, nil
 }
@@ -109,26 +103,20 @@ func (ac *FileKey) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom TODO
 func (ac *FileKey) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if Len, n, err := util.ReadUint16(r); err != nil {
+	if bs, n, err := util.ReadBytes(r); err != nil {
 		return read, err
 	} else {
 		read += n
-		bs := make([]byte, Len)
-		if n, err := r.Read(bs); err != nil {
+		ac.privkey = &ecdsa.PrivateKey{
+			PublicKey: ecdsa.PublicKey{
+				Curve: ecrypto.S256(),
+			},
+			D: new(big.Int),
+		}
+		ac.privkey.D.SetBytes(bs)
+		ac.privkey.PublicKey.X, ac.privkey.PublicKey.Y = ac.privkey.Curve.ScalarBaseMult(ac.privkey.D.Bytes())
+		if err := ac.calcPubkey(); err != nil {
 			return read, err
-		} else {
-			read += int64(n)
-			ac.privkey = &ecdsa.PrivateKey{
-				PublicKey: ecdsa.PublicKey{
-					Curve: ecrypto.S256(),
-				},
-				D: new(big.Int),
-			}
-			ac.privkey.D.SetBytes(bs)
-			ac.privkey.PublicKey.X, ac.privkey.PublicKey.Y = ac.privkey.Curve.ScalarBaseMult(ac.privkey.D.Bytes())
-			if err := ac.calcPubkey(); err != nil {
-				return read, err
-			}
 		}
 	}
 	return read, nil

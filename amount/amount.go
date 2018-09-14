@@ -18,12 +18,12 @@ const FractionalMax = 1000000000000000000
 // FractionalCount TODO
 const FractionalCount = 18
 
+var zeroInt = big.NewInt(0)
+
 // Amount TODO
 type Amount struct {
 	*big.Int
 }
-
-var zeroInt = big.NewInt(0)
 
 // newAmount TODO
 func newAmount(value int64) *Amount {
@@ -46,29 +46,34 @@ func NewCoinAmount(i uint64, f uint64) *Amount {
 	}
 }
 
-// ParseAmount TODO
-func ParseAmount(str string) (*Amount, error) {
-	ls := strings.SplitN(str, ".", 2)
-	switch len(ls) {
-	case 1:
-		pi, err := strconv.ParseUint(ls[0], 10, 64)
-		if err != nil {
-			return nil, ErrInvalidFormat
-		}
-		return NewCoinAmount(pi, 0), nil
-	case 2:
-		pi, err := strconv.ParseUint(ls[0], 10, 64)
-		if err != nil {
-			return nil, ErrInvalidFormat
-		}
-		pf, err := strconv.ParseUint(padFractional(ls[1]), 10, 64)
-		if err != nil {
-			return nil, ErrInvalidFormat
-		}
-		return NewCoinAmount(pi, pf), nil
-	default:
-		return nil, ErrInvalidFormat
+// WriteTo TODO
+func (am *Amount) WriteTo(w io.Writer) (int64, error) {
+	var wrote int64
+	if n, err := util.WriteBytes(w, am.Int.Bytes()); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
 	}
+	return wrote, nil
+}
+
+// ReadFrom TODO
+func (am *Amount) ReadFrom(r io.Reader) (int64, error) {
+	var read int64
+	if bs, n, err := util.ReadBytes(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		am.Int.SetBytes(bs)
+	}
+	return read, nil
+}
+
+// Clone TODO
+func (am *Amount) Clone() *Amount {
+	c := newAmount(0)
+	c.Int.Add(am.Int, zeroInt)
+	return c
 }
 
 // Add TODO
@@ -128,25 +133,27 @@ func (am *Amount) String() string {
 	}
 }
 
-// WriteTo TODO
-func (am *Amount) WriteTo(w io.Writer) (int64, error) {
-	var wrote int64
-	if n, err := util.WriteBytes(w, am.Int.Bytes()); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
+// ParseAmount TODO
+func ParseAmount(str string) (*Amount, error) {
+	ls := strings.SplitN(str, ".", 2)
+	switch len(ls) {
+	case 1:
+		pi, err := strconv.ParseUint(ls[0], 10, 64)
+		if err != nil {
+			return nil, ErrInvalidFormat
+		}
+		return NewCoinAmount(pi, 0), nil
+	case 2:
+		pi, err := strconv.ParseUint(ls[0], 10, 64)
+		if err != nil {
+			return nil, ErrInvalidFormat
+		}
+		pf, err := strconv.ParseUint(padFractional(ls[1]), 10, 64)
+		if err != nil {
+			return nil, ErrInvalidFormat
+		}
+		return NewCoinAmount(pi, pf), nil
+	default:
+		return nil, ErrInvalidFormat
 	}
-	return wrote, nil
-}
-
-// ReadFrom TODO
-func (am *Amount) ReadFrom(r io.Reader) (int64, error) {
-	var read int64
-	if bs, n, err := util.ReadBytes(r); err != nil {
-		return read, err
-	} else {
-		read += n
-		am.Int.SetBytes(bs)
-	}
-	return read, nil
 }
