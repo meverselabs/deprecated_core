@@ -75,6 +75,9 @@ func BuildLevelRoot(txHashes []hash.Hash256) (hash.Hash256, error) {
 	if len(txHashes) > 65535 {
 		return hash.Hash256{}, ErrExceedHashCount
 	}
+	if len(txHashes) == 0 {
+		return hash.Hash256{}, nil
+	}
 
 	lv3, err := BuildLevel(txHashes)
 	if err != nil {
