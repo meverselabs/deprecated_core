@@ -19,11 +19,12 @@ type MultiSigAccount struct {
 }
 
 // NewMultiSigAccount TODO
-func NewMultiSigAccount(version uint16, timestamp uint64) *MultiSigAccount {
+func NewMultiSigAccount(coord *common.Coordinate, timestamp uint64, seq uint64) *MultiSigAccount {
 	return &MultiSigAccount{
 		Base: transaction.Base{
-			Version_:   version,
-			Timestamp_: timestamp,
+			Coordinate_: coord.Clone(),
+			Timestamp_:  timestamp,
+			Seq_:        seq,
 		},
 		KeyAddresses: []common.Address{},
 	}

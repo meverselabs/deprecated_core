@@ -18,11 +18,12 @@ type Trade struct {
 }
 
 // NewTrade TODO
-func NewTrade(version uint16, timestamp uint64) *Trade {
+func NewTrade(coord *common.Coordinate, timestamp uint64, seq uint64) *Trade {
 	return &Trade{
 		Base: transaction.Base{
-			Version_:   version,
-			Timestamp_: timestamp,
+			Coordinate_: coord.Clone(),
+			Timestamp_:  timestamp,
+			Seq_:        seq,
 		},
 		Vout: []*transaction.TxOut{},
 	}

@@ -17,13 +17,13 @@ type Formulation struct {
 }
 
 // NewFormulation TODO
-func NewFormulation(version uint16, timestamp uint64, PublicKey common.PublicKey) *Formulation {
+func NewFormulation(coord *common.Coordinate, timestamp uint64, seq uint64) *Formulation {
 	return &Formulation{
 		Base: transaction.Base{
-			Version_:   version,
-			Timestamp_: timestamp,
+			Coordinate_: coord.Clone(),
+			Timestamp_:  timestamp,
+			Seq_:        seq,
 		},
-		PublicKey: PublicKey,
 	}
 }
 

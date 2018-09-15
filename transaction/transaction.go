@@ -3,6 +3,7 @@ package transaction
 import (
 	"io"
 
+	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 )
@@ -11,7 +12,7 @@ import (
 type Transaction interface {
 	io.WriterTo
 	io.ReaderFrom
-	Version() uint16
+	Coordinate() *common.Coordinate
 	Timestamp() uint64
 	Seq() uint64
 	Hash() (hash.Hash256, error)
@@ -19,14 +20,14 @@ type Transaction interface {
 
 // Base TODO
 type Base struct {
-	Version_   uint16
-	Timestamp_ uint64
-	Seq_       uint64
+	Coordinate_ *common.Coordinate
+	Timestamp_  uint64
+	Seq_        uint64
 }
 
-// Version TODO
-func (tx *Base) Version() uint16 {
-	return tx.Version_
+// Coordinate TODO
+func (tx *Base) Coordinate() *common.Coordinate {
+	return tx.Coordinate_.Clone()
 }
 
 // Timestamp TODO
@@ -42,7 +43,7 @@ func (tx *Base) Seq() uint64 {
 // WriteTo TODO
 func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := util.WriteUint16(w, tx.Version_); err != nil {
+	if n, err := tx.Coordinate_.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -63,11 +64,10 @@ func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom TODO
 func (tx *Base) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if v, n, err := util.ReadUint16(r); err != nil {
+	if n, err := tx.Coordinate_.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
-		tx.Version_ = v
 	}
 	if v, n, err := util.ReadUint64(r); err != nil {
 		return read, err

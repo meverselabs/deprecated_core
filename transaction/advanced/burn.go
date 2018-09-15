@@ -18,11 +18,12 @@ type Burn struct {
 }
 
 // NewBurn TODO
-func NewBurn(version uint16, timestamp uint64) *Burn {
+func NewBurn(coord *common.Coordinate, timestamp uint64, seq uint64) *Burn {
 	return &Burn{
 		Base: transaction.Base{
-			Version_:   version,
-			Timestamp_: timestamp,
+			Coordinate_: coord.Clone(),
+			Timestamp_:  timestamp,
+			Seq_:        seq,
 		},
 	}
 }
