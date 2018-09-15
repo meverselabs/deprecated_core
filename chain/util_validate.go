@@ -109,6 +109,10 @@ func validateTransactionWithResult(ctx *ValidationContext, cn Chain, tx transact
 
 // validateTransaction TODO
 func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Transaction, signers []common.Address, idx uint16, bResult bool) error {
+	if !cn.Coordinate().Equal(t.Coordinate()) {
+		return ErrMismatchCoordinate
+	}
+
 	signerHash := map[string]bool{}
 	for _, signer := range signers {
 		if signer.Type() != KeyAccountType {

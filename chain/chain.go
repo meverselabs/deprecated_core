@@ -23,7 +23,7 @@ type Provider interface {
 	BlockProvider
 	Config() *Config
 	GenesisHash() hash.Hash256
-	Coordinate() common.Coordinate
+	Coordinate() *common.Coordinate
 	ObserverPubkeys() []common.PublicKey
 	FormulationHash() map[string]common.PublicKey
 	Fee(tx transaction.Transaction) *amount.Amount
@@ -60,7 +60,6 @@ type Chain interface {
 
 // Base TODO
 type Base struct {
-	coordinate      common.Coordinate
 	blockStore      store.Store
 	accountStore    store.Store
 	dataStore       store.Store
@@ -84,7 +83,6 @@ func NewBase(config *Config, genesis *Genesis, blockStore store.Store, accountSt
 		formulationHash: map[string]common.PublicKey{},
 	}
 
-	cn.coordinate = cn.genesis.Coordinate
 	cn.observerPubkeys = cn.genesis.ObserverPubkeys
 	if h, err := genesis.Hash(); err != nil {
 		return nil, err
@@ -206,10 +204,8 @@ func (cn *Base) initGenesisAccount() error {
 }
 
 // Coordinate TODO
-func (cn *Base) Coordinate() common.Coordinate {
-	var coord common.Coordinate
-	copy(coord[:], cn.genesis.Coordinate[:])
-	return coord
+func (cn *Base) Coordinate() *common.Coordinate {
+	return cn.genesis.Coordinate.Clone()
 }
 
 // ObserverPubkeys TODO

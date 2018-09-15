@@ -11,7 +11,7 @@ import (
 // Account TODO
 type Account struct {
 	Address      common.Address
-	ChainCoord   common.Coordinate
+	ChainCoord   *common.Coordinate
 	Type         common.AddressType
 	Balance      *amount.Amount
 	Seq          uint64

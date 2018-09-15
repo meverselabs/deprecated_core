@@ -13,7 +13,7 @@ import (
 
 // Genesis TODO
 type Genesis struct {
-	Coordinate      common.Coordinate
+	Coordinate      *common.Coordinate
 	ObserverPubkeys []common.PublicKey
 	Accounts        []*GenesisAccount
 }
