@@ -11,8 +11,10 @@ type TransactionType uint8
 // transaction_type transaction types
 const (
 	TradeTransctionType             = TransactionType(10)
+	TaggedTradeTransctionType       = TransactionType(11)
 	BurnTransctionType              = TransactionType(19)
-	MultiSigAccountTransctionType   = TransactionType(20)
+	SingleAccountTransctionType     = TransactionType(20)
+	MultiSigAccountTransctionType   = TransactionType(21)
 	FormulationTransctionType       = TransactionType(30)
 	RevokeFormulationTransctionType = TransactionType(31)
 )
@@ -21,8 +23,12 @@ func (t TransactionType) String() string {
 	switch t {
 	case TradeTransctionType:
 		return "TradeTransctionType"
+	case TaggedTradeTransctionType:
+		return "TaggedTradeTransctionType"
 	case BurnTransctionType:
 		return "BurnTransctionType"
+	case SingleAccountTransctionType:
+		return "SingleAccountTransctionType"
 	case MultiSigAccountTransctionType:
 		return "MultiSigAccountTransctionType"
 	case FormulationTransctionType:
@@ -39,8 +45,12 @@ func TypeOfTransaction(tx transaction.Transaction) (TransactionType, error) {
 	switch tx.(type) {
 	case *advanced.Trade:
 		return TradeTransctionType, nil
+	case *advanced.TaggedTrade:
+		return TaggedTradeTransctionType, nil
 	case *advanced.Burn:
 		return BurnTransctionType, nil
+	case *advanced.SingleAccount:
+		return SingleAccountTransctionType, nil
 	case *advanced.MultiSigAccount:
 		return MultiSigAccountTransctionType, nil
 	case *advanced.Formulation:
@@ -57,8 +67,12 @@ func NewTransactionByType(t TransactionType) (transaction.Transaction, error) {
 	switch t {
 	case TradeTransctionType:
 		return new(advanced.Trade), nil
+	case TaggedTradeTransctionType:
+		return new(advanced.TaggedTrade), nil
 	case BurnTransctionType:
 		return new(advanced.Burn), nil
+	case SingleAccountTransctionType:
+		return new(advanced.SingleAccount), nil
 	case MultiSigAccountTransctionType:
 		return new(advanced.MultiSigAccount), nil
 	case FormulationTransctionType:

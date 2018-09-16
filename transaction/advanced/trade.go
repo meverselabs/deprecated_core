@@ -7,13 +7,14 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
+	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/transaction"
 )
 
 // Trade TODO
 type Trade struct {
 	transaction.Base
-	Vout []*transaction.TxOut //MAXLEN : 255
+	Vout []*TradeOut //MAXLEN : 255
 }
 
 // NewTrade TODO
@@ -24,7 +25,7 @@ func NewTrade(coord *common.Coordinate, timestamp uint64, seq uint64) *Trade {
 			Timestamp_:  timestamp,
 			Seq_:        seq,
 		},
-		Vout: []*transaction.TxOut{},
+		Vout: []*TradeOut{},
 	}
 }
 
@@ -40,7 +41,7 @@ func (tx *Trade) Hash() (hash.Hash256, error) {
 // WriteTo TODO
 func (tx *Trade) WriteTo(w io.Writer) (int64, error) {
 	if len(tx.Vout) > 255 {
-		return 0, ErrExceedTxOutCount
+		return 0, ErrExceedTradeOutCount
 	}
 
 	var wrote int64
@@ -78,9 +79,9 @@ func (tx *Trade) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		tx.Vout = make([]*transaction.TxOut, 0, Len)
+		tx.Vout = make([]*TradeOut, 0, Len)
 		for i := 0; i < int(Len); i++ {
-			vout := transaction.NewTxOut()
+			vout := NewTradeOut()
 			if n, err := vout.ReadFrom(r); err != nil {
 				return read, err
 			} else {
@@ -88,6 +89,52 @@ func (tx *Trade) ReadFrom(r io.Reader) (int64, error) {
 				tx.Vout = append(tx.Vout, vout)
 			}
 		}
+	}
+	return read, nil
+}
+
+// TradeOut TODO
+type TradeOut struct {
+	Amount  *amount.Amount
+	Address common.Address
+}
+
+// NewTradeOut TODO
+func NewTradeOut() *TradeOut {
+	out := &TradeOut{
+		Amount: amount.NewCoinAmount(0, 0),
+	}
+	return out
+}
+
+// WriteTo TODO
+func (out *TradeOut) WriteTo(w io.Writer) (int64, error) {
+	var wrote int64
+	if n, err := out.Amount.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := out.Address.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	return wrote, nil
+}
+
+// ReadFrom TODO
+func (out *TradeOut) ReadFrom(r io.Reader) (int64, error) {
+	var read int64
+	if n, err := out.Amount.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if n, err := out.Address.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
 	}
 	return read, nil
 }
