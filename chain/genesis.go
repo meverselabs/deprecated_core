@@ -96,8 +96,8 @@ func (gn *Genesis) ReadFrom(r io.Reader) (int64, error) {
 		gn.Accounts = make([]*GenesisAccount, 0, Len)
 		for i := 0; i < int(Len); i++ {
 			ga := &GenesisAccount{
-				Amount:       amount.NewCoinAmount(0, 0),
-				KeyAddresses: []common.Address{},
+				Amount:    amount.NewCoinAmount(0, 0),
+				KeyHashes: []common.PublicHash{},
 			}
 			if n, err := ga.ReadFrom(r); err != nil {
 				return read, err
@@ -112,13 +112,12 @@ func (gn *Genesis) ReadFrom(r io.Reader) (int64, error) {
 
 // GenesisAccount TODO
 type GenesisAccount struct {
-	Type             common.AddressType
-	Amount           *amount.Amount
-	PublicKey        common.PublicKey
-	UnlockHeight     uint32
-	Required         uint8
-	KeyAddresses     []common.Address
-	GeneratedAddress common.Address
+	Type         common.AddressType
+	Amount       *amount.Amount
+	PublicKey    common.PublicKey
+	UnlockHeight uint32
+	Required     uint8
+	KeyHashes    []common.PublicHash
 }
 
 // Hash TODO
@@ -132,7 +131,7 @@ func (ga *GenesisAccount) Hash() (hash.Hash256, error) {
 
 // WriteTo TODO
 func (ga *GenesisAccount) WriteTo(w io.Writer) (int64, error) {
-	if len(ga.KeyAddresses) > 255 {
+	if len(ga.KeyHashes) > 255 {
 		return 0, ErrExceedAddressCount
 	}
 
@@ -163,23 +162,17 @@ func (ga *GenesisAccount) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 
-	if n, err := util.WriteUint8(w, uint8(len(ga.KeyAddresses))); err != nil {
+	if n, err := util.WriteUint8(w, uint8(len(ga.KeyHashes))); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
-		for _, addr := range ga.KeyAddresses {
+		for _, addr := range ga.KeyHashes {
 			if n, err := addr.WriteTo(w); err != nil {
 				return wrote, err
 			} else {
 				wrote += n
 			}
 		}
-	}
-
-	if n, err := ga.GeneratedAddress.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
 	}
 	return wrote, nil
 }
@@ -220,22 +213,16 @@ func (ga *GenesisAccount) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		ga.KeyAddresses = make([]common.Address, 0, Len)
+		ga.KeyHashes = make([]common.PublicHash, 0, Len)
 		for i := 0; i < int(Len); i++ {
-			var addr common.Address
+			var addr common.PublicHash
 			if n, err := addr.ReadFrom(r); err != nil {
 				return read, err
 			} else {
 				read += n
-				ga.KeyAddresses = append(ga.KeyAddresses, addr)
+				ga.KeyHashes = append(ga.KeyHashes, addr)
 			}
 		}
-	}
-
-	if n, err := ga.GeneratedAddress.ReadFrom(r); err != nil {
-		return read, err
-	} else {
-		read += n
 	}
 	return read, nil
 }

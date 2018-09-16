@@ -10,23 +10,17 @@ import (
 
 // Account TODO
 type Account struct {
-	Address      common.Address
-	ChainCoord   *common.Coordinate
-	Type         common.AddressType
-	Balance      *amount.Amount
-	Seq          uint64
-	KeyAddresses []common.Address
+	Address    common.Address
+	ChainCoord *common.Coordinate
+	Balance    *amount.Amount
+	Seq        uint64
+	KeyHashes  []common.PublicHash
 }
 
 // WriteTo TODO
 func (acc *Account) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := acc.Address.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
-	if n, err := util.WriteUint8(w, uint8(acc.Type)); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -42,11 +36,11 @@ func (acc *Account) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 
-	if n, err := util.WriteUint16(w, uint16(len(acc.KeyAddresses))); err != nil {
+	if n, err := util.WriteUint16(w, uint16(len(acc.KeyHashes))); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
-		for _, ka := range acc.KeyAddresses {
+		for _, ka := range acc.KeyHashes {
 			if n, err := ka.WriteTo(w); err != nil {
 				return wrote, err
 			} else {
@@ -65,12 +59,6 @@ func (acc *Account) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if v, n, err := util.ReadUint8(r); err != nil {
-		return read, err
-	} else {
-		read += n
-		acc.Type = common.AddressType(v)
-	}
 	if n, err := acc.Balance.ReadFrom(r); err != nil {
 		return read, err
 	} else {
@@ -87,14 +75,14 @@ func (acc *Account) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		acc.KeyAddresses = make([]common.Address, 0, Len)
+		acc.KeyHashes = make([]common.PublicHash, 0, Len)
 		for i := 0; i < int(Len); i++ {
-			var ka common.Address
+			var ka common.PublicHash
 			if n, err := ka.ReadFrom(r); err != nil {
 				return read, err
 			} else {
 				read += n
-				acc.KeyAddresses = append(acc.KeyAddresses, ka)
+				acc.KeyHashes = append(acc.KeyHashes, ka)
 			}
 		}
 	}

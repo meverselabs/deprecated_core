@@ -15,7 +15,7 @@ var (
 	ErrInvalidGeneratorAddress       = errors.New("invalid generator address")
 	ErrInvalidRankAddress            = errors.New("invalid rank address")
 	ErrInvalidRankerAddressCount     = errors.New("invalid ranker address count")
-	ErrDuplicatedAddress             = errors.New("duplicated address")
+	ErrDuplicatedPublicKey           = errors.New("duplicated public key")
 	ErrUnknownTransactionType        = errors.New("unknown transaction type")
 	ErrExceedTransactionCount        = errors.New("exceed transaction count")
 	ErrExceedSignatureCount          = errors.New("exceed signature count")

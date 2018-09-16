@@ -2,7 +2,7 @@ package chain
 
 import (
 	"bytes"
-	"strconv"
+	"log"
 
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/chain/account"
@@ -96,13 +96,6 @@ func NewBase(config *Config, genesis *Genesis, blockStore store.Store, accountSt
 		}
 	} else {
 		cn.height = util.BytesToUint32(bh)
-		for i, v := range genesis.Accounts {
-			if bs, err := cn.blockStore.Get(toGenesisAccountAddress(uint16(i))); err != nil {
-				return nil, err
-			} else {
-				copy(v.GeneratedAddress[:], bs)
-			}
-		}
 	}
 	return cn, nil
 }
@@ -114,57 +107,40 @@ func (cn *Base) initGenesisAccount() error {
 
 	ctx := NewValidationContext()
 	for i, v := range cn.genesis.Accounts {
-		GaHash, err := v.Hash()
-		if err != nil {
-			return nil
-		}
-		h := hash.TwoHash(GaHash, hash.Hash([]byte(strconv.Itoa(i))))
-
-		for _, addr := range v.KeyAddresses {
-			if addr.Type() != KeyAccountType {
-				return ErrInvalidAccountType
-			}
-		}
-
+		addr := common.NewAddress(v.Type, 0, uint16(i))
 		switch v.Type {
 		case KeyAccountType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
 			}
-			if len(v.KeyAddresses) > 1 {
+			if len(v.KeyHashes) > 1 {
 				return ErrExceedAddressCount
 			}
-			addr := v.KeyAddresses[0]
-			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			acc := CreateAccount(cn, addr, v.KeyHashes)
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
-			v.GeneratedAddress = addr
 		case LockedAccountType:
 			if v.UnlockHeight == 0 {
 				return ErrInvalidUnlockHeight
 			}
-			if len(v.KeyAddresses) > 1 {
+			if len(v.KeyHashes) > 1 {
 				return ErrExceedAddressCount
 			}
-			addr := common.ConvertAddressType(v.KeyAddresses[0], v.Type)
-			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			acc := CreateAccount(cn, addr, v.KeyHashes)
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "UnlockHeight"))] = util.Uint32ToBytes(v.UnlockHeight)
-			v.GeneratedAddress = addr
 		case MultiSigAccountType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
 			}
-			if v.Required == 0 || int(v.Required) > len(v.KeyAddresses) {
+			if v.Required == 0 || int(v.Required) > len(v.KeyHashes) {
 				return ErrInvalidMultiSigRequired
 			}
-			addr := common.AddressFromHash(cn.genesis.Coordinate, v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
-			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			acc := CreateAccount(cn, addr, v.KeyHashes)
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(v.Required)}
-			v.GeneratedAddress = addr
 		case FormulationAccountType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
@@ -172,17 +148,11 @@ func (cn *Base) initGenesisAccount() error {
 			if !v.Amount.IsZero() {
 				return ErrInvalidAmount
 			}
-			addr := common.AddressFromHash(cn.genesis.Coordinate, v.Type, h, common.ChecksumFromAddresses(v.KeyAddresses))
-			acc := CreateAccount(cn, addr, v.KeyAddresses)
+			acc := CreateAccount(cn, addr, v.KeyHashes)
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = v.PublicKey[:]
-			v.GeneratedAddress = addr
 		default:
 			return ErrInvalidGenesisAccountType
-		}
-
-		if err := cn.blockStore.Set(toGenesisAccountAddress(uint16(i)), v.GeneratedAddress[:]); err != nil {
-			return err
 		}
 	}
 
@@ -278,7 +248,7 @@ func (cn *Base) UpdateAccount(acc *account.Account) error {
 	if _, err := acc.WriteTo(&buffer); err != nil {
 		return err
 	} else {
-		switch acc.Type {
+		switch acc.Address.Type() {
 		case FormulationAccountType:
 			bs, err := cn.AccountData(acc.Address, "PublicKey")
 			if err != nil {
@@ -373,16 +343,16 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 		TxHashes = append(TxHashes, txHash)
 
 		sigs := b.TransactionSignatures[idx]
-		addrs := make([]common.Address, 0, len(sigs))
+		signers := make([]common.PublicHash, 0, len(sigs))
 		for _, sig := range sigs {
 			if pubkey, err := common.RecoverPubkey(txHash, sig); err != nil {
 				return nil, err
 			} else {
-				addrs = append(addrs, common.AddressFromPubkey(cn.genesis.Coordinate, KeyAccountType, pubkey))
+				signers = append(signers, common.NewPublicHash(pubkey))
 			}
 		}
 		ctx.CurrentTxHash = txHash
-		if err := validateTransactionWithResult(ctx, cn, tx, addrs, uint16(idx)); err != nil {
+		if err := validateTransactionWithResult(ctx, cn, tx, signers, uint16(idx)); err != nil {
 			return nil, err
 		}
 	}
@@ -399,6 +369,7 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 		return nil, err
 	}
 	formulationAcc.Balance = formulationAcc.Balance.Add(cn.BlockReward(height))
+	log.Println(formulationAcc.Balance.String())
 
 	for key, data := range ctx.AccountDataHash {
 		if err := cn.updateAccountDataByKey([]byte(key), data); err != nil {

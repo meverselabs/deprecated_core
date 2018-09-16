@@ -7,12 +7,11 @@ import (
 )
 
 // CreateAccount TODO
-func CreateAccount(cn Provider, addr common.Address, keyAddresses []common.Address) *account.Account {
+func CreateAccount(cn Provider, addr common.Address, keyHashes []common.PublicHash) *account.Account {
 	return &account.Account{
-		Address:      addr,
-		ChainCoord:   cn.Coordinate(),
-		Type:         addr.Type(),
-		Balance:      amount.NewCoinAmount(0, 0),
-		KeyAddresses: keyAddresses,
+		Address:    addr,
+		ChainCoord: cn.Coordinate(),
+		Balance:    amount.NewCoinAmount(0, 0),
+		KeyHashes:  keyHashes,
 	}
 }

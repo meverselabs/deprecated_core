@@ -60,7 +60,7 @@ func (ctx *ValidationContext) LoadAccount(cn Provider, addr common.Address, chec
 			return nil, err
 		}
 		if checkLock {
-			switch acc.Type {
+			switch acc.Address.Type() {
 			case LockedAccountType:
 				bs, err := ctx.AccountData(cn, acc.Address, "UnlockHeight")
 				if err != nil {
@@ -92,7 +92,7 @@ func (ctx *ValidationContext) AccountData(cn Provider, addr common.Address, name
 }
 
 // ValidateTransaction TODO
-func ValidateTransaction(cn Chain, tx transaction.Transaction, signers []common.Address) error {
+func ValidateTransaction(cn Chain, tx transaction.Transaction, signers []common.PublicHash) error {
 	ctx := NewValidationContext()
 	txHash, err := tx.Hash()
 	if err != nil {
@@ -103,47 +103,46 @@ func ValidateTransaction(cn Chain, tx transaction.Transaction, signers []common.
 }
 
 // validateTransactionWithResult TODO
-func validateTransactionWithResult(ctx *ValidationContext, cn Chain, tx transaction.Transaction, signers []common.Address, idx uint16) error {
+func validateTransactionWithResult(ctx *ValidationContext, cn Chain, tx transaction.Transaction, signers []common.PublicHash, idx uint16) error {
 	return validateTransaction(ctx, cn, tx, signers, idx, true)
 }
 
 // validateTransaction TODO
-func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Transaction, signers []common.Address, idx uint16, bResult bool) error {
+func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Transaction, signers []common.PublicHash, idx uint16, bResult bool) error {
 	if !cn.Coordinate().Equal(t.Coordinate()) {
 		return ErrMismatchCoordinate
 	}
 
+	height := cn.Height() + 1
+
 	signerHash := map[string]bool{}
 	for _, signer := range signers {
-		if signer.Type() != KeyAccountType {
-			return ErrInvalidAccountType
-		}
 		signerHash[string(signer[:])] = true
 	}
 	if len(signers) != len(signerHash) {
-		return ErrDuplicatedAddress
+		return ErrDuplicatedPublicKey
+	}
+
+	fromAcc, err := ctx.LoadAccount(cn, t.From(), true)
+	if err != nil {
+		return err
+	}
+	if t.Seq() != fromAcc.Seq+1 {
+		return ErrInvalidSequence
+	}
+	if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
+		return err
 	}
 
 	Fee := cn.Fee(t)
+	if fromAcc.Balance.Less(Fee) {
+		return ErrInsuffcientBalance
+	}
+	fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+	fromAcc.Seq++
+
 	switch tx := t.(type) {
 	case *advanced.Trade:
-		fromAcc, err := ctx.LoadAccount(cn, tx.From, true)
-		if err != nil {
-			return err
-		}
-		if t.Seq() != fromAcc.Seq+1 {
-			return ErrInvalidSequence
-		}
-		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
-			return err
-		}
-
-		if fromAcc.Balance.Less(Fee) {
-			return ErrInsuffcientBalance
-		}
-		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
-		fromAcc.Seq++
-
 		for _, vout := range tx.Vout {
 			if vout.Amount.IsZero() {
 				return ErrInvalidAmount
@@ -159,65 +158,26 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 
 			toAcc, err := ctx.LoadAccount(cn, vout.Address, false)
 			if err != nil {
-				if err != store.ErrNotExistKey {
-					return err
-				} else {
-					toAcc = CreateAccount(cn, vout.Address, []common.Address{vout.Address})
-					ctx.AccountHash[string(vout.Address[:])] = toAcc
-				}
+				return err
 			}
 			toAcc.Balance = toAcc.Balance.Add(vout.Amount)
 		}
 	case *advanced.Burn:
-		fromAcc, err := ctx.LoadAccount(cn, tx.From, false)
-		if err != nil {
-			return err
-		}
-		if t.Seq() != fromAcc.Seq+1 {
-			return ErrInvalidSequence
-		}
-		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
-			return err
-		}
-
-		if fromAcc.Balance.Less(Fee) {
-			return ErrInsuffcientBalance
-		}
-		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
-		fromAcc.Seq++
-
 		if fromAcc.Balance.Less(tx.Amount) {
 			return ErrInsuffcientBalance
 		}
 		fromAcc.Balance = fromAcc.Balance.Sub(tx.Amount)
 	case *advanced.MultiSigAccount:
-		fromAcc, err := ctx.LoadAccount(cn, tx.From, true)
-		if err != nil {
-			return err
-		}
-		if t.Seq() != fromAcc.Seq+1 {
-			return ErrInvalidSequence
-		}
-		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
-			return err
-		}
-
-		if tx.Required == 0 || int(tx.Required) > len(tx.KeyAddresses) {
+		if tx.Required == 0 || int(tx.Required) > len(tx.KeyHashes) {
 			return ErrInvalidMultiSigRequired
 		}
 
-		if fromAcc.Balance.Less(Fee) {
-			return ErrInsuffcientBalance
-		}
-		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
-		fromAcc.Seq++
-
-		addr := common.AddressFromHash(cn.Coordinate(), MultiSigAccountType, ctx.CurrentTxHash, common.ChecksumFromAddresses(tx.KeyAddresses))
+		addr := common.NewAddress(MultiSigAccountType, height, idx)
 		if _, err := ctx.LoadAccount(cn, addr, false); err != nil {
 			if err != store.ErrNotExistKey {
 				return err
 			} else {
-				acc := CreateAccount(cn, addr, tx.KeyAddresses)
+				acc := CreateAccount(cn, addr, tx.KeyHashes)
 				ctx.AccountHash[string(addr[:])] = acc
 				ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(tx.Required)}
 			}
@@ -225,24 +185,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrExistAddress
 		}
 	case *advanced.Formulation:
-		fromAcc, err := ctx.LoadAccount(cn, tx.From, true)
-		if err != nil {
-			return err
-		}
-		if t.Seq() != fromAcc.Seq+1 {
-			return ErrInvalidSequence
-		}
-		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
-			return err
-		}
-
-		if fromAcc.Balance.Less(Fee) {
-			return ErrInsuffcientBalance
-		}
-		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
-		fromAcc.Seq++
-
-		addr := common.AddressFromHash(cn.Coordinate(), FormulationAccountType, ctx.CurrentTxHash, common.ChecksumFromAddresses(signers))
+		addr := common.NewAddress(FormulationAccountType, height, idx)
 		if _, err := ctx.LoadAccount(cn, addr, false); err != nil {
 			if err != store.ErrNotExistKey {
 				return err
@@ -255,17 +198,6 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrExistAddress
 		}
 	case *advanced.RevokeFormulation:
-		fromAcc, err := ctx.LoadAccount(cn, tx.From, true)
-		if err != nil {
-			return err
-		}
-		if t.Seq() != fromAcc.Seq+1 {
-			return ErrInvalidSequence
-		}
-		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
-			return err
-		}
-
 		formulationAcc, err := ctx.LoadAccount(cn, tx.FormulationAddress, false)
 		if err != nil {
 			return err
@@ -273,12 +205,6 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if err := ValidateSigners(ctx, cn, formulationAcc, signerHash); err != nil {
 			return err
 		}
-
-		if fromAcc.Balance.Less(Fee) {
-			return ErrInsuffcientBalance
-		}
-		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
-		fromAcc.Seq++
 		fromAcc.Balance = fromAcc.Balance.Add(formulationAcc.Balance).Add(cn.Config().FormulationCost)
 
 		ctx.DeleteAccountHash[string(tx.FormulationAddress[:])] = formulationAcc
@@ -289,12 +215,12 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 // ValidateSigners TODO
 func ValidateSigners(ctx *ValidationContext, cn Provider, acc *account.Account, signerHash map[string]bool) error {
 	matchCount := 0
-	for _, addr := range acc.KeyAddresses {
+	for _, addr := range acc.KeyHashes {
 		if signerHash[string(addr[:])] {
 			matchCount++
 		}
 	}
-	switch acc.Type {
+	switch acc.Address.Type() {
 	case MultiSigAccountType:
 		bs, err := ctx.AccountData(cn, acc.Address, "Required")
 		if err != nil {
@@ -305,7 +231,7 @@ func ValidateSigners(ctx *ValidationContext, cn Provider, acc *account.Account, 
 			return ErrInvalidTransactionSignature
 		}
 	default:
-		if matchCount != len(acc.KeyAddresses) {
+		if matchCount != len(acc.KeyHashes) {
 			return ErrInvalidTransactionSignature
 		}
 	}
