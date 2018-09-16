@@ -6,7 +6,7 @@ import (
 
 // advanced errors
 var (
-	ErrExceedAddressCount   = errors.New("exceed address count")
-	ErrExceedTxOutCount     = errors.New("exceed tx out count")
-	ErrExceedSignitureCount = errors.New("exceed signiture count")
+	ErrExceedPublicHashCount = errors.New("exceed public hash count")
+	ErrExceedTradeOutCount   = errors.New("exceed trade out count")
+	ErrExceedSignitureCount  = errors.New("exceed signiture count")
 )

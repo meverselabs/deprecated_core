@@ -41,7 +41,7 @@ func (tx *MultiSigAccount) Hash() (hash.Hash256, error) {
 // WriteTo TODO
 func (tx *MultiSigAccount) WriteTo(w io.Writer) (int64, error) {
 	if len(tx.KeyHashes) > 15 {
-		return 0, ErrExceedTxOutCount
+		return 0, ErrExceedPublicHashCount
 	}
 
 	var wrote int64

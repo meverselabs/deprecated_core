@@ -46,5 +46,6 @@ var (
 	ErrInvalidGenesisAccountType     = errors.New("invalid genesis account type")
 	ErrExceedAddressCount            = errors.New("exceed address count")
 	ErrUnknownAccountDataType        = errors.New("unknown account data type")
+	ErrInvalidMultiSigKeyCount       = errors.New("invalid multi sig key count")
 	ErrInvalidMultiSigRequired       = errors.New("invalid multi sig required")
 )
