@@ -12,7 +12,6 @@ import (
 // RevokeFormulation TODO
 type RevokeFormulation struct {
 	transaction.Base
-	From               common.Address
 	FormulationAddress common.Address
 }
 
@@ -44,11 +43,6 @@ func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := tx.From.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
 	if n, err := tx.FormulationAddress.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
@@ -61,11 +55,6 @@ func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 func (tx *RevokeFormulation) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
-		return read, err
-	} else {
-		read += n
-	}
-	if n, err := tx.From.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

@@ -13,7 +13,6 @@ import (
 // Trade TODO
 type Trade struct {
 	transaction.Base
-	From common.Address
 	Vout []*transaction.TxOut //MAXLEN : 255
 }
 
@@ -50,11 +49,6 @@ func (tx *Trade) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := tx.From.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
 
 	if n, err := util.WriteUint8(w, uint8(len(tx.Vout))); err != nil {
 		return wrote, err
@@ -75,11 +69,6 @@ func (tx *Trade) WriteTo(w io.Writer) (int64, error) {
 func (tx *Trade) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
-		return read, err
-	} else {
-		read += n
-	}
-	if n, err := tx.From.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

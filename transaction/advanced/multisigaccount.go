@@ -13,9 +13,8 @@ import (
 // MultiSigAccount TODO
 type MultiSigAccount struct {
 	transaction.Base
-	From         common.Address
-	Required     uint8
-	KeyAddresses []common.Address //MAXLEN : 256
+	Required  uint8
+	KeyHashes []common.PublicHash //MAXLEN : 15
 }
 
 // NewMultiSigAccount TODO
@@ -26,7 +25,7 @@ func NewMultiSigAccount(coord *common.Coordinate, timestamp uint64, seq uint64) 
 			Timestamp_:  timestamp,
 			Seq_:        seq,
 		},
-		KeyAddresses: []common.Address{},
+		KeyHashes: []common.PublicHash{},
 	}
 }
 
@@ -41,17 +40,12 @@ func (tx *MultiSigAccount) Hash() (hash.Hash256, error) {
 
 // WriteTo TODO
 func (tx *MultiSigAccount) WriteTo(w io.Writer) (int64, error) {
-	if len(tx.KeyAddresses) > 256 {
+	if len(tx.KeyHashes) > 15 {
 		return 0, ErrExceedTxOutCount
 	}
 
 	var wrote int64
 	if n, err := tx.Base.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
-	if n, err := tx.From.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -62,11 +56,11 @@ func (tx *MultiSigAccount) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 
-	if n, err := util.WriteUint8(w, uint8(len(tx.KeyAddresses))); err != nil {
+	if n, err := util.WriteUint8(w, uint8(len(tx.KeyHashes))); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
-		for _, addr := range tx.KeyAddresses {
+		for _, addr := range tx.KeyHashes {
 			if n, err := addr.WriteTo(w); err != nil {
 				return wrote, err
 			} else {
@@ -85,11 +79,6 @@ func (tx *MultiSigAccount) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if n, err := tx.From.ReadFrom(r); err != nil {
-		return read, err
-	} else {
-		read += n
-	}
 	if v, n, err := util.ReadUint8(r); err != nil {
 		return read, err
 	} else {
@@ -101,14 +90,14 @@ func (tx *MultiSigAccount) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		tx.KeyAddresses = make([]common.Address, 0, Len)
+		tx.KeyHashes = make([]common.PublicHash, 0, Len)
 		for i := 0; i < int(Len); i++ {
-			var addr common.Address
+			var addr common.PublicHash
 			if n, err := addr.ReadFrom(r); err != nil {
 				return read, err
 			} else {
 				read += n
-				tx.KeyAddresses = append(tx.KeyAddresses, addr)
+				tx.KeyHashes = append(tx.KeyHashes, addr)
 			}
 		}
 	}
