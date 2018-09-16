@@ -242,6 +242,10 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 
 		ctx.DeleteAccountHash[string(tx.FormulationAddress[:])] = formulationAcc
 	}
+
+	if fromAcc.Address.Type() == LockedAccountType && fromAcc.Balance.IsZero() {
+		ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+	}
 	return nil
 }
 

@@ -2,7 +2,6 @@ package chain
 
 import (
 	"bytes"
-	"log"
 
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/chain/account"
@@ -402,7 +401,6 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 		return nil, err
 	}
 	formulationAcc.Balance = formulationAcc.Balance.Add(cn.BlockReward(height))
-	log.Println(formulationAcc.Balance.String())
 
 	for key, data := range ctx.AccountDataHash {
 		if err := cn.updateAccountDataByKey([]byte(key), data); err != nil {
