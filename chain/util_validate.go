@@ -162,12 +162,45 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			}
 			toAcc.Balance = toAcc.Balance.Add(vout.Amount)
 		}
+	case *advanced.TaggedTrade:
+		if tx.Amount.IsZero() {
+			return ErrInvalidAmount
+		}
+		if tx.Amount.Less(cn.Config().DustAmount) {
+			return ErrTooSmallAmount
+		}
+
+		if fromAcc.Balance.Less(tx.Amount) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(tx.Amount)
+
+		toAcc, err := ctx.LoadAccount(cn, tx.Address, false)
+		if err != nil {
+			return err
+		}
+		toAcc.Balance = toAcc.Balance.Add(tx.Amount)
 	case *advanced.Burn:
 		if fromAcc.Balance.Less(tx.Amount) {
 			return ErrInsuffcientBalance
 		}
 		fromAcc.Balance = fromAcc.Balance.Sub(tx.Amount)
+	case *advanced.SingleAccount:
+		addr := common.NewAddress(SingleAccountType, height, idx)
+		if _, err := ctx.LoadAccount(cn, addr, false); err != nil {
+			if err != store.ErrNotExistKey {
+				return err
+			} else {
+				acc := CreateAccount(cn, addr, []common.PublicHash{tx.KeyHash})
+				ctx.AccountHash[string(addr[:])] = acc
+			}
+		} else {
+			return ErrExistAddress
+		}
 	case *advanced.MultiSigAccount:
+		if len(tx.KeyHashes) < 2 {
+			return ErrInvalidMultiSigKeyCount
+		}
 		if tx.Required == 0 || int(tx.Required) > len(tx.KeyHashes) {
 			return ErrInvalidMultiSigRequired
 		}
