@@ -8,6 +8,7 @@ import (
 type Config struct {
 	Version             uint16
 	FormulationCost     *amount.Amount
+	SingleAccountCost   *amount.Amount
 	MultiSigAccountCost *amount.Amount
 	DustAmount          *amount.Amount
 }
@@ -17,6 +18,7 @@ func (c *Config) Clone() *Config {
 	cc := &Config{
 		Version:             c.Version,
 		FormulationCost:     c.FormulationCost.Clone(),
+		SingleAccountCost:   c.SingleAccountCost.Clone(),
 		MultiSigAccountCost: c.MultiSigAccountCost.Clone(),
 		DustAmount:          c.DustAmount.Clone(),
 	}
