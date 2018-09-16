@@ -15,6 +15,7 @@ type Account struct {
 	Balance    *amount.Amount
 	Seq        uint64
 	KeyHashes  []common.PublicHash
+	IsExist_   bool
 }
 
 // WriteTo TODO

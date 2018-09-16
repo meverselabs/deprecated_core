@@ -34,6 +34,7 @@ type Provider interface {
 type AccountProvider interface {
 	Account(addr common.Address) (*account.Account, error)
 	AccountData(addr common.Address, name string) ([]byte, error)
+	Addresses(pubhash common.PublicHash) ([]common.Address, error)
 }
 
 // BlockProvider TODO
@@ -63,6 +64,7 @@ type Base struct {
 	blockStore      store.Store
 	accountStore    store.Store
 	dataStore       store.Store
+	hashStore       store.Store
 	height          uint32
 	hashPrevBlock   hash.Hash256
 	genesis         *Genesis
@@ -73,11 +75,12 @@ type Base struct {
 }
 
 // NewBase TODO
-func NewBase(config *Config, genesis *Genesis, blockStore store.Store, accountStore store.Store, dataStore store.Store) (*Base, error) {
+func NewBase(config *Config, genesis *Genesis, blockStore store.Store, accountStore store.Store, dataStore store.Store, hashStore store.Store) (*Base, error) {
 	cn := &Base{
 		blockStore:      blockStore,
 		accountStore:    accountStore,
 		dataStore:       dataStore,
+		hashStore:       hashStore,
 		genesis:         genesis,
 		config:          config,
 		formulationHash: map[string]common.PublicKey{},
@@ -109,7 +112,7 @@ func (cn *Base) initGenesisAccount() error {
 	for i, v := range cn.genesis.Accounts {
 		addr := common.NewAddress(v.Type, 0, uint16(i))
 		switch v.Type {
-		case KeyAccountType:
+		case SingleAccountType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
 			}
@@ -227,13 +230,29 @@ func (cn *Base) FormulationHash() map[string]common.PublicKey {
 	return hash
 }
 
+// Addresses TODO
+func (cn *Base) Addresses(pubhash common.PublicHash) ([]common.Address, error) {
+	if _, values, err := cn.hashStore.Scan(pubhash[:]); err != nil {
+		return nil, err
+	} else {
+		list := make([]common.Address, 0, len(values))
+		for _, v := range values {
+			var addr common.Address
+			copy(addr[:], v)
+			list = append(list, addr)
+		}
+		return list, nil
+	}
+}
+
 // Account TODO
 func (cn *Base) Account(addr common.Address) (*account.Account, error) {
 	if v, err := cn.accountStore.Get(addr[:]); err != nil {
 		return nil, err
 	} else {
 		acc := &account.Account{
-			Balance: amount.NewCoinAmount(0, 0),
+			Balance:  amount.NewCoinAmount(0, 0),
+			IsExist_: true,
 		}
 		if _, err := acc.ReadFrom(bytes.NewReader(v)); err != nil {
 			return nil, err
@@ -248,15 +267,25 @@ func (cn *Base) UpdateAccount(acc *account.Account) error {
 	if _, err := acc.WriteTo(&buffer); err != nil {
 		return err
 	} else {
-		switch acc.Address.Type() {
-		case FormulationAccountType:
-			bs, err := cn.AccountData(acc.Address, "PublicKey")
-			if err != nil {
-				return err
+		if !acc.IsExist_ {
+			switch acc.Address.Type() {
+			case FormulationAccountType:
+				bs, err := cn.AccountData(acc.Address, "PublicKey")
+				if err != nil {
+					return err
+				}
+				var pubkey common.PublicKey
+				copy(pubkey[:], bs)
+				cn.formulationHash[string(acc.Address[:])] = pubkey
 			}
-			var pubkey common.PublicKey
-			copy(pubkey[:], bs)
-			cn.formulationHash[string(acc.Address[:])] = pubkey
+			for _, ph := range acc.KeyHashes {
+				bs := make([]byte, common.PublicHashSize+common.AddressSize)
+				copy(bs[:], ph[:])
+				copy(bs[common.PublicHashSize:], acc.Address[:])
+				if err := cn.hashStore.Set(bs, acc.Address[:]); err != nil {
+					return err
+				}
+			}
 		}
 		if err := cn.accountStore.Set(acc.Address[:], buffer.Bytes()); err != nil {
 			return err
@@ -297,10 +326,14 @@ func (cn *Base) Fee(t transaction.Transaction) *amount.Amount {
 	switch tx := t.(type) {
 	case *advanced.Trade:
 		return baseFee.MulC(int64(len(tx.Vout)))
+	case *advanced.TaggedTrade:
+		return baseFee.MulC(2)
 	case *advanced.Formulation:
 		return baseFee.Add(cn.config.FormulationCost)
 	case *advanced.RevokeFormulation:
 		return baseFee
+	case *advanced.SingleAccount:
+		return baseFee.Add(cn.config.SingleAccountCost)
 	case *advanced.MultiSigAccount:
 		return baseFee.Add(cn.config.MultiSigAccountCost)
 	default:
