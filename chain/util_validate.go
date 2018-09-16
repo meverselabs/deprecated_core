@@ -47,8 +47,25 @@ func NewValidationContext() *ValidationContext {
 	return ctx
 }
 
+// IsExistAccount TODO
+func (ctx *ValidationContext) IsExistAccount(cn Provider, addr common.Address) (bool, error) {
+	if _, err := ctx.loadAccount(cn, addr, false); err != nil {
+		if err != store.ErrNotExistKey {
+			return false, err
+		} else {
+			return false, nil
+		}
+	} else {
+		return true, nil
+	}
+}
+
 // LoadAccount TODO
-func (ctx *ValidationContext) LoadAccount(cn Provider, addr common.Address, checkLock bool) (*account.Account, error) {
+func (ctx *ValidationContext) LoadAccount(cn Provider, addr common.Address) (*account.Account, error) {
+	return ctx.loadAccount(cn, addr, true)
+}
+
+func (ctx *ValidationContext) loadAccount(cn Provider, addr common.Address, checkLock bool) (*account.Account, error) {
 	if _, has := ctx.DeleteAccountHash[string(addr[:])]; has {
 		return nil, ErrDeletedAccount
 	}
@@ -123,7 +140,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		return ErrDuplicatedPublicKey
 	}
 
-	fromAcc, err := ctx.LoadAccount(cn, t.From(), true)
+	fromAcc, err := ctx.LoadAccount(cn, t.From())
 	if err != nil {
 		return err
 	}
@@ -156,7 +173,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			}
 			fromAcc.Balance = fromAcc.Balance.Sub(vout.Amount)
 
-			toAcc, err := ctx.LoadAccount(cn, vout.Address, false)
+			toAcc, err := ctx.LoadAccount(cn, vout.Address)
 			if err != nil {
 				return err
 			}
@@ -175,7 +192,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		}
 		fromAcc.Balance = fromAcc.Balance.Sub(tx.Amount)
 
-		toAcc, err := ctx.LoadAccount(cn, tx.Address, false)
+		toAcc, err := ctx.LoadAccount(cn, tx.Address)
 		if err != nil {
 			return err
 		}
@@ -187,15 +204,13 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		fromAcc.Balance = fromAcc.Balance.Sub(tx.Amount)
 	case *advanced.SingleAccount:
 		addr := common.NewAddress(SingleAccountType, height, idx)
-		if _, err := ctx.LoadAccount(cn, addr, false); err != nil {
-			if err != store.ErrNotExistKey {
-				return err
-			} else {
-				acc := CreateAccount(cn, addr, []common.PublicHash{tx.KeyHash})
-				ctx.AccountHash[string(addr[:])] = acc
-			}
-		} else {
+		if is, err := ctx.IsExistAccount(cn, addr); err != nil {
+			return err
+		} else if is {
 			return ErrExistAddress
+		} else {
+			acc := CreateAccount(cn, addr, []common.PublicHash{tx.KeyHash})
+			ctx.AccountHash[string(addr[:])] = acc
 		}
 	case *advanced.MultiSigAccount:
 		if len(tx.KeyHashes) < 2 {
@@ -206,32 +221,28 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		}
 
 		addr := common.NewAddress(MultiSigAccountType, height, idx)
-		if _, err := ctx.LoadAccount(cn, addr, false); err != nil {
-			if err != store.ErrNotExistKey {
-				return err
-			} else {
-				acc := CreateAccount(cn, addr, tx.KeyHashes)
-				ctx.AccountHash[string(addr[:])] = acc
-				ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(tx.Required)}
-			}
-		} else {
+		if is, err := ctx.IsExistAccount(cn, addr); err != nil {
+			return err
+		} else if is {
 			return ErrExistAddress
+		} else {
+			acc := CreateAccount(cn, addr, tx.KeyHashes)
+			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(tx.Required)}
 		}
 	case *advanced.Formulation:
 		addr := common.NewAddress(FormulationAccountType, height, idx)
-		if _, err := ctx.LoadAccount(cn, addr, false); err != nil {
-			if err != store.ErrNotExistKey {
-				return err
-			} else {
-				acc := CreateAccount(cn, addr, signers)
-				ctx.AccountHash[string(addr[:])] = acc
-				ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = tx.PublicKey[:]
-			}
-		} else {
+		if is, err := ctx.IsExistAccount(cn, addr); err != nil {
+			return err
+		} else if is {
 			return ErrExistAddress
+		} else {
+			acc := CreateAccount(cn, addr, signers)
+			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = tx.PublicKey[:]
 		}
 	case *advanced.RevokeFormulation:
-		formulationAcc, err := ctx.LoadAccount(cn, tx.FormulationAddress, false)
+		formulationAcc, err := ctx.LoadAccount(cn, tx.FormulationAddress)
 		if err != nil {
 			return err
 		}
