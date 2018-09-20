@@ -11,26 +11,26 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 )
 
-// Trade TODO
-type Trade struct {
+// Transfer TODO
+type Transfer struct {
 	transaction.Base
-	Vout []*TradeOut //MAXLEN : 255
+	Vout []*TransferOut //MAXLEN : 255
 }
 
-// NewTrade TODO
-func NewTrade(coord *common.Coordinate, timestamp uint64, seq uint64) *Trade {
-	return &Trade{
+// NewTransfer TODO
+func NewTransfer(coord *common.Coordinate, timestamp uint64, seq uint64) *Transfer {
+	return &Transfer{
 		Base: transaction.Base{
 			Coordinate_: coord.Clone(),
 			Timestamp_:  timestamp,
 			Seq_:        seq,
 		},
-		Vout: []*TradeOut{},
+		Vout: []*TransferOut{},
 	}
 }
 
 // Hash TODO
-func (tx *Trade) Hash() (hash.Hash256, error) {
+func (tx *Transfer) Hash() (hash.Hash256, error) {
 	var buffer bytes.Buffer
 	if _, err := tx.WriteTo(&buffer); err != nil {
 		return hash.Hash256{}, err
@@ -39,9 +39,9 @@ func (tx *Trade) Hash() (hash.Hash256, error) {
 }
 
 // WriteTo TODO
-func (tx *Trade) WriteTo(w io.Writer) (int64, error) {
+func (tx *Transfer) WriteTo(w io.Writer) (int64, error) {
 	if len(tx.Vout) > 255 {
-		return 0, ErrExceedTradeOutCount
+		return 0, ErrExceedTransferOutCount
 	}
 
 	var wrote int64
@@ -67,7 +67,7 @@ func (tx *Trade) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom TODO
-func (tx *Trade) ReadFrom(r io.Reader) (int64, error) {
+func (tx *Transfer) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
 		return read, err
@@ -79,9 +79,9 @@ func (tx *Trade) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		tx.Vout = make([]*TradeOut, 0, Len)
+		tx.Vout = make([]*TransferOut, 0, Len)
 		for i := 0; i < int(Len); i++ {
-			vout := NewTradeOut()
+			vout := NewTransferOut()
 			if n, err := vout.ReadFrom(r); err != nil {
 				return read, err
 			} else {
@@ -93,22 +93,22 @@ func (tx *Trade) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// TradeOut TODO
-type TradeOut struct {
+// TransferOut TODO
+type TransferOut struct {
 	Amount  *amount.Amount
 	Address common.Address
 }
 
-// NewTradeOut TODO
-func NewTradeOut() *TradeOut {
-	out := &TradeOut{
+// NewTransferOut TODO
+func NewTransferOut() *TransferOut {
+	out := &TransferOut{
 		Amount: amount.NewCoinAmount(0, 0),
 	}
 	return out
 }
 
 // WriteTo TODO
-func (out *TradeOut) WriteTo(w io.Writer) (int64, error) {
+func (out *TransferOut) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := out.Amount.WriteTo(w); err != nil {
 		return wrote, err
@@ -124,7 +124,7 @@ func (out *TradeOut) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom TODO
-func (out *TradeOut) ReadFrom(r io.Reader) (int64, error) {
+func (out *TransferOut) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := out.Amount.ReadFrom(r); err != nil {
 		return read, err

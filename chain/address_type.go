@@ -6,24 +6,27 @@ import (
 
 // account address types
 const (
-	SingleAccountType      = common.AddressType(10)
-	LockedAccountType      = common.AddressType(18)
-	MultiSigAccountType    = common.AddressType(20)
-	FormulationAccountType = common.AddressType(30)
+	OutputAddressType      = common.AddressType(1)
+	SingleAddressType      = common.AddressType(10)
+	LockedAddressType      = common.AddressType(18)
+	MultiSigAddressType    = common.AddressType(20)
+	FormulationAddressType = common.AddressType(30)
 )
 
 // NameOfAddressType TODO
 func NameOfAddressType(t common.AddressType) string {
 	switch t {
-	case SingleAccountType:
-		return "SingleAccountType"
-	case LockedAccountType:
-		return "LockedAccountType"
-	case MultiSigAccountType:
-		return "MultiSigAccountType"
-	case FormulationAccountType:
-		return "FormulationAccountType"
+	case OutputAddressType:
+		return "OutputAddressType"
+	case SingleAddressType:
+		return "SingleAddressType"
+	case LockedAddressType:
+		return "LockedAddressType"
+	case MultiSigAddressType:
+		return "MultiSigAddressType"
+	case FormulationAddressType:
+		return "FormulationAddressType"
 	default:
-		return "UnknownAccountType"
+		return "UnknownAddressType"
 	}
 }

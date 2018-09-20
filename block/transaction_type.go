@@ -10,8 +10,8 @@ type TransactionType uint8
 
 // transaction_type transaction types
 const (
-	TradeTransctionType             = TransactionType(10)
-	TaggedTradeTransctionType       = TransactionType(11)
+	TransferTransctionType          = TransactionType(10)
+	TaggedTransferTransctionType    = TransactionType(11)
 	BurnTransctionType              = TransactionType(19)
 	SingleAccountTransctionType     = TransactionType(20)
 	MultiSigAccountTransctionType   = TransactionType(21)
@@ -21,10 +21,10 @@ const (
 
 func (t TransactionType) String() string {
 	switch t {
-	case TradeTransctionType:
-		return "TradeTransctionType"
-	case TaggedTradeTransctionType:
-		return "TaggedTradeTransctionType"
+	case TransferTransctionType:
+		return "TransferTransctionType"
+	case TaggedTransferTransctionType:
+		return "TaggedTransferTransctionType"
 	case BurnTransctionType:
 		return "BurnTransctionType"
 	case SingleAccountTransctionType:
@@ -43,10 +43,10 @@ func (t TransactionType) String() string {
 // TypeOfTransaction TODO
 func TypeOfTransaction(tx transaction.Transaction) (TransactionType, error) {
 	switch tx.(type) {
-	case *advanced.Trade:
-		return TradeTransctionType, nil
-	case *advanced.TaggedTrade:
-		return TaggedTradeTransctionType, nil
+	case *advanced.Transfer:
+		return TransferTransctionType, nil
+	case *advanced.TaggedTransfer:
+		return TaggedTransferTransctionType, nil
 	case *advanced.Burn:
 		return BurnTransctionType, nil
 	case *advanced.SingleAccount:
@@ -65,10 +65,10 @@ func TypeOfTransaction(tx transaction.Transaction) (TransactionType, error) {
 // NewTransactionByType TODO
 func NewTransactionByType(t TransactionType) (transaction.Transaction, error) {
 	switch t {
-	case TradeTransctionType:
-		return new(advanced.Trade), nil
-	case TaggedTradeTransctionType:
-		return new(advanced.TaggedTrade), nil
+	case TransferTransctionType:
+		return new(advanced.Transfer), nil
+	case TaggedTransferTransctionType:
+		return new(advanced.TaggedTransfer), nil
 	case BurnTransctionType:
 		return new(advanced.Burn), nil
 	case SingleAccountTransctionType:

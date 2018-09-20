@@ -78,7 +78,7 @@ func (ctx *ValidationContext) loadAccount(cn Provider, addr common.Address, chec
 		}
 		if checkLock {
 			switch acc.Address.Type() {
-			case LockedAccountType:
+			case LockedAddressType:
 				bs, err := ctx.AccountData(cn, acc.Address, "UnlockHeight")
 				if err != nil {
 					return nil, err
@@ -159,7 +159,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 	fromAcc.Seq++
 
 	switch tx := t.(type) {
-	case *advanced.Trade:
+	case *advanced.Transfer:
 		for _, vout := range tx.Vout {
 			if vout.Amount.IsZero() {
 				return ErrInvalidAmount
@@ -179,7 +179,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			}
 			toAcc.Balance = toAcc.Balance.Add(vout.Amount)
 		}
-	case *advanced.TaggedTrade:
+	case *advanced.TaggedTransfer:
 		if tx.Amount.IsZero() {
 			return ErrInvalidAmount
 		}
@@ -203,7 +203,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		}
 		fromAcc.Balance = fromAcc.Balance.Sub(tx.Amount)
 	case *advanced.SingleAccount:
-		addr := common.NewAddress(SingleAccountType, height, idx)
+		addr := common.NewAddress(SingleAddressType, height, idx)
 		if is, err := ctx.IsExistAccount(cn, addr); err != nil {
 			return err
 		} else if is {
@@ -220,7 +220,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrInvalidMultiSigRequired
 		}
 
-		addr := common.NewAddress(MultiSigAccountType, height, idx)
+		addr := common.NewAddress(MultiSigAddressType, height, idx)
 		if is, err := ctx.IsExistAccount(cn, addr); err != nil {
 			return err
 		} else if is {
@@ -231,7 +231,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(tx.Required)}
 		}
 	case *advanced.Formulation:
-		addr := common.NewAddress(FormulationAccountType, height, idx)
+		addr := common.NewAddress(FormulationAddressType, height, idx)
 		if is, err := ctx.IsExistAccount(cn, addr); err != nil {
 			return err
 		} else if is {
@@ -254,7 +254,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		ctx.DeleteAccountHash[string(tx.FormulationAddress[:])] = formulationAcc
 	}
 
-	if fromAcc.Address.Type() == LockedAccountType && fromAcc.Balance.IsZero() {
+	if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
 		ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
 	}
 	return nil
@@ -269,7 +269,7 @@ func ValidateSigners(ctx *ValidationContext, cn Provider, acc *account.Account, 
 		}
 	}
 	switch acc.Address.Type() {
-	case MultiSigAccountType:
+	case MultiSigAddressType:
 		bs, err := ctx.AccountData(cn, acc.Address, "Required")
 		if err != nil {
 			return err

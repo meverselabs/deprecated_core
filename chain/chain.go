@@ -111,7 +111,7 @@ func (cn *Base) initGenesisAccount() error {
 	for i, v := range cn.genesis.Accounts {
 		addr := common.NewAddress(v.Type, 0, uint16(i))
 		switch v.Type {
-		case SingleAccountType:
+		case SingleAddressType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
 			}
@@ -121,7 +121,7 @@ func (cn *Base) initGenesisAccount() error {
 			acc := CreateAccount(cn, addr, v.KeyHashes)
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
-		case LockedAccountType:
+		case LockedAddressType:
 			if v.UnlockHeight == 0 {
 				return ErrInvalidUnlockHeight
 			}
@@ -132,7 +132,7 @@ func (cn *Base) initGenesisAccount() error {
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "UnlockHeight"))] = util.Uint32ToBytes(v.UnlockHeight)
-		case MultiSigAccountType:
+		case MultiSigAddressType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
 			}
@@ -143,7 +143,7 @@ func (cn *Base) initGenesisAccount() error {
 			acc.Balance = acc.Balance.Add(v.Amount)
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(v.Required)}
-		case FormulationAccountType:
+		case FormulationAddressType:
 			if v.UnlockHeight > 0 {
 				return ErrInvalidUnlockHeight
 			}
@@ -154,7 +154,7 @@ func (cn *Base) initGenesisAccount() error {
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = v.PublicKey[:]
 		default:
-			return ErrInvalidGenesisAccountType
+			return ErrInvalidGenesisAddressType
 		}
 	}
 
@@ -268,7 +268,7 @@ func (cn *Base) UpdateAccount(acc *account.Account) error {
 	} else {
 		if !acc.IsExist_ {
 			switch acc.Address.Type() {
-			case FormulationAccountType:
+			case FormulationAddressType:
 				bs, err := cn.AccountData(acc.Address, "PublicKey")
 				if err != nil {
 					return err
@@ -323,10 +323,10 @@ func (cn *Base) BlockReward(height uint32) *amount.Amount {
 func (cn *Base) Fee(t transaction.Transaction) *amount.Amount {
 	var baseFee = amount.COIN.DivC(10)
 	switch tx := t.(type) {
-	case *advanced.Trade:
-		return baseFee.MulC(int64(len(tx.Vout)))
-	case *advanced.TaggedTrade:
-		return baseFee.MulC(2)
+	case *advanced.Transfer:
+		return baseFee.MulC(1 + int64(len(tx.Vout)))
+	case *advanced.TaggedTransfer:
+		return baseFee.MulC(3)
 	case *advanced.Formulation:
 		return baseFee.Add(cn.config.FormulationCost)
 	case *advanced.RevokeFormulation:
@@ -396,7 +396,7 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 		return nil, ErrMismatchHashLevelRoot
 	}
 
-	formulationAcc, err := ctx.LoadAccount(cn, b.Header.FormulationAddress, false)
+	formulationAcc, err := ctx.LoadAccount(cn, b.Header.FormulationAddress)
 	if err != nil {
 		return nil, err
 	}
