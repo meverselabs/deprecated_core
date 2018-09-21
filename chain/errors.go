@@ -6,7 +6,7 @@ import (
 
 // ErrDoubleSpent chain errors
 var (
-	ErrMismatchAddress               = errors.New("mismatch address")
+	ErrMismatchPublicHash            = errors.New("mismatch public hash")
 	ErrMismatchOwnerCount            = errors.New("mismatch owner count")
 	ErrExceedTransactionInputValue   = errors.New("exceed transaction input value")
 	ErrExceedTransactionInputHeight  = errors.New("exceed transaction input height")

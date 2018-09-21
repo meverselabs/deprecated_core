@@ -5,7 +5,8 @@ import (
 
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/chain/account"
-	"git.fleta.io/fleta/core/transaction/advanced"
+	"git.fleta.io/fleta/core/transaction/tx_account"
+	"git.fleta.io/fleta/core/transaction/tx_utxo"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
@@ -47,6 +48,7 @@ type BlockProvider interface {
 	ObserverSignedByHash(h hash.Hash256) (*block.ObserverSigned, error)
 	Transactions(height uint32) ([]transaction.Transaction, error)
 	Transaction(height uint32, index uint16) (transaction.Transaction, error)
+	Unspent(height uint32, index uint16, n uint16) (*UTXO, error)
 }
 
 // Chain TODO
@@ -64,6 +66,7 @@ type Base struct {
 	accountStore    store.Store
 	dataStore       store.Store
 	hashStore       store.Store
+	utxoStore       store.Store
 	height          uint32
 	hashPrevBlock   hash.Hash256
 	genesis         *Genesis
@@ -74,12 +77,13 @@ type Base struct {
 }
 
 // NewBase TODO
-func NewBase(config *Config, genesis *Genesis, blockStore store.Store, accountStore store.Store, dataStore store.Store, hashStore store.Store) (*Base, error) {
+func NewBase(config *Config, genesis *Genesis, blockStore store.Store, accountStore store.Store, dataStore store.Store, hashStore store.Store, utxoStore store.Store) (*Base, error) {
 	cn := &Base{
 		blockStore:      blockStore,
 		accountStore:    accountStore,
 		dataStore:       dataStore,
 		hashStore:       hashStore,
+		utxoStore:       utxoStore,
 		genesis:         genesis,
 		config:          config,
 		formulationHash: map[string]common.PublicKey{},
@@ -321,20 +325,25 @@ func (cn *Base) BlockReward(height uint32) *amount.Amount {
 
 // Fee TODO TEMP
 func (cn *Base) Fee(t transaction.Transaction) *amount.Amount {
-	var baseFee = amount.COIN.DivC(10)
 	switch tx := t.(type) {
-	case *advanced.Transfer:
-		return baseFee.MulC(1 + int64(len(tx.Vout)))
-	case *advanced.TaggedTransfer:
-		return baseFee.MulC(3)
-	case *advanced.Formulation:
-		return baseFee.Add(cn.config.FormulationCost)
-	case *advanced.RevokeFormulation:
-		return baseFee
-	case *advanced.SingleAccount:
-		return baseFee.Add(cn.config.SingleAccountCost)
-	case *advanced.MultiSigAccount:
-		return baseFee.Add(cn.config.MultiSigAccountCost)
+	case *tx_account.Transfer:
+		return cn.config.AccountBaseFee.MulC(1 + int64(len(tx.Vout)))
+	case *tx_account.TaggedTransfer:
+		return cn.config.AccountBaseFee.MulC(3)
+	case *tx_account.Formulation:
+		return cn.config.AccountBaseFee.Add(cn.config.FormulationCost)
+	case *tx_account.RevokeFormulation:
+		return cn.config.AccountBaseFee.Clone()
+	case *tx_account.SingleAccount:
+		return cn.config.AccountBaseFee.Add(cn.config.SingleAccountCost)
+	case *tx_account.MultiSigAccount:
+		return cn.config.AccountBaseFee.Add(cn.config.MultiSigAccountCost)
+	case *tx_account.Withdraw:
+		return cn.config.AccountBaseFee.MulC(1 + int64(len(tx.Vout)))
+	case *tx_utxo.Assign:
+		return cn.config.UTXOBaseFee.MulC(int64(len(tx.Vin)) + int64(len(tx.Vout)))
+	case *tx_utxo.Deposit:
+		return cn.config.UTXOBaseFee.MulC(1 + int64(len(tx.Vin)) + int64(len(tx.Vout)))
 	default:
 		panic("Unknown transaction type fee : " + block.TypeNameOfTransaction(tx))
 	}
@@ -409,6 +418,16 @@ func (cn *Base) ConnectBlock(b *block.Block, s *block.ObserverSigned, ExpectedPu
 	}
 	for _, acc := range ctx.AccountHash {
 		if err := cn.UpdateAccount(acc); err != nil {
+			return nil, err
+		}
+	}
+	for id := range ctx.SpentUTXOHash {
+		if err := cn.deleteUTXO(id); err != nil {
+			return nil, err
+		}
+	}
+	for id, vout := range ctx.UTXOHash {
+		if err := cn.cacheUTXO(id, vout); err != nil {
 			return nil, err
 		}
 	}
@@ -521,6 +540,52 @@ func (cn *Base) Transaction(height uint32, index uint16) (transaction.Transactio
 		}
 		return txs[index], nil
 	}
+}
+
+// Unspent TODO
+func (cn *Base) Unspent(height uint32, index uint16, n uint16) (*UTXO, error) {
+	if height > cn.Height() {
+		return nil, ErrExceedChainHeight
+	}
+	id := transaction.MarshalID(height, index, n)
+	utxo := &UTXO{
+		TxIn: transaction.TxIn{
+			Height: height,
+			Index:  index,
+			N:      n,
+		},
+		TxOut: transaction.TxOut{
+			Amount: amount.NewCoinAmount(0, 0),
+		},
+	}
+	if v, err := cn.utxoStore.Get(util.Uint64ToBytes(id)); err != nil {
+		return nil, err
+	} else if _, err := utxo.TxOut.ReadFrom(bytes.NewReader(v)); err != nil {
+		return nil, err
+	}
+	return utxo, nil
+}
+
+func (cn *Base) cacheUTXO(id uint64, vout *transaction.TxOut) error {
+	bid := util.Uint64ToBytes(id)
+	var buffer bytes.Buffer
+	if _, err := vout.WriteTo(&buffer); err != nil {
+		return err
+	}
+	if err := cn.utxoStore.Set(bid, buffer.Bytes()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cn *Base) deleteUTXO(id uint64) error {
+	bid := util.Uint64ToBytes(id)
+	if err := cn.utxoStore.Delete(bid); err != nil {
+		if err != store.ErrNotExistKey {
+			return err
+		}
+	}
+	return nil
 }
 
 func (cn *Base) writeBlock(height uint32, b *block.Block, s *block.ObserverSigned) error {

@@ -2,13 +2,12 @@ package chain
 
 import (
 	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/store"
-	"git.fleta.io/fleta/common/util"
+	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/chain/account"
 	"git.fleta.io/fleta/core/transaction"
-	"git.fleta.io/fleta/core/transaction/advanced"
+	"git.fleta.io/fleta/core/transaction/tx_account"
+	"git.fleta.io/fleta/core/transaction/tx_utxo"
 )
 
 // ValidateBlockGeneratorSignature TODO
@@ -27,85 +26,6 @@ func ValidateBlockGeneratorSignature(b *block.Block, GeneratorSignature common.S
 		}
 	}
 	return nil
-}
-
-// ValidationContext TODO
-type ValidationContext struct {
-	CurrentTxHash     hash.Hash256
-	AccountHash       map[string]*account.Account
-	DeleteAccountHash map[string]*account.Account
-	AccountDataHash   map[string][]byte
-}
-
-// NewValidationContext TODO
-func NewValidationContext() *ValidationContext {
-	ctx := &ValidationContext{
-		AccountHash:       map[string]*account.Account{},
-		DeleteAccountHash: map[string]*account.Account{},
-		AccountDataHash:   map[string][]byte{},
-	}
-	return ctx
-}
-
-// IsExistAccount TODO
-func (ctx *ValidationContext) IsExistAccount(cn Provider, addr common.Address) (bool, error) {
-	if _, err := ctx.loadAccount(cn, addr, false); err != nil {
-		if err != store.ErrNotExistKey {
-			return false, err
-		} else {
-			return false, nil
-		}
-	} else {
-		return true, nil
-	}
-}
-
-// LoadAccount TODO
-func (ctx *ValidationContext) LoadAccount(cn Provider, addr common.Address) (*account.Account, error) {
-	return ctx.loadAccount(cn, addr, true)
-}
-
-func (ctx *ValidationContext) loadAccount(cn Provider, addr common.Address, checkLock bool) (*account.Account, error) {
-	if _, has := ctx.DeleteAccountHash[string(addr[:])]; has {
-		return nil, ErrDeletedAccount
-	}
-
-	targetAcc, has := ctx.AccountHash[string(addr[:])]
-	if !has {
-		acc, err := cn.Account(addr)
-		if err != nil {
-			return nil, err
-		}
-		if checkLock {
-			switch acc.Address.Type() {
-			case LockedAddressType:
-				bs, err := ctx.AccountData(cn, acc.Address, "UnlockHeight")
-				if err != nil {
-					return nil, err
-				}
-				if cn.Height() < util.BytesToUint32(bs) {
-					return nil, ErrLockedAccount
-				}
-			}
-		}
-		targetAcc = acc
-		ctx.AccountHash[string(addr[:])] = targetAcc
-	}
-	return targetAcc, nil
-}
-
-// AccountData TODO
-func (ctx *ValidationContext) AccountData(cn Provider, addr common.Address, name string) ([]byte, error) {
-	key := toAccountDataKey(addr, name)
-	data, has := ctx.AccountDataHash[string(key)]
-	if !has {
-		bs, err := cn.AccountData(addr, name)
-		if err != nil {
-			return nil, err
-		}
-		data = bs
-	}
-	return data, nil
 }
 
 // ValidateTransaction TODO
@@ -140,26 +60,26 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		return ErrDuplicatedPublicKey
 	}
 
-	fromAcc, err := ctx.LoadAccount(cn, t.From())
-	if err != nil {
-		return err
-	}
-	if t.Seq() != fromAcc.Seq+1 {
-		return ErrInvalidSequence
-	}
-	if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
-		return err
-	}
-
-	Fee := cn.Fee(t)
-	if fromAcc.Balance.Less(Fee) {
-		return ErrInsuffcientBalance
-	}
-	fromAcc.Balance = fromAcc.Balance.Sub(Fee)
-	fromAcc.Seq++
-
 	switch tx := t.(type) {
-	case *advanced.Transfer:
+	case *tx_account.Transfer:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if tx.Seq != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
+			return err
+		}
+
+		Fee := cn.Fee(t)
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+
 		for _, vout := range tx.Vout {
 			if vout.Amount.IsZero() {
 				return ErrInvalidAmount
@@ -179,7 +99,29 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			}
 			toAcc.Balance = toAcc.Balance.Add(vout.Amount)
 		}
-	case *advanced.TaggedTransfer:
+
+		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
+			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+		}
+	case *tx_account.TaggedTransfer:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if tx.Seq != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
+			return err
+		}
+
+		Fee := cn.Fee(t)
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+
 		if tx.Amount.IsZero() {
 			return ErrInvalidAmount
 		}
@@ -197,12 +139,56 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return err
 		}
 		toAcc.Balance = toAcc.Balance.Add(tx.Amount)
-	case *advanced.Burn:
+
+		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
+			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+		}
+	case *tx_account.Burn:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if tx.Seq != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
+			return err
+		}
+
+		Fee := cn.Fee(t)
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+
 		if fromAcc.Balance.Less(tx.Amount) {
 			return ErrInsuffcientBalance
 		}
 		fromAcc.Balance = fromAcc.Balance.Sub(tx.Amount)
-	case *advanced.SingleAccount:
+
+		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
+			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+		}
+	case *tx_account.SingleAccount:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if tx.Seq != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
+			return err
+		}
+
+		Fee := cn.Fee(t)
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+
 		addr := common.NewAddress(SingleAddressType, height, idx)
 		if is, err := ctx.IsExistAccount(cn, addr); err != nil {
 			return err
@@ -212,7 +198,29 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			acc := CreateAccount(cn, addr, []common.PublicHash{tx.KeyHash})
 			ctx.AccountHash[string(addr[:])] = acc
 		}
-	case *advanced.MultiSigAccount:
+
+		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
+			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+		}
+	case *tx_account.MultiSigAccount:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if tx.Seq != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
+			return err
+		}
+
+		Fee := cn.Fee(t)
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+
 		if len(tx.KeyHashes) < 2 {
 			return ErrInvalidMultiSigKeyCount
 		}
@@ -230,7 +238,29 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(tx.Required)}
 		}
-	case *advanced.Formulation:
+
+		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
+			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+		}
+	case *tx_account.Formulation:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if tx.Seq != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
+			return err
+		}
+
+		Fee := cn.Fee(t)
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+
 		addr := common.NewAddress(FormulationAddressType, height, idx)
 		if is, err := ctx.IsExistAccount(cn, addr); err != nil {
 			return err
@@ -241,7 +271,29 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			ctx.AccountHash[string(addr[:])] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = tx.PublicKey[:]
 		}
-	case *advanced.RevokeFormulation:
+
+		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
+			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+		}
+	case *tx_account.RevokeFormulation:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if tx.Seq != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
+			return err
+		}
+
+		Fee := cn.Fee(t)
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+
 		formulationAcc, err := ctx.LoadAccount(cn, tx.FormulationAddress)
 		if err != nil {
 			return err
@@ -252,10 +304,143 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		fromAcc.Balance = fromAcc.Balance.Add(formulationAcc.Balance).Add(cn.Config().FormulationCost)
 
 		ctx.DeleteAccountHash[string(tx.FormulationAddress[:])] = formulationAcc
-	}
 
-	if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
-		ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
+			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+		}
+	case *tx_account.Withdraw:
+		fromAcc, err := ctx.LoadAccount(cn, tx.From)
+		if err != nil {
+			return err
+		}
+		if tx.Seq != fromAcc.Seq+1 {
+			return ErrInvalidSequence
+		}
+		if err := ValidateSigners(ctx, cn, fromAcc, signerHash); err != nil {
+			return err
+		}
+
+		Fee := cn.Fee(t)
+		if fromAcc.Balance.Less(Fee) {
+			return ErrInsuffcientBalance
+		}
+		fromAcc.Balance = fromAcc.Balance.Sub(Fee)
+		fromAcc.Seq++
+
+		for n, vout := range tx.Vout {
+			if vout.Amount.IsZero() {
+				return ErrInvalidAmount
+			}
+			if vout.Amount.Less(cn.Config().DustAmount) {
+				return ErrTooSmallAmount
+			}
+
+			if fromAcc.Balance.Less(vout.Amount) {
+				return ErrInsuffcientBalance
+			}
+			fromAcc.Balance = fromAcc.Balance.Sub(vout.Amount)
+
+			ctx.UTXOHash[transaction.MarshalID(height, idx, uint16(n))] = vout
+		}
+
+		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
+			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+		}
+	case *tx_utxo.Assign:
+		if len(signers) > 1 {
+			return ErrExceedSignatureCount
+		}
+
+		insum := amount.NewCoinAmount(0, 0)
+		for _, vin := range tx.Vin {
+			if vin.Height >= height {
+				return ErrExceedTransactionInputHeight
+			}
+			if utxo, err := cn.Unspent(vin.Height, vin.Index, vin.N); err != nil {
+				return err
+			} else {
+				ctx.SpentUTXOHash[vin.ID()] = true
+				insum = insum.Add(utxo.Amount)
+
+				if !utxo.PublicHash.Equal(signers[0]) {
+					return ErrMismatchPublicHash
+				}
+			}
+		}
+
+		outsum := amount.NewCoinAmount(0, 0)
+		for n, vout := range tx.Vout {
+			if vout.Amount.IsZero() {
+				return ErrInvalidAmount
+			}
+			if vout.Amount.Less(cn.Config().DustAmount) {
+				return ErrTooSmallAmount
+			}
+			ctx.UTXOHash[transaction.MarshalID(height, idx, uint16(n))] = vout
+			outsum = outsum.Add(vout.Amount)
+		}
+		if insum.Less(outsum) {
+			return ErrExceedTransactionInputValue
+		}
+		PaidFee := insum.Sub(outsum)
+		Fee := cn.Fee(t)
+		if !PaidFee.Equal(Fee) {
+			return ErrInvalidTransactionFee
+		}
+	case *tx_utxo.Deposit:
+		if len(signers) > 1 {
+			return ErrExceedSignatureCount
+		}
+
+		insum := amount.NewCoinAmount(0, 0)
+		for _, vin := range tx.Vin {
+			if vin.Height >= height {
+				return ErrExceedTransactionInputHeight
+			}
+			if utxo, err := cn.Unspent(vin.Height, vin.Index, vin.N); err != nil {
+				return err
+			} else {
+				ctx.SpentUTXOHash[vin.ID()] = true
+				insum = insum.Add(utxo.Amount)
+
+				if !utxo.PublicHash.Equal(signers[0]) {
+					return ErrMismatchPublicHash
+				}
+			}
+		}
+
+		if tx.Amount.IsZero() {
+			return ErrInvalidAmount
+		}
+		if tx.Amount.Less(cn.Config().DustAmount) {
+			return ErrTooSmallAmount
+		}
+
+		outsum := tx.Amount
+		for n, vout := range tx.Vout {
+			if vout.Amount.IsZero() {
+				return ErrInvalidAmount
+			}
+			if vout.Amount.Less(cn.Config().DustAmount) {
+				return ErrTooSmallAmount
+			}
+			ctx.UTXOHash[transaction.MarshalID(height, idx, uint16(n))] = vout
+			outsum = outsum.Add(vout.Amount)
+		}
+		if insum.Less(outsum) {
+			return ErrExceedTransactionInputValue
+		}
+		PaidFee := insum.Sub(outsum)
+		Fee := cn.Fee(t)
+		if !PaidFee.Equal(Fee) {
+			return ErrInvalidTransactionFee
+		}
+
+		toAcc, err := ctx.LoadAccount(cn, tx.Address)
+		if err != nil {
+			return err
+		}
+		toAcc.Balance = toAcc.Balance.Add(tx.Amount)
 	}
 	return nil
 }

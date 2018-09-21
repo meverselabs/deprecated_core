@@ -6,9 +6,8 @@ import (
 
 // account address types
 const (
-	OutputAddressType      = common.AddressType(1)
 	SingleAddressType      = common.AddressType(10)
-	LockedAddressType      = common.AddressType(18)
+	LockedAddressType      = common.AddressType(19)
 	MultiSigAddressType    = common.AddressType(20)
 	FormulationAddressType = common.AddressType(30)
 )
@@ -16,8 +15,6 @@ const (
 // NameOfAddressType TODO
 func NameOfAddressType(t common.AddressType) string {
 	switch t {
-	case OutputAddressType:
-		return "OutputAddressType"
 	case SingleAddressType:
 		return "SingleAddressType"
 	case LockedAddressType:
