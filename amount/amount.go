@@ -114,6 +114,11 @@ func (am *Amount) Less(b *Amount) bool {
 	return am.Int.Cmp(b.Int) < 0
 }
 
+// Equal TODO
+func (am *Amount) Equal(b *Amount) bool {
+	return am.Int.Cmp(b.Int) == 0
+}
+
 // String TODO
 func (am *Amount) String() string {
 	if am.IsZero() {
