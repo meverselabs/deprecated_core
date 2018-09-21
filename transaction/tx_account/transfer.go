@@ -1,4 +1,4 @@
-package advanced
+package tx_account
 
 import (
 	"bytes"
@@ -14,6 +14,8 @@ import (
 // Transfer TODO
 type Transfer struct {
 	transaction.Base
+	Seq  uint64
+	From common.Address //MAXLEN : 255
 	Vout []*TransferOut //MAXLEN : 255
 }
 
@@ -23,8 +25,8 @@ func NewTransfer(coord *common.Coordinate, timestamp uint64, seq uint64) *Transf
 		Base: transaction.Base{
 			Coordinate_: coord.Clone(),
 			Timestamp_:  timestamp,
-			Seq_:        seq,
 		},
+		Seq:  seq,
 		Vout: []*TransferOut{},
 	}
 }
@@ -50,6 +52,16 @@ func (tx *Transfer) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := util.WriteUint64(w, tx.Seq); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := tx.From.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 
 	if n, err := util.WriteUint8(w, uint8(len(tx.Vout))); err != nil {
 		return wrote, err
@@ -70,6 +82,17 @@ func (tx *Transfer) WriteTo(w io.Writer) (int64, error) {
 func (tx *Transfer) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if v, n, err := util.ReadUint64(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.Seq = v
+	}
+	if n, err := tx.From.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

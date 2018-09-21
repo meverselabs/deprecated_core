@@ -1,4 +1,4 @@
-package advanced
+package tx_account
 
 import (
 	"bytes"
@@ -13,6 +13,8 @@ import (
 // MultiSigAccount TODO
 type MultiSigAccount struct {
 	transaction.Base
+	Seq       uint64
+	From      common.Address //MAXLEN : 255
 	Required  uint8
 	KeyHashes []common.PublicHash //MAXLEN : 15
 }
@@ -23,8 +25,8 @@ func NewMultiSigAccount(coord *common.Coordinate, timestamp uint64, seq uint64) 
 		Base: transaction.Base{
 			Coordinate_: coord.Clone(),
 			Timestamp_:  timestamp,
-			Seq_:        seq,
 		},
+		Seq:       seq,
 		KeyHashes: []common.PublicHash{},
 	}
 }
@@ -46,6 +48,16 @@ func (tx *MultiSigAccount) WriteTo(w io.Writer) (int64, error) {
 
 	var wrote int64
 	if n, err := tx.Base.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint64(w, tx.Seq); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := tx.From.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -75,6 +87,17 @@ func (tx *MultiSigAccount) WriteTo(w io.Writer) (int64, error) {
 func (tx *MultiSigAccount) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if v, n, err := util.ReadUint64(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.Seq = v
+	}
+	if n, err := tx.From.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

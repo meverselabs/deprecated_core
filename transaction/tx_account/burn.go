@@ -1,4 +1,4 @@
-package advanced
+package tx_account
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
+	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/transaction"
 )
@@ -13,6 +14,8 @@ import (
 // Burn TODO
 type Burn struct {
 	transaction.Base
+	Seq    uint64
+	From   common.Address //MAXLEN : 255
 	Amount *amount.Amount
 }
 
@@ -22,8 +25,8 @@ func NewBurn(coord *common.Coordinate, timestamp uint64, seq uint64) *Burn {
 		Base: transaction.Base{
 			Coordinate_: coord.Clone(),
 			Timestamp_:  timestamp,
-			Seq_:        seq,
 		},
+		Seq: seq,
 	}
 }
 
@@ -44,6 +47,16 @@ func (tx *Burn) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := util.WriteUint64(w, tx.Seq); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := tx.From.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := tx.Amount.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
@@ -56,6 +69,17 @@ func (tx *Burn) WriteTo(w io.Writer) (int64, error) {
 func (tx *Burn) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if v, n, err := util.ReadUint64(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.Seq = v
+	}
+	if n, err := tx.From.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

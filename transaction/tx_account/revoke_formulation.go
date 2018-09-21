@@ -1,4 +1,4 @@
-package advanced
+package tx_account
 
 import (
 	"bytes"
@@ -6,12 +6,15 @@ import (
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
+	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/transaction"
 )
 
 // RevokeFormulation TODO
 type RevokeFormulation struct {
 	transaction.Base
+	Seq                uint64
+	From               common.Address //MAXLEN : 255
 	FormulationAddress common.Address
 }
 
@@ -21,8 +24,8 @@ func NewRevokeFormulation(coord *common.Coordinate, timestamp uint64, seq uint64
 		Base: transaction.Base{
 			Coordinate_: coord.Clone(),
 			Timestamp_:  timestamp,
-			Seq_:        seq,
 		},
+		Seq: seq,
 	}
 }
 
@@ -43,6 +46,16 @@ func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := util.WriteUint64(w, tx.Seq); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := tx.From.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := tx.FormulationAddress.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
@@ -55,6 +68,17 @@ func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 func (tx *RevokeFormulation) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if v, n, err := util.ReadUint64(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.Seq = v
+	}
+	if n, err := tx.From.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
