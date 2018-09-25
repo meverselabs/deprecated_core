@@ -13,6 +13,7 @@ type Config struct {
 	DustAmount          *amount.Amount
 	AccountBaseFee      *amount.Amount
 	UTXOBaseFee         *amount.Amount
+	OpenAccountCost     *amount.Amount
 }
 
 // Clone TODO
@@ -25,6 +26,7 @@ func (c *Config) Clone() *Config {
 		DustAmount:          c.DustAmount.Clone(),
 		AccountBaseFee:      c.AccountBaseFee.Clone(),
 		UTXOBaseFee:         c.UTXOBaseFee.Clone(),
+		OpenAccountCost:     c.OpenAccountCost.Clone(),
 	}
 	return cc
 }

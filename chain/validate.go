@@ -359,12 +359,11 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			if utxo, err := cn.Unspent(vin.Height, vin.Index, vin.N); err != nil {
 				return err
 			} else {
-				ctx.SpentUTXOHash[vin.ID()] = true
-				insum = insum.Add(utxo.Amount)
-
 				if !utxo.PublicHash.Equal(signers[0]) {
 					return ErrMismatchPublicHash
 				}
+				ctx.SpentUTXOHash[vin.ID()] = true
+				insum = insum.Add(utxo.Amount)
 			}
 		}
 
@@ -391,6 +390,12 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		if len(signers) > 1 {
 			return ErrExceedSignatureCount
 		}
+		if tx.Amount.IsZero() {
+			return ErrInvalidAmount
+		}
+		if tx.Amount.Less(cn.Config().DustAmount) {
+			return ErrTooSmallAmount
+		}
 
 		insum := amount.NewCoinAmount(0, 0)
 		for _, vin := range tx.Vin {
@@ -400,20 +405,12 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			if utxo, err := cn.Unspent(vin.Height, vin.Index, vin.N); err != nil {
 				return err
 			} else {
-				ctx.SpentUTXOHash[vin.ID()] = true
-				insum = insum.Add(utxo.Amount)
-
 				if !utxo.PublicHash.Equal(signers[0]) {
 					return ErrMismatchPublicHash
 				}
+				ctx.SpentUTXOHash[vin.ID()] = true
+				insum = insum.Add(utxo.Amount)
 			}
-		}
-
-		if tx.Amount.IsZero() {
-			return ErrInvalidAmount
-		}
-		if tx.Amount.Less(cn.Config().DustAmount) {
-			return ErrTooSmallAmount
 		}
 
 		outsum := tx.Amount
@@ -441,6 +438,56 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return err
 		}
 		toAcc.Balance = toAcc.Balance.Add(tx.Amount)
+	case *tx_utxo.OpenAccount:
+		if len(signers) > 1 {
+			return ErrExceedSignatureCount
+		}
+
+		insum := amount.NewCoinAmount(0, 0)
+		for _, vin := range tx.Vin {
+			if vin.Height >= height {
+				return ErrExceedTransactionInputHeight
+			}
+			if utxo, err := cn.Unspent(vin.Height, vin.Index, vin.N); err != nil {
+				return err
+			} else {
+				if !utxo.PublicHash.Equal(signers[0]) {
+					return ErrMismatchPublicHash
+				}
+				ctx.SpentUTXOHash[vin.ID()] = true
+				insum = insum.Add(utxo.Amount)
+			}
+		}
+
+		outsum := amount.NewCoinAmount(0, 0)
+		for n, vout := range tx.Vout {
+			if vout.Amount.IsZero() {
+				return ErrInvalidAmount
+			}
+			if vout.Amount.Less(cn.Config().DustAmount) {
+				return ErrTooSmallAmount
+			}
+			ctx.UTXOHash[transaction.MarshalID(height, idx, uint16(n))] = vout
+			outsum = outsum.Add(vout.Amount)
+		}
+		if insum.Less(outsum) {
+			return ErrExceedTransactionInputValue
+		}
+		PaidFee := insum.Sub(outsum)
+		Fee := cn.Fee(t)
+		if !PaidFee.Equal(Fee) {
+			return ErrInvalidTransactionFee
+		}
+
+		addr := common.NewAddress(SingleAddressType, height, idx)
+		if is, err := ctx.IsExistAccount(cn, addr); err != nil {
+			return err
+		} else if is {
+			return ErrExistAddress
+		} else {
+			acc := CreateAccount(cn, addr, []common.PublicHash{tx.KeyHash})
+			ctx.AccountHash[string(addr[:])] = acc
+		}
 	}
 	return nil
 }

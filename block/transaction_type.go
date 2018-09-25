@@ -21,8 +21,9 @@ const (
 	FormulationTransctionType       = TransactionType(30)
 	RevokeFormulationTransctionType = TransactionType(31)
 	//UTXO transaction
-	AssignTransctionType  = TransactionType(81)
-	DepositTransctionType = TransactionType(91)
+	AssignTransctionType      = TransactionType(81)
+	DepositTransctionType     = TransactionType(91)
+	OpenAccountTransctionType = TransactionType(101)
 )
 
 func (t TransactionType) String() string {
@@ -47,6 +48,8 @@ func (t TransactionType) String() string {
 		return "AssignTransctionType"
 	case DepositTransctionType:
 		return "DepositTransctionType"
+	case OpenAccountTransctionType:
+		return "OpenAccountTransctionType"
 	default:
 		return "UnknownTransactionType"
 	}
@@ -75,6 +78,8 @@ func TypeOfTransaction(tx transaction.Transaction) (TransactionType, error) {
 		return AssignTransctionType, nil
 	case *tx_utxo.Deposit:
 		return DepositTransctionType, nil
+	case *tx_utxo.OpenAccount:
+		return OpenAccountTransctionType, nil
 	default:
 		return 0, ErrUnknownTransactionType
 	}
@@ -103,6 +108,8 @@ func NewTransactionByType(t TransactionType) (transaction.Transaction, error) {
 		return new(tx_utxo.Assign), nil
 	case DepositTransctionType:
 		return new(tx_utxo.Deposit), nil
+	case OpenAccountTransctionType:
+		return new(tx_utxo.OpenAccount), nil
 	default:
 		return nil, ErrUnknownTransactionType
 	}

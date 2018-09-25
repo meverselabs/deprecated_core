@@ -344,6 +344,8 @@ func (cn *Base) Fee(t transaction.Transaction) *amount.Amount {
 		return cn.config.UTXOBaseFee.MulC(int64(len(tx.Vin)) + int64(len(tx.Vout)))
 	case *tx_utxo.Deposit:
 		return cn.config.UTXOBaseFee.MulC(1 + int64(len(tx.Vin)) + int64(len(tx.Vout)))
+	case *tx_utxo.OpenAccount:
+		return cn.config.UTXOBaseFee.Add(cn.config.OpenAccountCost)
 	default:
 		panic("Unknown transaction type fee : " + block.TypeNameOfTransaction(tx))
 	}
