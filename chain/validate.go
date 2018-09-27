@@ -52,9 +52,9 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 
 	height := cn.Height() + 1
 
-	signerHash := map[string]bool{}
+	signerHash := map[common.PublicHash]bool{}
 	for _, signer := range signers {
-		signerHash[string(signer[:])] = true
+		signerHash[signer] = true
 	}
 	if len(signers) != len(signerHash) {
 		return ErrDuplicatedPublicKey
@@ -101,7 +101,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		}
 
 		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
-			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+			ctx.DeleteAccountHash[fromAcc.Address] = fromAcc
 		}
 	case *tx_account.TaggedTransfer:
 		fromAcc, err := ctx.LoadAccount(cn, tx.From)
@@ -141,7 +141,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		toAcc.Balance = toAcc.Balance.Add(tx.Amount)
 
 		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
-			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+			ctx.DeleteAccountHash[fromAcc.Address] = fromAcc
 		}
 	case *tx_account.Burn:
 		fromAcc, err := ctx.LoadAccount(cn, tx.From)
@@ -168,7 +168,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		fromAcc.Balance = fromAcc.Balance.Sub(tx.Amount)
 
 		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
-			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+			ctx.DeleteAccountHash[fromAcc.Address] = fromAcc
 		}
 	case *tx_account.SingleAccount:
 		fromAcc, err := ctx.LoadAccount(cn, tx.From)
@@ -196,11 +196,11 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrExistAddress
 		} else {
 			acc := CreateAccount(cn, addr, []common.PublicHash{tx.KeyHash})
-			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountHash[addr] = acc
 		}
 
 		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
-			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+			ctx.DeleteAccountHash[fromAcc.Address] = fromAcc
 		}
 	case *tx_account.MultiSigAccount:
 		fromAcc, err := ctx.LoadAccount(cn, tx.From)
@@ -235,12 +235,12 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrExistAddress
 		} else {
 			acc := CreateAccount(cn, addr, tx.KeyHashes)
-			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountHash[addr] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(tx.Required)}
 		}
 
 		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
-			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+			ctx.DeleteAccountHash[fromAcc.Address] = fromAcc
 		}
 	case *tx_account.Formulation:
 		fromAcc, err := ctx.LoadAccount(cn, tx.From)
@@ -268,12 +268,12 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrExistAddress
 		} else {
 			acc := CreateAccount(cn, addr, signers)
-			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountHash[addr] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = tx.PublicKey[:]
 		}
 
 		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
-			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+			ctx.DeleteAccountHash[fromAcc.Address] = fromAcc
 		}
 	case *tx_account.RevokeFormulation:
 		fromAcc, err := ctx.LoadAccount(cn, tx.From)
@@ -303,10 +303,10 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		}
 		fromAcc.Balance = fromAcc.Balance.Add(formulationAcc.Balance).Add(cn.Config().FormulationCost)
 
-		ctx.DeleteAccountHash[string(tx.FormulationAddress[:])] = formulationAcc
+		ctx.DeleteAccountHash[tx.FormulationAddress] = formulationAcc
 
 		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
-			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+			ctx.DeleteAccountHash[fromAcc.Address] = fromAcc
 		}
 	case *tx_account.Withdraw:
 		fromAcc, err := ctx.LoadAccount(cn, tx.From)
@@ -344,7 +344,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 		}
 
 		if fromAcc.Address.Type() == LockedAddressType && fromAcc.Balance.IsZero() {
-			ctx.DeleteAccountHash[string(fromAcc.Address[:])] = fromAcc
+			ctx.DeleteAccountHash[fromAcc.Address] = fromAcc
 		}
 	case *tx_utxo.Assign:
 		if len(signers) > 1 {
@@ -486,17 +486,17 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			return ErrExistAddress
 		} else {
 			acc := CreateAccount(cn, addr, []common.PublicHash{tx.KeyHash})
-			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountHash[addr] = acc
 		}
 	}
 	return nil
 }
 
 // ValidateSigners TODO
-func ValidateSigners(ctx *ValidationContext, cn Provider, acc *account.Account, signerHash map[string]bool) error {
+func ValidateSigners(ctx *ValidationContext, cn Provider, acc *account.Account, signerHash map[common.PublicHash]bool) error {
 	matchCount := 0
 	for _, addr := range acc.KeyHashes {
-		if signerHash[string(addr[:])] {
+		if signerHash[addr] {
 			matchCount++
 		}
 	}

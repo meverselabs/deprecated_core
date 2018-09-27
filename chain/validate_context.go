@@ -12,8 +12,8 @@ import (
 // ValidationContext TODO
 type ValidationContext struct {
 	CurrentTxHash     hash.Hash256
-	AccountHash       map[string]*account.Account
-	DeleteAccountHash map[string]*account.Account
+	AccountHash       map[common.Address]*account.Account
+	DeleteAccountHash map[common.Address]*account.Account
 	AccountDataHash   map[string][]byte
 	SpentUTXOHash     map[uint64]bool
 	UTXOHash          map[uint64]*transaction.TxOut
@@ -22,8 +22,8 @@ type ValidationContext struct {
 // NewValidationContext TODO
 func NewValidationContext() *ValidationContext {
 	ctx := &ValidationContext{
-		AccountHash:       map[string]*account.Account{},
-		DeleteAccountHash: map[string]*account.Account{},
+		AccountHash:       map[common.Address]*account.Account{},
+		DeleteAccountHash: map[common.Address]*account.Account{},
 		AccountDataHash:   map[string][]byte{},
 		SpentUTXOHash:     map[uint64]bool{},
 		UTXOHash:          map[uint64]*transaction.TxOut{},
@@ -50,11 +50,11 @@ func (ctx *ValidationContext) LoadAccount(cn Provider, addr common.Address) (*ac
 }
 
 func (ctx *ValidationContext) loadAccount(cn Provider, addr common.Address, checkLock bool) (*account.Account, error) {
-	if _, has := ctx.DeleteAccountHash[string(addr[:])]; has {
+	if _, has := ctx.DeleteAccountHash[addr]; has {
 		return nil, ErrDeletedAccount
 	}
 
-	targetAcc, has := ctx.AccountHash[string(addr[:])]
+	targetAcc, has := ctx.AccountHash[addr]
 	if !has {
 		acc, err := cn.Account(addr)
 		if err != nil {
@@ -73,7 +73,7 @@ func (ctx *ValidationContext) loadAccount(cn Provider, addr common.Address, chec
 			}
 		}
 		targetAcc = acc
-		ctx.AccountHash[string(addr[:])] = targetAcc
+		ctx.AccountHash[addr] = targetAcc
 	}
 	return targetAcc, nil
 }

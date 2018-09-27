@@ -25,7 +25,7 @@ type Provider interface {
 	GenesisHash() hash.Hash256
 	Coordinate() *common.Coordinate
 	ObserverPubkeys() []common.PublicKey
-	FormulationHash() map[string]common.PublicKey
+	FormulationHash() map[common.Address]common.PublicKey
 	Fee(tx transaction.Transaction) *amount.Amount
 	BlockReward(height uint32) *amount.Amount
 }
@@ -73,7 +73,7 @@ type Base struct {
 	genesisHash     hash.Hash256
 	observerPubkeys []common.PublicKey
 	config          *Config
-	formulationHash map[string]common.PublicKey
+	formulationHash map[common.Address]common.PublicKey
 }
 
 // NewBase TODO
@@ -86,7 +86,7 @@ func NewBase(config *Config, genesis *Genesis, blockStore store.Store, accountSt
 		utxoStore:       utxoStore,
 		genesis:         genesis,
 		config:          config,
-		formulationHash: map[string]common.PublicKey{},
+		formulationHash: map[common.Address]common.PublicKey{},
 	}
 
 	cn.observerPubkeys = cn.genesis.ObserverPubkeys
@@ -124,7 +124,7 @@ func (cn *Base) initGenesisAccount() error {
 			}
 			acc := CreateAccount(cn, addr, v.KeyHashes)
 			acc.Balance = acc.Balance.Add(v.Amount)
-			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountHash[addr] = acc
 		case LockedAddressType:
 			if v.UnlockHeight == 0 {
 				return ErrInvalidUnlockHeight
@@ -134,7 +134,7 @@ func (cn *Base) initGenesisAccount() error {
 			}
 			acc := CreateAccount(cn, addr, v.KeyHashes)
 			acc.Balance = acc.Balance.Add(v.Amount)
-			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountHash[addr] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "UnlockHeight"))] = util.Uint32ToBytes(v.UnlockHeight)
 		case MultiSigAddressType:
 			if v.UnlockHeight > 0 {
@@ -145,7 +145,7 @@ func (cn *Base) initGenesisAccount() error {
 			}
 			acc := CreateAccount(cn, addr, v.KeyHashes)
 			acc.Balance = acc.Balance.Add(v.Amount)
-			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountHash[addr] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "Required"))] = []byte{byte(v.Required)}
 		case FormulationAddressType:
 			if v.UnlockHeight > 0 {
@@ -155,7 +155,7 @@ func (cn *Base) initGenesisAccount() error {
 				return ErrInvalidAmount
 			}
 			acc := CreateAccount(cn, addr, v.KeyHashes)
-			ctx.AccountHash[string(addr[:])] = acc
+			ctx.AccountHash[addr] = acc
 			ctx.AccountDataHash[string(toAccountDataKey(addr, "PublicKey"))] = v.PublicKey[:]
 		default:
 			return ErrInvalidGenesisAddressType
@@ -223,8 +223,8 @@ func (cn *Base) HashCurrentBlock() (hash.Hash256, error) {
 }
 
 // FormulationHash TODO
-func (cn *Base) FormulationHash() map[string]common.PublicKey {
-	hash := map[string]common.PublicKey{}
+func (cn *Base) FormulationHash() map[common.Address]common.PublicKey {
+	hash := map[common.Address]common.PublicKey{}
 	for k, v := range cn.formulationHash {
 		var pubkey common.PublicKey
 		copy(pubkey[:], v[:])
@@ -279,7 +279,7 @@ func (cn *Base) UpdateAccount(acc *account.Account) error {
 				}
 				var pubkey common.PublicKey
 				copy(pubkey[:], bs)
-				cn.formulationHash[string(acc.Address[:])] = pubkey
+				cn.formulationHash[acc.Address] = pubkey
 			}
 			for _, ph := range acc.KeyHashes {
 				bs := make([]byte, common.PublicHashSize+common.AddressSize)
