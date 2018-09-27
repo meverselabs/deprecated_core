@@ -413,7 +413,7 @@ func validateTransaction(ctx *ValidationContext, cn Provider, t transaction.Tran
 			}
 		}
 
-		outsum := tx.Amount
+		outsum := tx.Amount.Clone()
 		for n, vout := range tx.Vout {
 			if vout.Amount.IsZero() {
 				return ErrInvalidAmount
