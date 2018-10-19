@@ -10,8 +10,8 @@ import (
 const hashPerLevel = 16
 const levelHashAppender = "fletablockchain"
 
-// Hash TODO
-func Hash(hashes []hash.Hash256) (hash.Hash256, error) {
+// Hash16 TODO
+func Hash16(hashes []hash.Hash256) (hash.Hash256, error) {
 	if len(hashes) > hashPerLevel {
 		return hash.Hash256{}, ErrExceedHashCount
 	}
@@ -54,7 +54,7 @@ func BuildLevel(hashes []hash.Hash256) ([]hash.Hash256, error) {
 			if last > len(hashes) {
 				last = len(hashes)
 			}
-			h, err := Hash(hashes[idx*hashPerLevel : last])
+			h, err := Hash16(hashes[idx*hashPerLevel : last])
 			if err != nil {
 				errs <- err
 				return
@@ -91,7 +91,7 @@ func BuildLevelRoot(txHashes []hash.Hash256) (hash.Hash256, error) {
 	if err != nil {
 		return hash.Hash256{}, err
 	}
-	h, err := Hash(lv1)
+	h, err := Hash16(lv1)
 	if err != nil {
 		return hash.Hash256{}, err
 	}

@@ -11,27 +11,33 @@ import (
 
 // Header TODO
 type Header struct {
+	ChainCoord         common.Coordinate
 	Height             uint32
 	Version            uint16
 	HashPrevBlock      hash.Hash256
 	HashLevelRoot      hash.Hash256
 	Timestamp          uint64
 	FormulationAddress common.Address
-	TimeoutCount       uint16
+	TimeoutCount       uint32
 }
 
 // Hash TODO
-func (bh *Header) Hash() (hash.Hash256, error) {
+func (bh *Header) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := bh.WriteTo(&buffer); err != nil {
-		return hash.Hash256{}, err
+		panic(err)
 	}
-	return hash.DoubleHash(buffer.Bytes()), nil
+	return hash.DoubleHash(buffer.Bytes())
 }
 
 // WriteTo TODO
 func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
+	if n, err := bh.ChainCoord.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := util.WriteUint32(w, bh.Height); err != nil {
 		return wrote, err
 	} else {
@@ -62,7 +68,7 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := util.WriteUint16(w, bh.TimeoutCount); err != nil {
+	if n, err := util.WriteUint32(w, bh.TimeoutCount); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -73,6 +79,11 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom TODO
 func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
+	if n, err := bh.ChainCoord.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
 	if v, n, err := util.ReadUint32(r); err != nil {
 		return read, err
 	} else {
@@ -106,7 +117,7 @@ func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if v, n, err := util.ReadUint16(r); err != nil {
+	if v, n, err := util.ReadUint32(r); err != nil {
 		return read, err
 	} else {
 		bh.TimeoutCount = v

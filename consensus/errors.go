@@ -1,10 +1,16 @@
 package consensus
 
-import (
-	"errors"
-)
+import "errors"
 
+// consensus errors
 var (
-	// ErrExceedTimeoutCount TODO
-	ErrExceedTimeoutCount = errors.New("exceed timeout count")
+	ErrInvalidPrevBlockHash          = errors.New("invalid prev block hash")
+	ErrInvalidPrevBlockHeight        = errors.New("invalid prev block height")
+	ErrInsufficientCandidateCount    = errors.New("insufficient candidate count")
+	ErrInvalidTopMember              = errors.New("invalid top member")
+	ErrInvalidTopSignature           = errors.New("invalid top signature")
+	ErrInsufficientObserverSignature = errors.New("insufficient observer signature")
+	ErrDuplicatedObserverSignature   = errors.New("duplicated observer signature")
+	ErrInvalidObserverSignature      = errors.New("invalid observer signature")
+	ErrInvalidKeyHashCount           = errors.New("invalid key hash count")
 )

@@ -12,20 +12,24 @@ import (
 type Transaction interface {
 	io.WriterTo
 	io.ReaderFrom
-	Coordinate() *common.Coordinate
+	ChainCoord() *common.Coordinate
 	Timestamp() uint64
-	Hash() (hash.Hash256, error)
+	SetType(t Type)
+	Type() Type
+	Hash() hash.Hash256
+	IsUTXO() bool
 }
 
 // Base TODO
 type Base struct {
-	Coordinate_ *common.Coordinate
+	ChainCoord_ *common.Coordinate
 	Timestamp_  uint64
+	Type_       Type
 }
 
-// Coordinate TODO
-func (tx *Base) Coordinate() *common.Coordinate {
-	return tx.Coordinate_.Clone()
+// ChainCoord TODO
+func (tx *Base) ChainCoord() *common.Coordinate {
+	return tx.ChainCoord_.Clone()
 }
 
 // Timestamp TODO
@@ -33,15 +37,30 @@ func (tx *Base) Timestamp() uint64 {
 	return tx.Timestamp_
 }
 
+// SetType TODO
+func (tx *Base) SetType(t Type) {
+	tx.Type_ = t
+}
+
+// Type TODO
+func (tx *Base) Type() Type {
+	return tx.Type_
+}
+
 // WriteTo TODO
 func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := tx.Coordinate_.WriteTo(w); err != nil {
+	if n, err := tx.ChainCoord_.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
 	if n, err := util.WriteUint64(w, tx.Timestamp_); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint8(w, uint8(tx.Type_)); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -52,7 +71,7 @@ func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom TODO
 func (tx *Base) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if n, err := tx.Coordinate_.ReadFrom(r); err != nil {
+	if n, err := tx.ChainCoord_.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -62,6 +81,12 @@ func (tx *Base) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 		tx.Timestamp_ = v
+	}
+	if v, n, err := util.ReadUint8(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.Type_ = Type(v)
 	}
 	return read, nil
 }

@@ -6,6 +6,7 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/transaction"
+	"git.fleta.io/fleta/core/transactor"
 )
 
 // Block TODO
@@ -36,18 +37,14 @@ func (b *Block) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 		for _, tx := range b.Transactions {
-			if t, err := TypeOfTransaction(tx); err != nil {
+			if n, err := util.WriteUint8(w, uint8(tx.Type())); err != nil {
 				return wrote, err
 			} else {
-				if n, err := util.WriteUint8(w, uint8(t)); err != nil {
+				wrote += n
+				if n, err := tx.WriteTo(w); err != nil {
 					return wrote, err
 				} else {
 					wrote += n
-					if n, err := tx.WriteTo(w); err != nil {
-						return wrote, err
-					} else {
-						wrote += n
-					}
 				}
 			}
 		}
@@ -89,7 +86,11 @@ func (b *Block) ReadFrom(r io.Reader) (int64, error) {
 				return read, err
 			} else {
 				read += n
-				if tx, err := NewTransactionByType(TransactionType(t)); err != nil {
+				tran, err := transactor.ByCoord(&b.Header.ChainCoord)
+				if err != nil {
+					return read, err
+				}
+				if tx, err := tran.NewByType(transaction.Type(t)); err != nil {
 					return read, err
 				} else {
 					if n, err := tx.ReadFrom(r); err != nil {

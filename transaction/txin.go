@@ -13,8 +13,20 @@ type TxIn struct {
 	N      uint16
 }
 
+// Clone TODO
+func (in *TxIn) Clone() *TxIn {
+	return &TxIn{
+		Height: in.Height,
+		Index:  in.Index,
+		N:      in.N,
+	}
+}
+
 // NewTxIn TODO
 func NewTxIn(id uint64) *TxIn {
+	if id == 0 {
+		return &TxIn{}
+	}
 	height, index, n := UnmarshalID(id)
 	return &TxIn{
 		Height: height,

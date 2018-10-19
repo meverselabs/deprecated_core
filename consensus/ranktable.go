@@ -2,11 +2,12 @@ package consensus
 
 import (
 	"errors"
+	"io"
 	"sort"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/core/consensus/rank"
+	"git.fleta.io/fleta/common/util"
 )
 
 var (
@@ -20,18 +21,72 @@ var (
 
 // RankTable TODO
 type RankTable struct {
-	candidates []*rank.Rank
-	rankHash   map[string]*rank.Rank
 	height     uint64
+	candidates []*Rank
+	rankHash   map[common.Address]*Rank
 }
 
 // NewRankTable TODO
 func NewRankTable() *RankTable {
 	rt := &RankTable{
-		candidates: []*rank.Rank{},
-		rankHash:   map[string]*rank.Rank{},
+		candidates: []*Rank{},
+		rankHash:   map[common.Address]*Rank{},
 	}
 	return rt
+}
+
+// WriteTo TODO
+func (rt *RankTable) WriteTo(w io.Writer) (int64, error) {
+	var wrote int64
+	if n, err := util.WriteUint64(w, rt.height); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+
+	if n, err := util.WriteUint32(w, uint32(len(rt.candidates))); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+		for _, s := range rt.candidates {
+			if n, err := s.WriteTo(w); err != nil {
+				return wrote, err
+			} else {
+				wrote += n
+			}
+		}
+	}
+	return wrote, nil
+}
+
+// ReadFrom TODO
+func (rt *RankTable) ReadFrom(r io.Reader) (int64, error) {
+	var read int64
+	if v, n, err := util.ReadUint64(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		rt.height = v
+	}
+
+	if Len, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		rt.candidates = make([]*Rank, 0, Len)
+		rt.rankHash = map[common.Address]*Rank{}
+		for i := 0; i < int(Len); i++ {
+			s := new(Rank)
+			if n, err := s.ReadFrom(r); err != nil {
+				return read, err
+			} else {
+				read += n
+				rt.candidates = append(rt.candidates, s)
+				rt.rankHash[s.Address] = s
+			}
+		}
+	}
+	return read, nil
 }
 
 // Height TODO
@@ -40,7 +95,7 @@ func (rt *RankTable) Height() uint64 {
 }
 
 // Add TODO
-func (rt *RankTable) Add(s *rank.Rank) error {
+func (rt *RankTable) Add(s *Rank) error {
 	if len(rt.candidates) > 0 {
 		if s.Phase() < rt.candidates[0].Phase() {
 			return ErrInvalidPhase
@@ -50,33 +105,43 @@ func (rt *RankTable) Add(s *rank.Rank) error {
 		return ErrExistAddress
 	}
 	rt.candidates = InsertRankToList(rt.candidates, s)
-	rt.rankHash[string(s.Address[:])] = s
+	rt.rankHash[s.Address] = s
 	return nil
+}
+
+// LargestPhase TODO
+func (rt *RankTable) LargestPhase() uint32 {
+	if len(rt.candidates) == 0 {
+		return 0
+	}
+	return rt.candidates[len(rt.candidates)-1].phase
 }
 
 // Remove TODO
 func (rt *RankTable) Remove(addr common.Address) {
-	delete(rt.rankHash, string(addr[:]))
-	candidates := make([]*rank.Rank, 0, len(rt.candidates))
-	for _, s := range rt.candidates {
-		if !s.Address.Equal(addr) {
-			candidates = append(candidates, s)
+	if _, has := rt.rankHash[addr]; has {
+		delete(rt.rankHash, addr)
+		candidates := make([]*Rank, 0, len(rt.candidates))
+		for _, s := range rt.candidates {
+			if !s.Address.Equal(addr) {
+				candidates = append(candidates, s)
+			}
 		}
 	}
 }
 
 // Rank TODO
-func (rt *RankTable) Rank(addr common.Address) *rank.Rank {
-	return rt.rankHash[string(addr[:])]
+func (rt *RankTable) Rank(addr common.Address) *Rank {
+	return rt.rankHash[addr]
 }
 
 // Candidates TODO
-func (rt *RankTable) Candidates(cnt int) []*rank.Rank {
+func (rt *RankTable) Candidates(cnt int) []*Rank {
 	if cnt > len(rt.candidates) {
 		return nil
 	}
 
-	list := make([]*rank.Rank, 0, cnt)
+	list := make([]*Rank, 0, cnt)
 	for _, m := range rt.candidates {
 		list = append(list, m.Clone())
 		if len(list) >= cnt {
@@ -117,7 +182,7 @@ func (rt *RankTable) ForwardCandidates(TimeoutCount int, LastTableAppendHash has
 }
 
 // InsertRankToList TODO
-func InsertRankToList(ranks []*rank.Rank, s *rank.Rank) []*rank.Rank {
+func InsertRankToList(ranks []*Rank, s *Rank) []*Rank {
 	idx := sort.Search(len(ranks), func(i int) bool {
 		return s.Less(ranks[i])
 	})

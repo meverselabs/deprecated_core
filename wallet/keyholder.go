@@ -31,11 +31,6 @@ func (kh *KeyHolder) UUID() string {
 	return kh.uuid
 }
 
-// IsLock TODO
-func (kh *KeyHolder) IsLock() bool {
-	return kh.key.IsLock()
-}
-
 // PublicKey TODO
 func (kh *KeyHolder) PublicKey() common.PublicKey {
 	return kh.key.PublicKey()

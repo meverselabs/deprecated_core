@@ -21,6 +21,14 @@ func NewTxOut() *TxOut {
 	return out
 }
 
+// Clone TODO
+func (out *TxOut) Clone() *TxOut {
+	return &TxOut{
+		Amount:     out.Amount.Clone(),
+		PublicHash: out.PublicHash.Clone(),
+	}
+}
+
 // WriteTo TODO
 func (out *TxOut) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64

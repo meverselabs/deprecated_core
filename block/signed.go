@@ -16,12 +16,12 @@ type Signed struct {
 }
 
 // Hash TODO
-func (s *Signed) Hash() (hash.Hash256, error) {
+func (s *Signed) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := s.WriteTo(&buffer); err != nil {
-		return hash.Hash256{}, err
+		panic(err)
 	}
-	return hash.DoubleHash(buffer.Bytes()), nil
+	return hash.DoubleHash(buffer.Bytes())
 }
 
 // WriteTo TODO
@@ -65,12 +65,12 @@ type ObserverSigned struct {
 }
 
 // Hash TODO
-func (s *ObserverSigned) Hash() (hash.Hash256, error) {
+func (s *ObserverSigned) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := s.WriteTo(&buffer); err != nil {
-		return hash.Hash256{}, err
+		panic(err)
 	}
-	return hash.DoubleHash(buffer.Bytes()), nil
+	return hash.DoubleHash(buffer.Bytes())
 }
 
 // WriteTo TODO
