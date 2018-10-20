@@ -113,7 +113,7 @@ func (kn *Kernel) RecvBlock(b *block.Block, s *block.ObserverSigned, IsNewBlock 
 	if err := kn.Consensus.ValidateBlock(b, s, PrevHeight, PrevHash); err != nil {
 		return err
 	}
-	ctx := data.NewContext(kn.Store, kn.ChainCoord)
+	ctx := data.NewContext(kn.Store)
 	if err := kn.processBlock(ctx, b); err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
 
 // GenerateBlock TODO
 func (kn *Kernel) GenerateBlock(TimeoutCount uint32) error {
-	ctx := data.NewContext(kn.Store, kn.ChainCoord)
+	ctx := data.NewContext(kn.Store)
 	PrevHeight := kn.Store.Height()
 	PrevHash, err := kn.Store.BlockHash(PrevHeight)
 	if err != nil {

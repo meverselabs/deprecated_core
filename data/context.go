@@ -15,15 +15,13 @@ import (
 // Context TODO
 type Context struct {
 	loader Loader
-	coord  *common.Coordinate
 	stack  []*ContextData
 }
 
 // NewContext TODO
-func NewContext(loader Loader, coord *common.Coordinate) *Context {
+func NewContext(loader Loader) *Context {
 	ctx := &Context{
 		loader: loader,
-		coord:  coord,
 		stack:  []*ContextData{NewContextData(loader, nil)},
 	}
 	return ctx
@@ -31,12 +29,13 @@ func NewContext(loader Loader, coord *common.Coordinate) *Context {
 
 // ChainCoord TODO
 func (ctx *Context) ChainCoord() *common.Coordinate {
-	return ctx.coord
+	return ctx.loader.ChainCoord()
 }
 
 // IsMainChain TODO
 func (ctx *Context) IsMainChain() bool {
-	return ctx.coord.Height == 0 && ctx.coord.Index == 0
+	coord := ctx.ChainCoord()
+	return coord.Height == 0 && coord.Index == 0
 }
 
 // Top TODO
