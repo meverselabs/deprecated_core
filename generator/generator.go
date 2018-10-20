@@ -72,7 +72,7 @@ TxLoop:
 				break TxLoop
 			}
 			idx := uint16(len(b.Transactions))
-			if err := Transactor.Execute(ctx, item.Transaction, &common.Coordinate{Height: b.Header.Height, Index: idx}); err != nil {
+			if _, err := Transactor.Execute(ctx, item.Transaction, &common.Coordinate{Height: b.Header.Height, Index: idx}); err != nil {
 				log.Println(err)
 				//TODO : EventTransactionPendingFail
 				break

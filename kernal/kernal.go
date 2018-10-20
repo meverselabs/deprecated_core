@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/framework/profiler"
 
 	"git.fleta.io/fleta/core/observer_proxy"
 	"git.fleta.io/fleta/core/txpool"
@@ -156,11 +155,6 @@ func (kn *Kernel) RecvBlock(b *block.Block, s *block.ObserverSigned, IsNewBlock 
 }
 
 func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
-	defer profiler.Enter().Exit()
-
-	var p *profiler.Instance
-	p = profiler.EnterTag("Sig")
-
 	var wg sync.WaitGroup
 	cpuCnt := runtime.NumCPU()
 	if len(b.Transactions) < 1000 {
@@ -206,21 +200,16 @@ func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
 		err := <-errs
 		return err
 	}
-	p.Exit()
-	p = profiler.EnterTag("Level")
 	if h, err := level.BuildLevelRoot(TxHashes); err != nil {
 		return err
 	} else if !b.Header.HashLevelRoot.Equal(h) {
 		return ErrInvalidHashLevelRoot
 	}
-	p.Exit()
-	p = profiler.EnterTag("Execute")
 	for i, tx := range b.Transactions {
-		if err := kn.Transactor.Execute(ctx, tx, &common.Coordinate{Height: b.Header.Height, Index: uint16(i)}); err != nil {
+		if _, err := kn.Transactor.Execute(ctx, tx, &common.Coordinate{Height: b.Header.Height, Index: uint16(i)}); err != nil {
 			return err
 		}
 	}
-	p.Exit()
 	return nil
 }
 

@@ -184,6 +184,18 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 	return acc, nil
 }
 
+// IsExistAccount TODO
+func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
+	if _, err := st.Account(addr); err != nil {
+		if err != db.ErrNotExistKey {
+			return true, err
+		}
+		return false, nil
+	} else {
+		return true, nil
+	}
+}
+
 // AccountData TODO
 func (st *Store) AccountData(addr common.Address, name []byte) []byte {
 	key := string(addr[:]) + string(name)
