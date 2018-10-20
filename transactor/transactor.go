@@ -68,22 +68,23 @@ func (tran *Transactor) Validate(loader data.Loader, tx transaction.Transaction,
 }
 
 // Execute TODO
-func (tran *Transactor) Execute(ctx *data.Context, tx transaction.Transaction, coord *common.Coordinate) error {
+func (tran *Transactor) Execute(ctx *data.Context, tx transaction.Transaction, coord *common.Coordinate) (interface{}, error) {
 	t := tx.Type()
 	if !tran.coord.Equal(ctx.ChainCoord()) {
-		return ErrInvalidChainCoordinate
+		return nil, ErrInvalidChainCoordinate
 	}
 	if !tran.coord.Equal(tx.ChainCoord()) {
-		return ErrInvalidChainCoordinate
+		return nil, ErrInvalidChainCoordinate
 	}
 
 	if item, has := tran.handlerTypeHash[t]; !has {
-		return ErrNotExistHandler
+		return nil, ErrNotExistHandler
 	} else {
-		if err := item.Executor(ctx, tran.feeHash[t].Clone(), tx, coord); err != nil {
-			return err
+		if ret, err := item.Executor(ctx, tran.feeHash[t].Clone(), tx, coord); err != nil {
+			return nil, err
+		} else {
+			return ret, nil
 		}
-		return nil
 	}
 }
 
@@ -171,4 +172,4 @@ type Factory func(t transaction.Type) transaction.Transaction
 type Validator func(loader data.Loader, tx transaction.Transaction, signers []common.PublicHash) error
 
 // Executor TODO
-type Executor func(ctx *data.Context, Fee *amount.Amount, tx transaction.Transaction, coord *common.Coordinate) error
+type Executor func(ctx *data.Context, Fee *amount.Amount, tx transaction.Transaction, coord *common.Coordinate) (interface{}, error)
