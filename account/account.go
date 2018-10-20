@@ -16,8 +16,6 @@ type Account interface {
 	Address() common.Address
 	SetType(t Type)
 	Type() Type
-	Seq() uint64
-	AddSeq()
 	Balance(coord *common.Coordinate) *amount.Amount
 	SetBalance(coord *common.Coordinate, a *amount.Amount)
 	Clone() Account
@@ -29,7 +27,6 @@ type Account interface {
 type Base struct {
 	Address_    common.Address
 	Type_       Type
-	Seq_        uint64
 	BalanceHash map[uint64]*amount.Amount
 }
 
@@ -56,16 +53,6 @@ func (acc *Base) Type() Type {
 	return acc.Type_
 }
 
-// Seq TODO
-func (acc *Base) Seq() uint64 {
-	return acc.Seq_
-}
-
-// AddSeq TODO
-func (acc *Base) AddSeq() {
-	acc.Seq_++
-}
-
 // Balance TODO
 func (acc *Base) Balance(coord *common.Coordinate) *amount.Amount {
 	if a, has := acc.BalanceHash[coord.ID()]; has {
@@ -89,11 +76,6 @@ func (acc *Base) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 	if n, err := util.WriteUint8(w, uint8(acc.Type_)); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
-	if n, err := util.WriteUint64(w, acc.Seq_); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -132,12 +114,6 @@ func (acc *Base) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 		acc.Type_ = Type(v)
-	}
-	if v, n, err := util.ReadUint64(r); err != nil {
-		return read, err
-	} else {
-		read += n
-		acc.Seq_ = v
 	}
 
 	if Len, n, err := util.ReadUint32(r); err != nil {

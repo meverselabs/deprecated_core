@@ -53,7 +53,6 @@ func (acc *FormulationAccount) Clone() account.Account {
 		Base: account.Base{
 			Address_:    acc.Address_,
 			Type_:       acc.Type_,
-			Seq_:        acc.Seq_,
 			BalanceHash: balanceHash,
 		},
 		KeyHash: acc.KeyHash.Clone(),

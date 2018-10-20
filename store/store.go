@@ -95,8 +95,7 @@ func (st *Store) Accounts() ([]account.Account, error) {
 	if err := st.db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
-		prefix := []byte{tagAccount}
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		for it.Seek(tagAccount); it.ValidForPrefix(tagAccount); it.Next() {
 			item := it.Item()
 			value, err := item.Value()
 			if err != nil {
@@ -127,13 +126,27 @@ func (st *Store) Seq(addr common.Address) uint64 {
 	if seq, has := st.SeqHash[addr]; has {
 		return seq
 	} else {
-		if acc, err := st.Account(addr); err != nil {
+		var seq uint64
+		if err := st.db.View(func(txn *badger.Txn) error {
+			item, err := txn.Get(toAccountSeqKey(addr))
+			if err != nil {
+				if err == badger.ErrKeyNotFound {
+					return db.ErrNotExistKey
+				} else {
+					return err
+				}
+			}
+			value, err := item.Value()
+			if err != nil {
+				return err
+			}
+			seq = util.BytesToUint64(value)
+			return nil
+		}); err != nil {
 			return 0
-		} else {
-			seq := acc.Seq()
-			st.SeqHash[addr] = seq
-			return seq
 		}
+		st.SeqHash[addr] = seq
+		return seq
 	}
 }
 
@@ -172,7 +185,8 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 }
 
 // AccountData TODO
-func (st *Store) AccountData(key string) []byte {
+func (st *Store) AccountData(addr common.Address, name []byte) []byte {
+	key := string(addr[:]) + string(name)
 	var data []byte
 	if err := st.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(toAccountDataKey(key))
@@ -475,6 +489,11 @@ func (st *Store) StoreBlock(ctd *data.ContextData, b *block.Block, s *block.Obse
 }
 
 func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
+	for k, v := range ctd.SeqHash {
+		if err := txn.Set(toAccountSeqKey(k), util.Uint64ToBytes(v)); err != nil {
+			return err
+		}
+	}
 	for k, v := range ctd.AccountHash {
 		var buffer bytes.Buffer
 		buffer.WriteByte(byte(v.Type()))

@@ -50,8 +50,8 @@ func (ctx *Context) Seq(addr common.Address) uint64 {
 }
 
 // AddSeq TODO
-func (ctx *Context) AddSeq(acc account.Account) {
-	ctx.Top().AddSeq(acc)
+func (ctx *Context) AddSeq(addr common.Address) {
+	ctx.Top().AddSeq(addr)
 }
 
 // Account TODO
@@ -82,13 +82,13 @@ func (ctx *Context) DeleteAccount(acc account.Account) error {
 }
 
 // AccountData TODO
-func (ctx *Context) AccountData(key string) []byte {
-	return ctx.Top().AccountData(key)
+func (ctx *Context) AccountData(addr common.Address, name []byte) []byte {
+	return ctx.Top().AccountData(addr, name)
 }
 
 // SetAccountData TODO
-func (ctx *Context) SetAccountData(key string, value []byte) {
-	ctx.Top().SetAccountData(key, value)
+func (ctx *Context) SetAccountData(addr common.Address, name []byte, value []byte) {
+	ctx.Top().SetAccountData(addr, name, value)
 }
 
 // UTXO TODO
@@ -200,6 +200,23 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 // Hash TODO
 func (ctd *ContextData) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
+	buffer.WriteString("SeqHash")
+	{
+		keys := []common.Address{}
+		for k := range ctd.SeqHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			v := ctd.SeqHash[k]
+			if _, err := k.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+			if _, err := util.WriteUint64(&buffer, v); err != nil {
+				panic(err)
+			}
+		}
+	}
 	buffer.WriteString("AccountHash")
 	{
 		keys := []common.Address{}
@@ -330,19 +347,25 @@ func (ctd *ContextData) Seq(addr common.Address) uint64 {
 		return seq
 	} else if ctd.Parent != nil {
 		seq := ctd.Parent.Seq(addr)
-		ctd.SeqHash[addr] = seq
+		if seq > 0 {
+			ctd.SeqHash[addr] = seq
+		}
 		return seq
 	} else {
 		seq := ctd.loader.Seq(addr)
-		ctd.SeqHash[addr] = seq
+		if seq > 0 {
+			ctd.SeqHash[addr] = seq
+		}
 		return seq
 	}
 }
 
 // AddSeq TODO
-func (ctd *ContextData) AddSeq(acc account.Account) {
-	acc.AddSeq()
-	ctd.SeqHash[acc.Address()] = acc.Seq()
+func (ctd *ContextData) AddSeq(addr common.Address) {
+	if _, has := ctd.DeletedAccountHash[addr]; has {
+		return
+	}
+	ctd.SeqHash[addr] = ctd.Seq(addr) + 1
 }
 
 // Account TODO
@@ -351,6 +374,8 @@ func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 		return nil, db.ErrNotExistKey
 	}
 	if acc, has := ctd.AccountHash[addr]; has {
+		return acc, nil
+	} else if acc, has := ctd.CreatedAccountHash[addr]; has {
 		return acc, nil
 	} else if ctd.Parent != nil {
 		if acc, err := ctd.Parent.Account(addr); err != nil {
@@ -390,31 +415,42 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 		return err
 	}
 	ctd.DeletedAccountHash[acc.Address()] = acc
+	delete(ctd.AccountHash, acc.Address())
 	return nil
 }
 
 // AccountData TODO
-func (ctd *ContextData) AccountData(key string) []byte {
+func (ctd *ContextData) AccountData(addr common.Address, name []byte) []byte {
+	key := string(addr[:]) + string(name)
 	if ctd.DeletedAccountDataHash[key] {
 		return nil
 	}
 	if value, has := ctd.AccountDataHash[key]; has {
 		return value
 	} else if ctd.Parent != nil {
-		value := ctd.Parent.AccountData(key)
-		nvalue := make([]byte, len(value))
-		copy(nvalue, value)
-		ctd.AccountDataHash[key] = nvalue
-		return nvalue
+		value := ctd.Parent.AccountData(addr, name)
+		if len(value) > 0 {
+			nvalue := make([]byte, len(value))
+			copy(nvalue, value)
+			ctd.AccountDataHash[key] = nvalue
+			return nvalue
+		} else {
+			return nil
+		}
 	} else {
-		value := ctd.loader.AccountData(key)
-		ctd.AccountDataHash[key] = value
-		return value
+		value := ctd.loader.AccountData(addr, name)
+		if len(value) > 0 {
+			ctd.AccountDataHash[key] = value
+			return value
+		} else {
+			return nil
+		}
 	}
 }
 
 // SetAccountData TODO
-func (ctd *ContextData) SetAccountData(key string, value []byte) {
+func (ctd *ContextData) SetAccountData(addr common.Address, name []byte, value []byte) {
+	key := string(addr[:]) + string(name)
 	if len(value) == 0 {
 		delete(ctd.AccountDataHash, key)
 		ctd.DeletedAccountDataHash[key] = true

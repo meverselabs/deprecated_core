@@ -46,6 +46,13 @@ func NewCoinAmount(i uint64, f uint64) *Amount {
 	}
 }
 
+// NewAmountFromBytes TODO
+func NewAmountFromBytes(bs []byte) *Amount {
+	b := newAmount(0)
+	b.Int.SetBytes(bs)
+	return b
+}
+
 // WriteTo TODO
 func (am *Amount) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
