@@ -12,6 +12,7 @@ type Loader interface {
 	ChainCoord() *common.Coordinate
 	Seq(addr common.Address) uint64
 	Account(addr common.Address) (account.Account, error)
+	IsExistAccount(addr common.Address) (bool, error)
 	AccountData(addr common.Address, name []byte) []byte
 	UTXO(id uint64) (*transaction.UTXO, error)
 }
@@ -37,6 +38,10 @@ func (st *emptyLoader) Seq(addr common.Address) uint64 {
 
 func (st *emptyLoader) Account(addr common.Address) (account.Account, error) {
 	return nil, db.ErrNotExistKey
+}
+
+func (st *emptyLoader) IsExistAccount(addr common.Address) (bool, error) {
+	return false, nil
 }
 
 func (st *emptyLoader) AccountData(addr common.Address, name []byte) []byte {
