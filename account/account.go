@@ -18,6 +18,7 @@ type Account interface {
 	Type() Type
 	Balance(coord *common.Coordinate) *amount.Amount
 	SetBalance(coord *common.Coordinate, a *amount.Amount)
+	TokenCoords() []*common.Coordinate
 	Clone() Account
 	io.WriterTo
 	io.ReaderFrom
@@ -65,6 +66,15 @@ func (acc *Base) Balance(coord *common.Coordinate) *amount.Amount {
 // SetBalance TODO
 func (acc *Base) SetBalance(coord *common.Coordinate, a *amount.Amount) {
 	acc.BalanceHash[coord.ID()] = a
+}
+
+// TokenCoords TODO
+func (acc *Base) TokenCoords() []*common.Coordinate {
+	list := make([]*common.Coordinate, 0, len(acc.BalanceHash))
+	for k := range acc.BalanceHash {
+		list = append(list, common.NewCoordinateByID(k))
+	}
+	return list
 }
 
 // WriteTo TODO
