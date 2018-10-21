@@ -15,7 +15,7 @@ var (
 	tagAccount              = []byte{3, 0}
 	tagAccountSeq           = []byte{3, 1}
 	tagAccountData          = []byte{3, 2}
-	tagTxInUTXO             = []byte{4, 0}
+	tagUTXO                 = []byte{4, 0}
 	tagCustomData           = []byte{5, 0}
 )
 
@@ -68,11 +68,15 @@ func toAccountDataKey(key string) []byte {
 	return bs
 }
 
-func toTxInUTXOKey(id uint64) []byte {
+func toUTXOKey(id uint64) []byte {
 	bs := make([]byte, 10)
-	copy(bs, tagTxInUTXO)
+	copy(bs, tagUTXO)
 	binary.LittleEndian.PutUint64(bs[2:], id)
 	return bs
+}
+
+func fromUTXOKey(bs []byte) uint64 {
+	return binary.LittleEndian.Uint64(bs[2:])
 }
 
 func toCustomData(key string) []byte {

@@ -221,11 +221,39 @@ func (st *Store) AccountData(addr common.Address, name []byte) []byte {
 	return data
 }
 
+// UTXOs TODO
+func (st *Store) UTXOs() ([]*transaction.UTXO, error) {
+	list := []*transaction.UTXO{}
+	if err := st.db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+		for it.Seek(tagUTXO); it.ValidForPrefix(tagUTXO); it.Next() {
+			item := it.Item()
+			value, err := item.Value()
+			if err != nil {
+				return err
+			}
+			utxo := &transaction.UTXO{
+				TxIn:  transaction.NewTxIn(fromUTXOKey(item.Key())),
+				TxOut: transaction.NewTxOut(),
+			}
+			if _, err := utxo.TxOut.ReadFrom(bytes.NewReader(value)); err != nil {
+				return err
+			}
+			list = append(list, utxo)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // UTXO TODO
 func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
 	var utxo *transaction.UTXO
 	if err := st.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(toTxInUTXOKey(id))
+		item, err := txn.Get(toUTXOKey(id))
 		if err != nil {
 			if err == badger.ErrKeyNotFound {
 				return db.ErrNotExistKey
@@ -237,8 +265,11 @@ func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
 		if err != nil {
 			return err
 		}
-		utxo = transaction.NewUTXO()
-		if _, err := utxo.ReadFrom(bytes.NewReader(value)); err != nil {
+		utxo = &transaction.UTXO{
+			TxIn:  transaction.NewTxIn(id),
+			TxOut: transaction.NewTxOut(),
+		}
+		if _, err := utxo.TxOut.ReadFrom(bytes.NewReader(value)); err != nil {
 			return err
 		}
 		return nil
@@ -543,10 +574,13 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 	}
 	for k, v := range ctd.UTXOHash {
 		var buffer bytes.Buffer
-		if _, err := v.WriteTo(&buffer); err != nil {
+		if v.TxIn.ID() != k {
+			return ErrInvalidTxInKey
+		}
+		if _, err := v.TxOut.WriteTo(&buffer); err != nil {
 			return err
 		}
-		if err := txn.Set(toTxInUTXOKey(k), buffer.Bytes()); err != nil {
+		if err := txn.Set(toUTXOKey(k), buffer.Bytes()); err != nil {
 			return err
 		}
 	}
@@ -555,12 +589,12 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 		if _, err := v.WriteTo(&buffer); err != nil {
 			return err
 		}
-		if err := txn.Set(toTxInUTXOKey(k), buffer.Bytes()); err != nil {
+		if err := txn.Set(toUTXOKey(k), buffer.Bytes()); err != nil {
 			return err
 		}
 	}
 	for k := range ctd.DeletedUTXOHash {
-		if err := txn.Delete(toTxInUTXOKey(k)); err != nil {
+		if err := txn.Delete(toUTXOKey(k)); err != nil {
 			return err
 		}
 	}

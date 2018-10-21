@@ -32,12 +32,6 @@ func (ctx *Context) ChainCoord() *common.Coordinate {
 	return ctx.loader.ChainCoord()
 }
 
-// IsMainChain TODO
-func (ctx *Context) IsMainChain() bool {
-	coord := ctx.ChainCoord()
-	return coord.Height == 0 && coord.Index == 0
-}
-
 // Top TODO
 func (ctx *Context) Top() *ContextData {
 	return ctx.stack[len(ctx.stack)-1]

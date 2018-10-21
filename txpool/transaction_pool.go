@@ -8,8 +8,13 @@ import (
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/queue"
 	"git.fleta.io/fleta/core/transaction"
-	"git.fleta.io/fleta/extension/account_tx"
 )
+
+// AccountTransaction TODO
+type AccountTransaction interface {
+	Seq() uint64
+	From() common.Address
+}
 
 // TransactionPool errors
 var (
@@ -56,7 +61,7 @@ func (tp *TransactionPool) Push(t transaction.Transaction, sigs []common.Signatu
 		tp.turnQ.Push(true)
 		return nil
 	} else {
-		tx, is := t.(account_tx.AccountTransaction)
+		tx, is := t.(AccountTransaction)
 		if !is {
 			return ErrNotAccountTransaction
 		}
@@ -83,7 +88,7 @@ func (tp *TransactionPool) Remove(t transaction.Transaction) {
 			tp.turnOutHash[true]++
 		}
 	} else {
-		tx := t.(account_tx.AccountTransaction)
+		tx := t.(AccountTransaction)
 		addr := tx.From()
 		if q, has := tp.bucketHash[addr]; has {
 			for {
@@ -91,7 +96,7 @@ func (tp *TransactionPool) Remove(t transaction.Transaction) {
 					break
 				}
 				item := q.Peek().(*PoolItem)
-				if tx.Seq() < item.Transaction.(account_tx.AccountTransaction).Seq() {
+				if tx.Seq() < item.Transaction.(AccountTransaction).Seq() {
 					break
 				}
 				q.Pop()
@@ -160,7 +165,7 @@ func (tp *TransactionPool) Pop(SeqCache SeqCache) *PoolItem {
 			q := tp.bucketHash[addr]
 			item := q.Peek().(*PoolItem)
 			lastSeq := SeqCache.Seq(addr)
-			if item.Transaction.(account_tx.AccountTransaction).Seq() != lastSeq+1 {
+			if item.Transaction.(AccountTransaction).Seq() != lastSeq+1 {
 				ignoreHash[addr] = true
 				tp.numberQ.Push(addr)
 				if remain > 0 {
