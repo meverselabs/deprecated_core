@@ -31,6 +31,11 @@ func (ctx *Context) ChainCoord() *common.Coordinate {
 	return ctx.loader.ChainCoord()
 }
 
+// TargetHeight TODO
+func (ctx *Context) TargetHeight() uint32 {
+	return ctx.loader.TargetHeight()
+}
+
 // Top TODO
 func (ctx *Context) Top() *ContextData {
 	return ctx.stack[len(ctx.stack)-1]

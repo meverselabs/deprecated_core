@@ -8,6 +8,7 @@ import (
 	"git.fleta.io/fleta/core/account"
 	"git.fleta.io/fleta/core/accounter"
 	"git.fleta.io/fleta/core/amount"
+	"git.fleta.io/fleta/core/data"
 )
 
 // Account errors
@@ -24,7 +25,7 @@ func init() {
 				BalanceHash: map[uint64]*amount.Amount{},
 			},
 		}
-	}, func(a account.Account, signers []common.PublicHash) error {
+	}, func(loader data.Loader, a account.Account, signers []common.PublicHash) error {
 		acc := a.(*Account)
 		if len(signers) != 1 {
 			return ErrInvalidSignerCount

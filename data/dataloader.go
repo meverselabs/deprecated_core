@@ -9,6 +9,7 @@ import (
 // Loader TODO
 type Loader interface {
 	ChainCoord() *common.Coordinate
+	TargetHeight() uint32
 	Seq(addr common.Address) uint64
 	Account(addr common.Address) (account.Account, error)
 	IsExistAccount(addr common.Address) (bool, error)
@@ -29,6 +30,10 @@ func NewEmptyLoader(coord *common.Coordinate) Loader {
 
 func (st *emptyLoader) ChainCoord() *common.Coordinate {
 	return st.coord
+}
+
+func (st *emptyLoader) TargetHeight() uint32 {
+	return 0
 }
 
 func (st *emptyLoader) Seq(addr common.Address) uint64 {

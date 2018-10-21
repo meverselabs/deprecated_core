@@ -40,7 +40,7 @@ func init() {
 		if err != nil {
 			return err
 		}
-		if err := act.Validate(fromAcc, signers); err != nil {
+		if err := act.Validate(loader, fromAcc, signers); err != nil {
 			return err
 		}
 		return nil

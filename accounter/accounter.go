@@ -3,6 +3,7 @@ package accounter
 import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/core/account"
+	"git.fleta.io/fleta/core/data"
 )
 
 var accounterHash = map[uint64]*Accounter{}
@@ -45,11 +46,11 @@ func newAccounter(coord *common.Coordinate) *Accounter {
 }
 
 // Validate TODO
-func (act *Accounter) Validate(acc account.Account, signers []common.PublicHash) error {
+func (act *Accounter) Validate(loader data.Loader, acc account.Account, signers []common.PublicHash) error {
 	if item, has := act.handlerTypeHash[acc.Type()]; !has {
 		return ErrNotExistHandler
 	} else {
-		if err := item.Validator(acc, signers); err != nil {
+		if err := item.Validator(loader, acc, signers); err != nil {
 			return err
 		}
 		return nil
@@ -134,4 +135,4 @@ type typeItem struct {
 type Factory func(t account.Type) account.Account
 
 // Validator TODO
-type Validator func(acc account.Account, signers []common.PublicHash) error
+type Validator func(loader data.Loader, acc account.Account, signers []common.PublicHash) error

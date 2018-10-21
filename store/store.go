@@ -89,6 +89,11 @@ func (st *Store) ChainCoord() *common.Coordinate {
 	return st.coord
 }
 
+// TargetHeight TODO
+func (st *Store) TargetHeight() uint32 {
+	return st.Height() + 1
+}
+
 // Accounts TODO
 func (st *Store) Accounts() ([]account.Account, error) {
 	list := []account.Account{}
