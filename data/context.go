@@ -136,6 +136,7 @@ func (ctx *Context) Commit(sn int) {
 		}
 		for k, v := range ctd.DeletedAccountHash {
 			delete(top.AccountHash, k)
+			delete(top.CreatedAccountHash, k)
 			top.DeletedAccountHash[k] = v
 		}
 		for k, v := range ctd.AccountDataHash {
@@ -153,6 +154,7 @@ func (ctx *Context) Commit(sn int) {
 		}
 		for k, v := range ctd.DeletedUTXOHash {
 			delete(top.UTXOHash, k)
+			delete(top.CreatedUTXOHash, k)
 			top.DeletedUTXOHash[k] = v
 		}
 	}

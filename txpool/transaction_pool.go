@@ -87,6 +87,9 @@ func (tp *TransactionPool) Remove(t transaction.Transaction) {
 		addr := tx.From()
 		if q, has := tp.bucketHash[addr]; has {
 			for {
+				if q.Size() == 0 {
+					break
+				}
 				item := q.Peek().(*PoolItem)
 				if tx.Seq() < item.Transaction.(account_tx.AccountTransaction).Seq() {
 					break
@@ -129,6 +132,9 @@ func (tp *TransactionPool) Pop(SeqCache SeqCache) *PoolItem {
 		for {
 			var addr common.Address
 			for {
+				if tp.numberQ.Size() == 0 {
+					return nil
+				}
 				addr = tp.numberQ.Pop().(common.Address)
 				remain--
 				nout := tp.numberOutHash[addr]
