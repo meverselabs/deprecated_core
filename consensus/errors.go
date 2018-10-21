@@ -15,4 +15,5 @@ var (
 	ErrInvalidKeyHashCount           = errors.New("invalid key hash count")
 	ErrInvalidSequence               = errors.New("invalid sequence")
 	ErrInsuffcientBalance            = errors.New("insufficient balance")
+	ErrInvalidToAddress              = errors.New("invalid to address")
 )

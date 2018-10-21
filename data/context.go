@@ -8,7 +8,6 @@ import (
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/account"
-	"git.fleta.io/fleta/core/db"
 	"git.fleta.io/fleta/core/transaction"
 )
 
@@ -55,7 +54,7 @@ func (ctx *Context) Account(addr common.Address) (account.Account, error) {
 // IsExistAccount TODO
 func (ctx *Context) IsExistAccount(addr common.Address) (bool, error) {
 	if _, err := ctx.Account(addr); err != nil {
-		if err != db.ErrNotExistKey {
+		if err != ErrNotExistAccount {
 			return true, err
 		}
 		return false, nil
@@ -366,7 +365,7 @@ func (ctd *ContextData) AddSeq(addr common.Address) {
 // Account TODO
 func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 	if _, has := ctd.DeletedAccountHash[addr]; has {
-		return nil, db.ErrNotExistKey
+		return nil, ErrNotExistAccount
 	}
 	if acc, has := ctd.AccountHash[addr]; has {
 		return acc, nil
@@ -394,7 +393,7 @@ func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 // CreateAccount TODO
 func (ctd *ContextData) CreateAccount(acc account.Account) error {
 	if _, err := ctd.Account(acc.Address()); err != nil {
-		if err != db.ErrNotExistKey {
+		if err != ErrNotExistAccount {
 			return err
 		}
 	} else {
@@ -483,11 +482,11 @@ func (ctd *ContextData) UTXO(id uint64) (*transaction.UTXO, error) {
 // CreateUTXO TODO
 func (ctd *ContextData) CreateUTXO(id uint64, vout *transaction.TxOut) error {
 	if _, err := ctd.UTXO(id); err != nil {
-		if err != db.ErrNotExistKey {
+		if err != ErrNotExistUTXO {
 			return err
 		}
 	} else {
-		return ErrExistAccount
+		return ErrExistUTXO
 	}
 	ctd.CreatedUTXOHash[id] = vout
 	return nil

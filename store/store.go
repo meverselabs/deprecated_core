@@ -130,11 +130,7 @@ func (st *Store) Seq(addr common.Address) uint64 {
 		if err := st.db.View(func(txn *badger.Txn) error {
 			item, err := txn.Get(toAccountSeqKey(addr))
 			if err != nil {
-				if err == badger.ErrKeyNotFound {
-					return db.ErrNotExistKey
-				} else {
-					return err
-				}
+				return err
 			}
 			value, err := item.Value()
 			if err != nil {
@@ -179,7 +175,11 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		if err == db.ErrNotExistKey {
+			return nil, data.ErrNotExistAccount
+		} else {
+			return nil, err
+		}
 	}
 	return acc, nil
 }
@@ -187,7 +187,7 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 // IsExistAccount TODO
 func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
 	if _, err := st.Account(addr); err != nil {
-		if err != db.ErrNotExistKey {
+		if err != data.ErrNotExistAccount {
 			return true, err
 		}
 		return false, nil
@@ -203,11 +203,7 @@ func (st *Store) AccountData(addr common.Address, name []byte) []byte {
 	if err := st.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(toAccountDataKey(key))
 		if err != nil {
-			if err == badger.ErrKeyNotFound {
-				return db.ErrNotExistKey
-			} else {
-				return err
-			}
+			return err
 		}
 		value, err := item.Value()
 		if err != nil {
@@ -256,7 +252,7 @@ func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
 		item, err := txn.Get(toUTXOKey(id))
 		if err != nil {
 			if err == badger.ErrKeyNotFound {
-				return db.ErrNotExistKey
+				return data.ErrNotExistUTXO
 			} else {
 				return err
 			}

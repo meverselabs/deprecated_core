@@ -27,6 +27,9 @@ func init() {
 		if tx.Seq() <= loader.Seq(tx.From()) {
 			return ErrInvalidSequence
 		}
+		if tx.To.Equal(tx.From()) {
+			return ErrInvalidToAddress
+		}
 
 		fromAcc, err := loader.Account(tx.From())
 		if err != nil {

@@ -3,7 +3,6 @@ package data
 import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/core/account"
-	"git.fleta.io/fleta/core/db"
 	"git.fleta.io/fleta/core/transaction"
 )
 
@@ -37,7 +36,7 @@ func (st *emptyLoader) Seq(addr common.Address) uint64 {
 }
 
 func (st *emptyLoader) Account(addr common.Address) (account.Account, error) {
-	return nil, db.ErrNotExistKey
+	return nil, ErrNotExistAccount
 }
 
 func (st *emptyLoader) IsExistAccount(addr common.Address) (bool, error) {
@@ -49,5 +48,5 @@ func (st *emptyLoader) AccountData(addr common.Address, name []byte) []byte {
 }
 
 func (st *emptyLoader) UTXO(id uint64) (*transaction.UTXO, error) {
-	return nil, db.ErrNotExistKey
+	return nil, ErrNotExistUTXO
 }
