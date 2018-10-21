@@ -10,22 +10,22 @@ import (
 	"git.fleta.io/fleta/core/amount"
 )
 
-// FormulationAccount errors
+// Account errors
 var (
 	ErrInvalidSignerCount   = errors.New("invalid signer count")
 	ErrInvalidAccountSigner = errors.New("invalid account signer")
 )
 
 func init() {
-	accounter.RegisterHandler("fleta.FormulationAccount", func(t account.Type) account.Account {
-		return &FormulationAccount{
+	accounter.RegisterHandler("formulation.Account", func(t account.Type) account.Account {
+		return &Account{
 			Base: account.Base{
 				Type_:       t,
 				BalanceHash: map[uint64]*amount.Amount{},
 			},
 		}
 	}, func(a account.Account, signers []common.PublicHash) error {
-		acc := a.(*FormulationAccount)
+		acc := a.(*Account)
 		if len(signers) != 1 {
 			return ErrInvalidSignerCount
 		}
@@ -37,19 +37,19 @@ func init() {
 	})
 }
 
-// FormulationAccount TODO
-type FormulationAccount struct {
+// Account TODO
+type Account struct {
 	account.Base
 	KeyHash common.PublicHash
 }
 
 // Clone TODO
-func (acc *FormulationAccount) Clone() account.Account {
+func (acc *Account) Clone() account.Account {
 	balanceHash := map[uint64]*amount.Amount{}
 	for k, v := range acc.BalanceHash {
 		balanceHash[k] = v.Clone()
 	}
-	return &FormulationAccount{
+	return &Account{
 		Base: account.Base{
 			Address_:    acc.Address_,
 			Type_:       acc.Type_,
@@ -60,7 +60,7 @@ func (acc *FormulationAccount) Clone() account.Account {
 }
 
 // WriteTo TODO
-func (acc *FormulationAccount) WriteTo(w io.Writer) (int64, error) {
+func (acc *Account) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := acc.Base.WriteTo(w); err != nil {
 		return wrote, err
@@ -76,7 +76,7 @@ func (acc *FormulationAccount) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom TODO
-func (acc *FormulationAccount) ReadFrom(r io.Reader) (int64, error) {
+func (acc *Account) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := acc.Base.ReadFrom(r); err != nil {
 		return read, err

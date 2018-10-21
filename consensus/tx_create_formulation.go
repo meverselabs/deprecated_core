@@ -1,0 +1,174 @@
+package consensus
+
+import (
+	"bytes"
+	"io"
+
+	"git.fleta.io/fleta/common"
+	"git.fleta.io/fleta/common/hash"
+	"git.fleta.io/fleta/common/util"
+	"git.fleta.io/fleta/core/accounter"
+	"git.fleta.io/fleta/core/amount"
+	"git.fleta.io/fleta/core/data"
+	"git.fleta.io/fleta/core/transaction"
+	"git.fleta.io/fleta/core/transactor"
+)
+
+func init() {
+	transactor.RegisterHandler("formulation.CreateFormulation", func(t transaction.Type) transaction.Transaction {
+		return &CreateFormulation{
+			Base: transaction.Base{
+				ChainCoord_: &common.Coordinate{},
+				Type_:       t,
+			},
+		}
+	}, func(loader data.Loader, t transaction.Transaction, signers []common.PublicHash) error {
+		tx := t.(*CreateFormulation)
+		if tx.Seq() <= loader.Seq(tx.From()) {
+			return ErrInvalidSequence
+		}
+
+		fromAcc, err := loader.Account(tx.From())
+		if err != nil {
+			return err
+		}
+
+		act, err := accounter.ByCoord(loader.ChainCoord())
+		if err != nil {
+			return err
+		}
+		if err := act.Validate(fromAcc, signers); err != nil {
+			return err
+		}
+		return nil
+	}, func(ctx *data.Context, Fee *amount.Amount, t transaction.Transaction, coord *common.Coordinate) (ret interface{}, rerr error) {
+		tx := t.(*CreateFormulation)
+		sn := ctx.Snapshot()
+		defer ctx.Revert(sn)
+
+		if tx.Seq() != ctx.Seq(tx.From())+1 {
+			return nil, ErrInvalidSequence
+		}
+		ctx.AddSeq(tx.From())
+
+		fromAcc, err := ctx.Account(tx.From())
+		if err != nil {
+			return nil, err
+		}
+
+		chainCoord := ctx.ChainCoord()
+		balance := fromAcc.Balance(chainCoord)
+		if balance.Less(Fee) {
+			return nil, ErrInsuffcientBalance
+		}
+		balance = balance.Sub(Fee)
+		fromAcc.SetBalance(chainCoord, balance)
+
+		addr := common.NewAddress(coord, chainCoord, 0)
+		if is, err := ctx.IsExistAccount(addr); err != nil {
+			return nil, err
+		} else if is {
+			return nil, ErrExistAddress
+		} else {
+			act, err := accounter.ByCoord(ctx.ChainCoord())
+			if err != nil {
+				return nil, err
+			}
+			a, err := act.NewByTypeName("formulation.Account")
+			if err != nil {
+				return nil, err
+			}
+			acc := a.(*Account)
+			acc.Address_ = addr
+			acc.KeyHash = tx.KeyHash
+			ctx.CreateAccount(acc)
+		}
+		ctx.Commit(sn)
+		return nil, nil
+	})
+}
+
+// CreateFormulation TODO
+type CreateFormulation struct {
+	transaction.Base
+	Seq_    uint64
+	From_   common.Address
+	KeyHash common.PublicHash
+}
+
+// IsUTXO TODO
+func (tx *CreateFormulation) IsUTXO() bool {
+	return false
+}
+
+// From TODO
+func (tx *CreateFormulation) From() common.Address {
+	return tx.From_
+}
+
+// Seq TODO
+func (tx *CreateFormulation) Seq() uint64 {
+	return tx.Seq_
+}
+
+// Hash TODO
+func (tx *CreateFormulation) Hash() hash.Hash256 {
+	var buffer bytes.Buffer
+	if _, err := tx.WriteTo(&buffer); err != nil {
+		panic(err)
+	}
+	return hash.DoubleHash(buffer.Bytes())
+}
+
+// WriteTo TODO
+func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
+	var wrote int64
+	if n, err := tx.Base.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint64(w, tx.Seq_); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := tx.From_.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := tx.KeyHash.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	return wrote, nil
+}
+
+// ReadFrom TODO
+func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
+	var read int64
+	if n, err := tx.Base.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if v, n, err := util.ReadUint64(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.Seq_ = v
+	}
+	if n, err := tx.From_.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if n, err := tx.KeyHash.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	return read, nil
+}
