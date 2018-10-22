@@ -98,6 +98,15 @@ func (act *Accounter) NewByTypeName(name string) (account.Account, error) {
 	}
 }
 
+// TypeByName TODO
+func (act *Accounter) TypeByName(name string) (account.Type, error) {
+	if t, has := act.typeNameHash[name]; has {
+		return t, nil
+	} else {
+		return 0, ErrUnknownAccountType
+	}
+}
+
 var handlerHash = map[string]*handler{}
 
 // RegisterHandler TODO

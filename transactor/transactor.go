@@ -130,6 +130,15 @@ func (tran *Transactor) NewByTypeName(name string) (transaction.Transaction, err
 	}
 }
 
+// TypeByName TODO
+func (tran *Transactor) TypeByName(name string) (transaction.Type, error) {
+	if t, has := tran.typeNameHash[name]; has {
+		return t, nil
+	} else {
+		return 0, ErrUnknownTransactionType
+	}
+}
+
 var handlerHash = map[string]*handler{}
 
 // RegisterHandler TODO
