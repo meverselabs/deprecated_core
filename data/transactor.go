@@ -119,8 +119,8 @@ func (tran *Transactor) TypeByName(name string) (transaction.Type, error) {
 
 var transactionHandlerHash = map[string]*transactionHandler{}
 
-// RegisterHandler TODO
-func RegisterHandler(Name string, Factory TransactionFactory, Validator TransactionValidator, Executor TransactionExecutor) error {
+// RegisterTransaction TODO
+func RegisterTransaction(Name string, Factory TransactionFactory, Validator TransactionValidator, Executor TransactionExecutor) error {
 	if _, has := transactionHandlerHash[Name]; has {
 		return ErrExistHandler
 	}

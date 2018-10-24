@@ -21,7 +21,6 @@ import (
 	"git.fleta.io/fleta/core/level"
 	"git.fleta.io/fleta/core/store"
 	"git.fleta.io/fleta/core/transaction"
-	"git.fleta.io/fleta/core/transactor"
 )
 
 // kernel errors
@@ -38,7 +37,7 @@ var (
 type Kernel struct {
 	ChainCoord    *common.Coordinate
 	Consensus     *consensus.Consensus
-	Transactor    *transactor.Transactor
+	Transactor    *data.Transactor
 	Store         *store.Store
 	TxPool        *txpool.TransactionPool
 	Generator     *generator.Generator

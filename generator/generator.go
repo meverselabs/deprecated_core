@@ -6,7 +6,6 @@ import (
 
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/level"
-	"git.fleta.io/fleta/core/transactor"
 	"git.fleta.io/fleta/core/txpool"
 
 	"git.fleta.io/fleta/common"
@@ -43,7 +42,7 @@ func (gn *Generator) Address() common.Address {
 }
 
 // GenerateBlock TODO
-func (gn *Generator) GenerateBlock(Transactor *transactor.Transactor, TxPool *txpool.TransactionPool, ctx *data.Context, TimeoutCount uint32, ChainCoord *common.Coordinate, PrevHeight uint32, PrevHash hash.Hash256) (*block.Block, *block.Signed, error) {
+func (gn *Generator) GenerateBlock(Transactor *data.Transactor, TxPool *txpool.TransactionPool, ctx *data.Context, TimeoutCount uint32, ChainCoord *common.Coordinate, PrevHeight uint32, PrevHash hash.Hash256) (*block.Block, *block.Signed, error) {
 	b := &block.Block{
 		Header: block.Header{
 			ChainCoord:         *ChainCoord,

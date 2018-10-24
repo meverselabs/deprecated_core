@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"git.fleta.io/fleta/core/transactor"
-
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
@@ -26,7 +24,7 @@ type Store struct {
 	ticker     *time.Ticker
 	cache      storeCache
 	accounter  *data.Accounter
-	transactor *transactor.Transactor
+	transactor *data.Transactor
 	SeqHash    map[common.Address]uint64
 }
 
@@ -37,7 +35,7 @@ type storeCache struct {
 }
 
 // NewStore TODO
-func NewStore(act *data.Accounter, tran *transactor.Transactor) (*Store, error) {
+func NewStore(act *data.Accounter, tran *data.Transactor) (*Store, error) {
 	path := "./" + act.ChainCoord().String()
 	opts := badger.DefaultOptions
 	opts.Dir = path
@@ -98,7 +96,7 @@ func (st *Store) Accounter() *data.Accounter {
 }
 
 // Transactor TODO
-func (st *Store) Transactor() *Transactor {
+func (st *Store) Transactor() *data.Transactor {
 	return st.transactor
 }
 

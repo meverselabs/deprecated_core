@@ -10,11 +10,10 @@ import (
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/transaction"
-	"git.fleta.io/fleta/core/transactor"
 )
 
 func init() {
-	transactor.RegisterHandler("formulation.CreateFormulation", func(t transaction.Type) transaction.Transaction {
+	data.RegisterTransaction("formulation.CreateFormulation", func(t transaction.Type) transaction.Transaction {
 		return &CreateFormulation{
 			Base: transaction.Base{
 				ChainCoord_: &common.Coordinate{},

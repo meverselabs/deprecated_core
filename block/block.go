@@ -5,8 +5,8 @@ import (
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/util"
+	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/transaction"
-	"git.fleta.io/fleta/core/transactor"
 )
 
 // Block TODO
@@ -68,7 +68,7 @@ func (b *Block) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFromWith TODO
-func (b *Block) ReadFromWith(r io.Reader, tran *transactor.Transactor) (int64, error) {
+func (b *Block) ReadFromWith(r io.Reader, tran *data.Transactor) (int64, error) {
 	var read int64
 	if n, err := b.Header.ReadFrom(r); err != nil {
 		return read, err
