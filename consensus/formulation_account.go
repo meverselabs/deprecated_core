@@ -6,7 +6,6 @@ import (
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/core/account"
-	"git.fleta.io/fleta/core/accounter"
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/data"
 )
@@ -18,7 +17,7 @@ var (
 )
 
 func init() {
-	accounter.RegisterHandler("formulation.Account", func(t account.Type) account.Account {
+	data.RegisterAccount("formulation.Account", func(t account.Type) account.Account {
 		return &Account{
 			Base: account.Base{
 				Type_:       t,

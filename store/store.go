@@ -10,7 +10,6 @@ import (
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/account"
-	"git.fleta.io/fleta/core/accounter"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/db"
@@ -20,12 +19,12 @@ import (
 
 // Store TODO
 type Store struct {
-	db       *badger.DB
-	lockfile *os.File
-	ticker   *time.Ticker
-	cache    storeCache
-	coord    *common.Coordinate
-	SeqHash  map[common.Address]uint64
+	db        *badger.DB
+	lockfile  *os.File
+	ticker    *time.Ticker
+	cache     storeCache
+	accounter *data.Accounter
+	SeqHash   map[common.Address]uint64
 }
 
 type storeCache struct {
@@ -35,8 +34,8 @@ type storeCache struct {
 }
 
 // NewStore TODO
-func NewStore(coord *common.Coordinate) (*Store, error) {
-	path := "./" + coord.String()
+func NewStore(act *data.Accounter) (*Store, error) {
+	path := "./" + act.ChainCoord().String()
 	opts := badger.DefaultOptions
 	opts.Dir = path
 	opts.ValueDir = path
@@ -76,17 +75,22 @@ func NewStore(coord *common.Coordinate) (*Store, error) {
 	}()
 
 	return &Store{
-		db:       db,
-		lockfile: lockfile,
-		ticker:   ticker,
-		coord:    coord,
-		SeqHash:  map[common.Address]uint64{},
+		db:        db,
+		lockfile:  lockfile,
+		ticker:    ticker,
+		accounter: act,
+		SeqHash:   map[common.Address]uint64{},
 	}, nil
 }
 
 // ChainCoord TODO
 func (st *Store) ChainCoord() *common.Coordinate {
-	return st.coord
+	return st.accounter.ChainCoord()
+}
+
+// Accounter TODO
+func (st *Store) Accounter() *data.Accounter {
+	return st.accounter
 }
 
 // TargetHeight TODO
@@ -106,11 +110,7 @@ func (st *Store) Accounts() ([]account.Account, error) {
 			if err != nil {
 				return err
 			}
-			act, err := accounter.ByCoord(st.coord)
-			if err != nil {
-				return err
-			}
-			acc, err := act.NewByType(account.Type(value[0]))
+			acc, err := st.accounter.NewByType(account.Type(value[0]))
 			if err != nil {
 				return err
 			}
@@ -167,11 +167,7 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 		if err != nil {
 			return err
 		}
-		act, err := accounter.ByCoord(st.coord)
-		if err != nil {
-			return err
-		}
-		acc, err = act.NewByType(account.Type(value[0]))
+		acc, err = st.accounter.NewByType(account.Type(value[0]))
 		if err != nil {
 			return err
 		}

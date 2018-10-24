@@ -1,31 +1,9 @@
-package accounter
+package data
 
 import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/core/account"
-	"git.fleta.io/fleta/core/data"
 )
-
-var accounterHash = map[uint64]*Accounter{}
-
-// GetAccounter TODO
-func GetAccounter(coord *common.Coordinate) *Accounter {
-	if act, _ := ByCoord(coord); act != nil {
-		return act
-	}
-	act := newAccounter(coord)
-	accounterHash[coord.ID()] = act
-	return act
-}
-
-// ByCoord TODO
-func ByCoord(coord *common.Coordinate) (*Accounter, error) {
-	if act, has := accounterHash[coord.ID()]; !has {
-		return nil, ErrNotExistAccounter
-	} else {
-		return act, nil
-	}
-}
 
 // Accounter TODO
 type Accounter struct {
@@ -35,7 +13,8 @@ type Accounter struct {
 	typeHash        map[account.Type]*typeItem
 }
 
-func newAccounter(coord *common.Coordinate) *Accounter {
+// NewAccounter TODO
+func NewAccounter(coord *common.Coordinate) *Accounter {
 	act := &Accounter{
 		coord:           coord,
 		handlerTypeHash: map[account.Type]*handler{},
@@ -45,8 +24,13 @@ func newAccounter(coord *common.Coordinate) *Accounter {
 	return act
 }
 
+// ChainCoord TODO
+func (act *Accounter) ChainCoord() *common.Coordinate {
+	return act.coord
+}
+
 // Validate TODO
-func (act *Accounter) Validate(loader data.Loader, acc account.Account, signers []common.PublicHash) error {
+func (act *Accounter) Validate(loader Loader, acc account.Account, signers []common.PublicHash) error {
 	if item, has := act.handlerTypeHash[acc.Type()]; !has {
 		return ErrNotExistHandler
 	} else {
@@ -109,8 +93,8 @@ func (act *Accounter) TypeByName(name string) (account.Type, error) {
 
 var handlerHash = map[string]*handler{}
 
-// RegisterHandler TODO
-func RegisterHandler(Name string, Factory Factory, Validator Validator) error {
+// RegisterAccount TODO
+func RegisterAccount(Name string, Factory Factory, Validator Validator) error {
 	if _, has := handlerHash[Name]; has {
 		return ErrExistHandler
 	}
@@ -144,4 +128,4 @@ type typeItem struct {
 type Factory func(t account.Type) account.Account
 
 // Validator TODO
-type Validator func(loader data.Loader, acc account.Account, signers []common.PublicHash) error
+type Validator func(loader Loader, acc account.Account, signers []common.PublicHash) error

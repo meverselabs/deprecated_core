@@ -7,7 +7,6 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/accounter"
 	"git.fleta.io/fleta/core/amount"
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/transaction"
@@ -36,11 +35,7 @@ func init() {
 			return err
 		}
 
-		act, err := accounter.ByCoord(loader.ChainCoord())
-		if err != nil {
-			return err
-		}
-		if err := act.Validate(loader, fromAcc, signers); err != nil {
+		if err := loader.Accounter().Validate(loader, fromAcc, signers); err != nil {
 			return err
 		}
 		return nil

@@ -9,6 +9,7 @@ import (
 // Loader TODO
 type Loader interface {
 	ChainCoord() *common.Coordinate
+	Accounter() *Accounter
 	TargetHeight() uint32
 	Seq(addr common.Address) uint64
 	Account(addr common.Address) (account.Account, error)
@@ -19,12 +20,14 @@ type Loader interface {
 
 type emptyLoader struct {
 	coord *common.Coordinate
+	act   *Accounter
 }
 
 // NewEmptyLoader TODO
-func NewEmptyLoader(coord *common.Coordinate) Loader {
+func NewEmptyLoader(coord *common.Coordinate, act *Accounter) Loader {
 	return &emptyLoader{
 		coord: coord,
+		act:   act,
 	}
 }
 
@@ -32,6 +35,9 @@ func (st *emptyLoader) ChainCoord() *common.Coordinate {
 	return st.coord
 }
 
+func (st *emptyLoader) Accounter() *Accounter {
+	return st.act
+}
 func (st *emptyLoader) TargetHeight() uint32 {
 	return 0
 }
