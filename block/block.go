@@ -67,8 +67,8 @@ func (b *Block) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
-func (b *Block) ReadFrom(r io.Reader) (int64, error) {
+// ReadFromWith TODO
+func (b *Block) ReadFromWith(r io.Reader, tran *transactor.Transactor) (int64, error) {
 	var read int64
 	if n, err := b.Header.ReadFrom(r); err != nil {
 		return read, err
@@ -86,10 +86,6 @@ func (b *Block) ReadFrom(r io.Reader) (int64, error) {
 				return read, err
 			} else {
 				read += n
-				tran, err := transactor.ByCoord(&b.Header.ChainCoord)
-				if err != nil {
-					return read, err
-				}
 				if tx, err := tran.NewByType(transaction.Type(t)); err != nil {
 					return read, err
 				} else {

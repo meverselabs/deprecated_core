@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"git.fleta.io/fleta/core/transactor"
+
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
@@ -19,12 +21,13 @@ import (
 
 // Store TODO
 type Store struct {
-	db        *badger.DB
-	lockfile  *os.File
-	ticker    *time.Ticker
-	cache     storeCache
-	accounter *data.Accounter
-	SeqHash   map[common.Address]uint64
+	db         *badger.DB
+	lockfile   *os.File
+	ticker     *time.Ticker
+	cache      storeCache
+	accounter  *data.Accounter
+	transactor *transactor.Transactor
+	SeqHash    map[common.Address]uint64
 }
 
 type storeCache struct {
@@ -34,7 +37,7 @@ type storeCache struct {
 }
 
 // NewStore TODO
-func NewStore(act *data.Accounter) (*Store, error) {
+func NewStore(act *data.Accounter, tran *transactor.Transactor) (*Store, error) {
 	path := "./" + act.ChainCoord().String()
 	opts := badger.DefaultOptions
 	opts.Dir = path
@@ -75,11 +78,12 @@ func NewStore(act *data.Accounter) (*Store, error) {
 	}()
 
 	return &Store{
-		db:        db,
-		lockfile:  lockfile,
-		ticker:    ticker,
-		accounter: act,
-		SeqHash:   map[common.Address]uint64{},
+		db:         db,
+		lockfile:   lockfile,
+		ticker:     ticker,
+		accounter:  act,
+		transactor: tran,
+		SeqHash:    map[common.Address]uint64{},
 	}, nil
 }
 
@@ -91,6 +95,11 @@ func (st *Store) ChainCoord() *common.Coordinate {
 // Accounter TODO
 func (st *Store) Accounter() *data.Accounter {
 	return st.accounter
+}
+
+// Transactor TODO
+func (st *Store) Transactor() *Transactor {
+	return st.transactor
 }
 
 // TargetHeight TODO
@@ -325,7 +334,7 @@ func (st *Store) Block(height uint32) (*block.Block, error) {
 			return err
 		}
 		b = new(block.Block)
-		if _, err := b.ReadFrom(bytes.NewReader(value)); err != nil {
+		if _, err := b.ReadFromWith(bytes.NewReader(value), st.transactor); err != nil {
 			return err
 		}
 		return nil

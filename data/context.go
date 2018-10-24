@@ -36,6 +36,11 @@ func (ctx *Context) Accounter() *Accounter {
 	return ctx.loader.Accounter()
 }
 
+// Transactor TODO
+func (ctx *Context) Transactor() *Transactor {
+	return ctx.loader.Transactor()
+}
+
 // TargetHeight TODO
 func (ctx *Context) TargetHeight() uint32 {
 	return ctx.loader.TargetHeight()

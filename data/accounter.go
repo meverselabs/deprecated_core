@@ -8,18 +8,18 @@ import (
 // Accounter TODO
 type Accounter struct {
 	coord           *common.Coordinate
-	handlerTypeHash map[account.Type]*handler
+	handlerTypeHash map[account.Type]*accountHandler
 	typeNameHash    map[string]account.Type
-	typeHash        map[account.Type]*typeItem
+	typeHash        map[account.Type]*accountTypeItem
 }
 
 // NewAccounter TODO
 func NewAccounter(coord *common.Coordinate) *Accounter {
 	act := &Accounter{
 		coord:           coord,
-		handlerTypeHash: map[account.Type]*handler{},
+		handlerTypeHash: map[account.Type]*accountHandler{},
 		typeNameHash:    map[string]account.Type{},
-		typeHash:        map[account.Type]*typeItem{},
+		typeHash:        map[account.Type]*accountTypeItem{},
 	}
 	return act
 }
@@ -43,7 +43,7 @@ func (act *Accounter) Validate(loader Loader, acc account.Account, signers []com
 
 // RegisterType TODO
 func (act *Accounter) RegisterType(Name string, t account.Type) error {
-	item, err := loadHandler(Name)
+	item, err := loadAccountHandler(Name)
 	if err != nil {
 		return err
 	}
@@ -54,8 +54,8 @@ func (act *Accounter) RegisterType(Name string, t account.Type) error {
 }
 
 // AddType TODO
-func (act *Accounter) AddType(Type account.Type, Name string, Factory Factory) {
-	act.typeHash[Type] = &typeItem{
+func (act *Accounter) AddType(Type account.Type, Name string, Factory AccountFactory) {
+	act.typeHash[Type] = &accountTypeItem{
 		Type:    Type,
 		Name:    Name,
 		Factory: Factory,
@@ -91,41 +91,40 @@ func (act *Accounter) TypeByName(name string) (account.Type, error) {
 	}
 }
 
-var handlerHash = map[string]*handler{}
+var accounterHandlerHash = map[string]*accountHandler{}
 
 // RegisterAccount TODO
-func RegisterAccount(Name string, Factory Factory, Validator Validator) error {
-	if _, has := handlerHash[Name]; has {
+func RegisterAccount(Name string, Factory AccountFactory, Validator AccountValidator) error {
+	if _, has := accounterHandlerHash[Name]; has {
 		return ErrExistHandler
 	}
-	handlerHash[Name] = &handler{
+	accounterHandlerHash[Name] = &accountHandler{
 		Factory:   Factory,
 		Validator: Validator,
 	}
 	return nil
 }
 
-func loadHandler(Name string) (*handler, error) {
-	if _, has := handlerHash[Name]; !has {
+func loadAccountHandler(Name string) (*accountHandler, error) {
+	if _, has := accounterHandlerHash[Name]; !has {
 		return nil, ErrNotExistHandler
 	}
-	return handlerHash[Name], nil
+	return accounterHandlerHash[Name], nil
 }
 
-// handler TODO
-type handler struct {
-	Factory   Factory
-	Validator Validator
+type accountHandler struct {
+	Factory   AccountFactory
+	Validator AccountValidator
 }
 
-type typeItem struct {
+type accountTypeItem struct {
 	Type    account.Type
 	Name    string
-	Factory Factory
+	Factory AccountFactory
 }
 
-// Factory TODO
-type Factory func(t account.Type) account.Account
+// AccountFactory TODO
+type AccountFactory func(t account.Type) account.Account
 
-// Validator TODO
-type Validator func(loader Loader, acc account.Account, signers []common.PublicHash) error
+// AccountValidator TODO
+type AccountValidator func(loader Loader, acc account.Account, signers []common.PublicHash) error

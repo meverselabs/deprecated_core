@@ -1,55 +1,33 @@
-package transactor
+package data
 
 import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/core/amount"
-	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/transaction"
 )
-
-var transactorHash = map[uint64]*Transactor{}
-
-// GetTransactor TODO
-func GetTransactor(coord *common.Coordinate) *Transactor {
-	if tran, _ := ByCoord(coord); tran != nil {
-		return tran
-	}
-	tran := newTransactor(coord)
-	transactorHash[coord.ID()] = tran
-	return tran
-}
-
-// ByCoord TODO
-func ByCoord(coord *common.Coordinate) (*Transactor, error) {
-	if act, has := transactorHash[coord.ID()]; !has {
-		return nil, ErrNotExistTransactor
-	} else {
-		return act, nil
-	}
-}
 
 // Transactor TODO
 type Transactor struct {
 	coord           *common.Coordinate
-	handlerTypeHash map[transaction.Type]*handler
+	handlerTypeHash map[transaction.Type]*transactionHandler
 	feeHash         map[transaction.Type]*amount.Amount
 	typeNameHash    map[string]transaction.Type
-	typeHash        map[transaction.Type]*typeItem
+	typeHash        map[transaction.Type]*transactionTypeItem
 }
 
-func newTransactor(coord *common.Coordinate) *Transactor {
+func NewTransactor(coord *common.Coordinate) *Transactor {
 	tran := &Transactor{
 		coord:           coord,
-		handlerTypeHash: map[transaction.Type]*handler{},
+		handlerTypeHash: map[transaction.Type]*transactionHandler{},
 		feeHash:         map[transaction.Type]*amount.Amount{},
 		typeNameHash:    map[string]transaction.Type{},
-		typeHash:        map[transaction.Type]*typeItem{},
+		typeHash:        map[transaction.Type]*transactionTypeItem{},
 	}
 	return tran
 }
 
 // Validate TODO
-func (tran *Transactor) Validate(loader data.Loader, tx transaction.Transaction, signers []common.PublicHash) error {
+func (tran *Transactor) Validate(loader Loader, tx transaction.Transaction, signers []common.PublicHash) error {
 	if !tran.coord.Equal(loader.ChainCoord()) {
 		return ErrInvalidChainCoordinate
 	}
@@ -68,7 +46,7 @@ func (tran *Transactor) Validate(loader data.Loader, tx transaction.Transaction,
 }
 
 // Execute TODO
-func (tran *Transactor) Execute(ctx *data.Context, tx transaction.Transaction, coord *common.Coordinate) (interface{}, error) {
+func (tran *Transactor) Execute(ctx *Context, tx transaction.Transaction, coord *common.Coordinate) (interface{}, error) {
 	t := tx.Type()
 	if !tran.coord.Equal(ctx.ChainCoord()) {
 		return nil, ErrInvalidChainCoordinate
@@ -90,7 +68,7 @@ func (tran *Transactor) Execute(ctx *data.Context, tx transaction.Transaction, c
 
 // RegisterType TODO
 func (tran *Transactor) RegisterType(Name string, t transaction.Type, Fee *amount.Amount) error {
-	item, err := loadHandler(Name)
+	item, err := loadTransactionHandler(Name)
 	if err != nil {
 		return err
 	}
@@ -102,8 +80,8 @@ func (tran *Transactor) RegisterType(Name string, t transaction.Type, Fee *amoun
 }
 
 // AddType TODO
-func (tran *Transactor) AddType(Type transaction.Type, Name string, Factory Factory) {
-	tran.typeHash[Type] = &typeItem{
+func (tran *Transactor) AddType(Type transaction.Type, Name string, Factory TransactionFactory) {
+	tran.typeHash[Type] = &transactionTypeItem{
 		Type:    Type,
 		Name:    Name,
 		Factory: Factory,
@@ -139,14 +117,14 @@ func (tran *Transactor) TypeByName(name string) (transaction.Type, error) {
 	}
 }
 
-var handlerHash = map[string]*handler{}
+var transactionHandlerHash = map[string]*transactionHandler{}
 
 // RegisterHandler TODO
-func RegisterHandler(Name string, Factory Factory, Validator Validator, Executor Executor) error {
-	if _, has := handlerHash[Name]; has {
+func RegisterHandler(Name string, Factory TransactionFactory, Validator TransactionValidator, Executor TransactionExecutor) error {
+	if _, has := transactionHandlerHash[Name]; has {
 		return ErrExistHandler
 	}
-	handlerHash[Name] = &handler{
+	transactionHandlerHash[Name] = &transactionHandler{
 		Factory:   Factory,
 		Validator: Validator,
 		Executor:  Executor,
@@ -154,31 +132,30 @@ func RegisterHandler(Name string, Factory Factory, Validator Validator, Executor
 	return nil
 }
 
-func loadHandler(Name string) (*handler, error) {
-	if _, has := handlerHash[Name]; !has {
+func loadTransactionHandler(Name string) (*transactionHandler, error) {
+	if _, has := transactionHandlerHash[Name]; !has {
 		return nil, ErrNotExistHandler
 	}
-	return handlerHash[Name], nil
+	return transactionHandlerHash[Name], nil
 }
 
-// handler TODO
-type handler struct {
-	Factory   Factory
-	Validator Validator
-	Executor  Executor
+type transactionHandler struct {
+	Factory   TransactionFactory
+	Validator TransactionValidator
+	Executor  TransactionExecutor
 }
 
-type typeItem struct {
+type transactionTypeItem struct {
 	Type    transaction.Type
 	Name    string
-	Factory Factory
+	Factory TransactionFactory
 }
 
-// Factory TODO
-type Factory func(t transaction.Type) transaction.Transaction
+// TransactionFactory TODO
+type TransactionFactory func(t transaction.Type) transaction.Transaction
 
-// Validator TODO
-type Validator func(loader data.Loader, tx transaction.Transaction, signers []common.PublicHash) error
+// TransactionValidator TODO
+type TransactionValidator func(loader Loader, tx transaction.Transaction, signers []common.PublicHash) error
 
-// Executor TODO
-type Executor func(ctx *data.Context, Fee *amount.Amount, tx transaction.Transaction, coord *common.Coordinate) (interface{}, error)
+// TransactionExecutor TODO
+type TransactionExecutor func(ctx *Context, Fee *amount.Amount, tx transaction.Transaction, coord *common.Coordinate) (interface{}, error)
