@@ -135,6 +135,11 @@ func (rt *RankTable) Rank(addr common.Address) *Rank {
 	return rt.rankHash[addr]
 }
 
+// CandidateCount TODO
+func (rt *RankTable) CandidateCount() int {
+	return len(rt.candidates)
+}
+
 // Candidates TODO
 func (rt *RankTable) Candidates(cnt int) []*Rank {
 	if cnt > len(rt.candidates) {

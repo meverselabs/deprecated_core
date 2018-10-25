@@ -35,14 +35,18 @@ type storeCache struct {
 }
 
 // NewStore TODO
-func NewStore(act *data.Accounter, tran *data.Transactor) (*Store, error) {
-	path := "./" + act.ChainCoord().String()
+func NewStore(path string, act *data.Accounter, tran *data.Transactor) (*Store, error) {
+	if !act.ChainCoord().Equal(tran.ChainCoord()) {
+		return nil, ErrInvalidChainCoord
+	}
+
 	opts := badger.DefaultOptions
 	opts.Dir = path
 	opts.ValueDir = path
 	opts.Truncate = true
 	opts.SyncWrites = true
 	lockfilePath := filepath.Join(opts.Dir, "LOCK")
+	os.MkdirAll(path, os.ModeDir)
 
 	os.Remove(lockfilePath)
 

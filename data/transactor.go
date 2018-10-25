@@ -15,6 +15,7 @@ type Transactor struct {
 	typeHash        map[transaction.Type]*transactionTypeItem
 }
 
+// NewTransactor TODO
 func NewTransactor(coord *common.Coordinate) *Transactor {
 	tran := &Transactor{
 		coord:           coord,
@@ -24,6 +25,11 @@ func NewTransactor(coord *common.Coordinate) *Transactor {
 		typeHash:        map[transaction.Type]*transactionTypeItem{},
 	}
 	return tran
+}
+
+// ChainCoord TODO
+func (tran *Transactor) ChainCoord() *common.Coordinate {
+	return tran.coord
 }
 
 // Validate TODO
