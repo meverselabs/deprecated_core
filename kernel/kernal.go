@@ -45,7 +45,7 @@ type Kernel struct {
 }
 
 // Init TODO
-func (kn *Kernel) Init(GenesisContextData *data.ContextData) error {
+func (kn *Kernel) Init(ObserverSignatures []string, GenesisContextData *data.ContextData) error {
 	if bs := kn.Store.CustomData("chaincoord"); bs != nil {
 		var coord common.Coordinate
 		if _, err := coord.ReadFrom(bytes.NewReader(bs)); err != nil {
@@ -64,7 +64,12 @@ func (kn *Kernel) Init(GenesisContextData *data.ContextData) error {
 		}
 	}
 
-	GenesisHash := GenesisContextData.Hash()
+	var buffer bytes.Buffer
+	for _, str := range ObserverSignatures {
+		buffer.WriteString(str)
+		buffer.WriteString(":")
+	}
+	GenesisHash := hash.TwoHash(hash.Hash(buffer.Bytes()), GenesisContextData.Hash())
 	if h, err := kn.Store.BlockHash(0); err != nil {
 		if err != db.ErrNotExistKey {
 			return err
