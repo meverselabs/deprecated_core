@@ -104,7 +104,7 @@ func (kn *Kernel) Reward(Height uint32) *amount.Amount {
 }
 
 // RecvBlock TODO
-func (kn *Kernel) RecvBlock(b *block.Block, s *block.ObserverSigned, IsNewBlock bool) error {
+func (kn *Kernel) RecvBlock(b *block.Block, s *block.ObserverSigned) error {
 	if !b.Header.ChainCoord.Equal(kn.ChainCoord) {
 		return ErrInvalidChainCoordinate
 	}
@@ -142,18 +142,6 @@ func (kn *Kernel) RecvBlock(b *block.Block, s *block.ObserverSigned, IsNewBlock 
 
 	for _, tx := range b.Transactions {
 		kn.TxPool.Remove(tx)
-	}
-
-	if kn.Generator != nil {
-		if IsNewBlock {
-			if is, err := kn.Consensus.IsMinable(kn.Generator.Address(), 0); err != nil {
-				return err
-			} else if is {
-				if err := kn.GenerateBlock(0); err != nil {
-					return err
-				}
-			}
-		}
 	}
 	return nil
 }
@@ -218,45 +206,45 @@ func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
 }
 
 // GenerateBlock TODO
-func (kn *Kernel) GenerateBlock(TimeoutCount uint32) error {
+func (kn *Kernel) GenerateBlock(TimeoutCount uint32) (*block.Block, *block.ObserverSigned, error) {
 	ctx := data.NewContext(kn.Store)
 	PrevHeight := kn.Store.Height()
 	PrevHash, err := kn.Store.BlockHash(PrevHeight)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if is, err := kn.Consensus.IsMinable(kn.Generator.Address(), TimeoutCount); err != nil {
-		return err
+		return nil, nil, err
 	} else if !is {
-		return ErrInvalidGenerateRequest
+		return nil, nil, ErrInvalidGenerateRequest
 	}
 	nb, ns, err := kn.Generator.GenerateBlock(kn.Transactor, kn.TxPool, ctx, TimeoutCount, kn.ChainCoord, PrevHeight, PrevHash)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	// TODO : EventBlockGenerated
 	nos, err := kn.ObserverProxy.RequestSign(nb, ns)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	// TODO : EventBlockObserverSigned
 
 	CustomHash := map[string][]byte{}
 	if ctx.StackSize() > 1 {
-		return ErrDirtyContext
+		return nil, nil, ErrDirtyContext
 	}
 	top := ctx.Top()
 	if SaveData, err := kn.Consensus.ApplyBlock(top, nb); err != nil {
-		return err
+		return nil, nil, err
 	} else {
 		CustomHash["consensus"] = SaveData
 	}
 	if err := kn.Store.StoreBlock(top, nb, nos, CustomHash); err != nil {
-		return err
+		return nil, nil, err
 	}
 	// TODO : save consensus
 	// TODO : EventBlockConnected
-	return nil
+	return nb, nos, nil
 }
 
 // RecvTransaction TODO
