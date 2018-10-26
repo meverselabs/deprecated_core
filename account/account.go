@@ -8,10 +8,10 @@ import (
 	"git.fleta.io/fleta/core/amount"
 )
 
-// Type TODO
+// Type is using when serealization and deserialization account
 type Type uint8
 
-// Account TODO
+// Account is a interface that define the basic account functions
 type Account interface {
 	Address() common.Address
 	SetType(t Type)
@@ -24,14 +24,14 @@ type Account interface {
 	io.ReaderFrom
 }
 
-// Base TODO
+// Base is the parts of account functions that are not changed by derived one
 type Base struct {
 	Address_    common.Address
 	Type_       Type
 	BalanceHash map[uint64]*amount.Amount
 }
 
-// NewBase TODO
+// NewBase returns a account Base
 func NewBase() *Base {
 	acc := &Base{
 		BalanceHash: map[uint64]*amount.Amount{},
@@ -39,22 +39,22 @@ func NewBase() *Base {
 	return acc
 }
 
-// Address TODO
+// Address returns the account address
 func (acc *Base) Address() common.Address {
 	return acc.Address_
 }
 
-// SetType TODO
+// SetType set the account type
 func (acc *Base) SetType(t Type) {
 	acc.Type_ = t
 }
 
-// Type TODO
+// Type returns the account type
 func (acc *Base) Type() Type {
 	return acc.Type_
 }
 
-// Balance TODO
+// Balance returns the amount of the target chain's token(or coin)
 func (acc *Base) Balance(coord *common.Coordinate) *amount.Amount {
 	if a, has := acc.BalanceHash[coord.ID()]; has {
 		return a
@@ -63,12 +63,16 @@ func (acc *Base) Balance(coord *common.Coordinate) *amount.Amount {
 	}
 }
 
-// SetBalance TODO
+// SetBalance set the amount of the target chain's token(or coin)
 func (acc *Base) SetBalance(coord *common.Coordinate, a *amount.Amount) {
-	acc.BalanceHash[coord.ID()] = a
+	if a.IsZero() {
+		delete(acc.BalanceHash, coord.ID())
+	} else {
+		acc.BalanceHash[coord.ID()] = a
+	}
 }
 
-// TokenCoords TODO
+// TokenCoords retuns chain's coordinates of usable tokens
 func (acc *Base) TokenCoords() []*common.Coordinate {
 	list := make([]*common.Coordinate, 0, len(acc.BalanceHash))
 	for k := range acc.BalanceHash {
@@ -77,7 +81,7 @@ func (acc *Base) TokenCoords() []*common.Coordinate {
 	return list
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (acc *Base) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := acc.Address_.WriteTo(w); err != nil {
@@ -111,7 +115,7 @@ func (acc *Base) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (acc *Base) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := acc.Address_.ReadFrom(r); err != nil {
