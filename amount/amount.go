@@ -56,7 +56,7 @@ func NewAmountFromBytes(bs []byte) *Amount {
 // WriteTo TODO
 func (am *Amount) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := util.WriteBytes8(w, am.Int.Bytes()); err != nil {
+	if n, err := util.WriteBytes(w, am.Int.Bytes()); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -67,7 +67,7 @@ func (am *Amount) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom TODO
 func (am *Amount) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if bs, n, err := util.ReadBytes8(r); err != nil {
+	if bs, n, err := util.ReadBytes(r); err != nil {
 		return read, err
 	} else {
 		read += n
