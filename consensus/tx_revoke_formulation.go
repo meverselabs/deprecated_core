@@ -79,7 +79,7 @@ func init() {
 	})
 }
 
-// RevokeFormulation TODO
+// RevokeFormulation is formulation.RevokeFormulation
 type RevokeFormulation struct {
 	transaction.Base
 	Seq_  uint64
@@ -87,22 +87,22 @@ type RevokeFormulation struct {
 	To    common.Address
 }
 
-// IsUTXO TODO
+// IsUTXO retuns false
 func (tx *RevokeFormulation) IsUTXO() bool {
 	return false
 }
 
-// From TODO
+// From returns the creator of the transaction
 func (tx *RevokeFormulation) From() common.Address {
 	return tx.From_
 }
 
-// Seq TODO
+// Seq returns the sequence of the transaction
 func (tx *RevokeFormulation) Seq() uint64 {
 	return tx.Seq_
 }
 
-// Hash TODO
+// Hash retuns the hash value of it
 func (tx *RevokeFormulation) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := tx.WriteTo(&buffer); err != nil {
@@ -111,7 +111,7 @@ func (tx *RevokeFormulation) Hash() hash.Hash256 {
 	return hash.DoubleHash(buffer.Bytes())
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := tx.Base.WriteTo(w); err != nil {
@@ -137,7 +137,7 @@ func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (tx *RevokeFormulation) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {

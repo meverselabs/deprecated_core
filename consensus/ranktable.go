@@ -10,23 +10,21 @@ import (
 	"git.fleta.io/fleta/common/util"
 )
 
+// ranktable rrors
 var (
-	// ErrInvalidPhase TODO
-	ErrInvalidPhase = errors.New("invalid phase")
-	// ErrExistAddress TODO
-	ErrExistAddress = errors.New("exist address")
-	// ErrExceedCandidateCount TODO
+	ErrInvalidPhase         = errors.New("invalid phase")
+	ErrExistAddress         = errors.New("exist address")
 	ErrExceedCandidateCount = errors.New("exceed candidate count")
 )
 
-// RankTable TODO
+// RankTable maintain the rank list of formulators
 type RankTable struct {
 	height     uint64
 	candidates []*Rank
 	rankHash   map[common.Address]*Rank
 }
 
-// NewRankTable TODO
+// NewRankTable returns a RankTable
 func NewRankTable() *RankTable {
 	rt := &RankTable{
 		candidates: []*Rank{},
@@ -35,7 +33,7 @@ func NewRankTable() *RankTable {
 	return rt
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (rt *RankTable) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := util.WriteUint64(w, rt.height); err != nil {
@@ -59,7 +57,7 @@ func (rt *RankTable) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (rt *RankTable) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if v, n, err := util.ReadUint64(r); err != nil {
@@ -89,12 +87,7 @@ func (rt *RankTable) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// Height TODO
-func (rt *RankTable) Height() uint64 {
-	return rt.height
-}
-
-// Add TODO
+// Add add the new rank
 func (rt *RankTable) Add(s *Rank) error {
 	if len(rt.candidates) > 0 {
 		if s.Phase() < rt.candidates[0].Phase() {
@@ -109,7 +102,7 @@ func (rt *RankTable) Add(s *Rank) error {
 	return nil
 }
 
-// LargestPhase TODO
+// LargestPhase retuns the largest phase of ranks
 func (rt *RankTable) LargestPhase() uint32 {
 	if len(rt.candidates) == 0 {
 		return 0
@@ -117,7 +110,7 @@ func (rt *RankTable) LargestPhase() uint32 {
 	return rt.candidates[len(rt.candidates)-1].phase
 }
 
-// Remove TODO
+// Remove delete the rank by the formulation account address
 func (rt *RankTable) Remove(addr common.Address) {
 	if _, has := rt.rankHash[addr]; has {
 		delete(rt.rankHash, addr)
@@ -130,17 +123,17 @@ func (rt *RankTable) Remove(addr common.Address) {
 	}
 }
 
-// Rank TODO
+// Rank retuns the cloned rank by the formulation account address
 func (rt *RankTable) Rank(addr common.Address) *Rank {
 	return rt.rankHash[addr]
 }
 
-// CandidateCount TODO
+// CandidateCount returns the number of ranks
 func (rt *RankTable) CandidateCount() int {
 	return len(rt.candidates)
 }
 
-// Candidates TODO
+// Candidates retuns next miners
 func (rt *RankTable) Candidates(cnt int) []*Rank {
 	if cnt > len(rt.candidates) {
 		return nil
@@ -156,7 +149,7 @@ func (rt *RankTable) Candidates(cnt int) []*Rank {
 	return list
 }
 
-// ForwardCandidates TODO
+// ForwardCandidates rotates the rank table using the timeout count and the hash
 func (rt *RankTable) ForwardCandidates(TimeoutCount int, LastTableAppendHash hash.Hash256) error {
 	if TimeoutCount >= len(rt.candidates) {
 		return ErrExceedCandidateCount
@@ -186,7 +179,7 @@ func (rt *RankTable) ForwardCandidates(TimeoutCount int, LastTableAppendHash has
 	return nil
 }
 
-// InsertRankToList TODO
+// InsertRankToList inserts the rank by the score to the rank list
 func InsertRankToList(ranks []*Rank, s *Rank) []*Rank {
 	idx := sort.Search(len(ranks), func(i int) bool {
 		return s.Less(ranks[i])

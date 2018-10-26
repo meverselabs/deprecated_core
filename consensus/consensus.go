@@ -11,14 +11,14 @@ import (
 	"git.fleta.io/fleta/core/data"
 )
 
-// Consensus TODO
+// Consensus supports the proof of formulation algorithm
 type Consensus struct {
 	RankTable              *RankTable
 	ObserverSignatureHash  map[common.PublicHash]bool
 	FormulationAccountType account.Type
 }
 
-// NewConsensus TODO
+// NewConsensus retuns a Consensus
 func NewConsensus(ObserverSignatureHash map[common.PublicHash]bool, FormulationAccountType account.Type) *Consensus {
 	cs := &Consensus{
 		RankTable:              NewRankTable(),
@@ -28,7 +28,7 @@ func NewConsensus(ObserverSignatureHash map[common.PublicHash]bool, FormulationA
 	return cs
 }
 
-// ValidateBlock TODO
+// ValidateBlock validate the block with signatures and previus block's information
 func (cs *Consensus) ValidateBlock(b *block.Block, s *block.ObserverSigned, PrevHeight uint32, LastBlockHash hash.Hash256) error {
 	if b.Header.Height != PrevHeight+1 {
 		return ErrInvalidPrevBlockHeight
@@ -59,7 +59,7 @@ func (cs *Consensus) ValidateBlock(b *block.Block, s *block.ObserverSigned, Prev
 	return nil
 }
 
-// ValidateObserverSignatures TODO
+// ValidateObserverSignatures validate observer signatures with the block hash
 func (cs *Consensus) ValidateObserverSignatures(blockHash hash.Hash256, sigs []common.Signature) error {
 	if len(sigs) != len(cs.ObserverSignatureHash)/2+1 {
 		return ErrInsufficientObserverSignature
@@ -82,7 +82,7 @@ func (cs *Consensus) ValidateObserverSignatures(blockHash hash.Hash256, sigs []c
 	return nil
 }
 
-// ApplyGenesis TODO
+// ApplyGenesis initialize the consensus using the genesis context data
 func (cs *Consensus) ApplyGenesis(ctd *data.ContextData) ([]byte, error) {
 	phase := cs.RankTable.LargestPhase() + 1
 	for _, a := range ctd.CreatedAccountHash {
@@ -106,7 +106,7 @@ func (cs *Consensus) ApplyGenesis(ctd *data.ContextData) ([]byte, error) {
 	return SaveData, nil
 }
 
-// ApplyBlock TODO
+// ApplyBlock update the consensus using the block and its context data
 func (cs *Consensus) ApplyBlock(ctd *data.ContextData, b *block.Block) ([]byte, error) {
 	if err := cs.RankTable.ForwardCandidates(int(b.Header.TimeoutCount), b.Header.Hash()); err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (cs *Consensus) ApplyBlock(ctd *data.ContextData, b *block.Block) ([]byte, 
 	return SaveData, nil
 }
 
-// IsMinable TODO
+// IsMinable checks a mining chance of the address with the timeout count
 func (cs *Consensus) IsMinable(addr common.Address, TimeoutCount uint32) (bool, error) {
 	members := cs.RankTable.Candidates(int(TimeoutCount) + 1)
 	if len(members) == 0 {
@@ -167,7 +167,7 @@ func (cs *Consensus) buildSaveData() ([]byte, error) {
 	return SaveData, nil
 }
 
-// LoadFromSaveData TODO
+// LoadFromSaveData recover the status using the save data
 func (cs *Consensus) LoadFromSaveData(SaveData []byte) error {
 	r := bytes.NewReader(SaveData)
 	if _, err := cs.RankTable.ReadFrom(r); err != nil {

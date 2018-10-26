@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"strconv"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 )
 
-// Rank TODO
+// Rank represents the rank information of the formulation account
 type Rank struct {
 	Address    common.Address
 	PublicHash common.PublicHash
@@ -20,7 +19,7 @@ type Rank struct {
 	score      uint64
 }
 
-// NewRank TODO
+// NewRank returns a Rank
 func NewRank(Address common.Address, PublicHash common.PublicHash, phase uint32, hashSpace hash.Hash256) *Rank {
 	m := &Rank{
 		phase:     phase,
@@ -32,7 +31,7 @@ func NewRank(Address common.Address, PublicHash common.PublicHash, phase uint32,
 	return m
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (rank *Rank) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := rank.Address.WriteTo(w); err != nil {
@@ -58,7 +57,7 @@ func (rank *Rank) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (rank *Rank) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := rank.Address.ReadFrom(r); err != nil {
@@ -86,56 +85,56 @@ func (rank *Rank) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// Clone TODO
+// Clone returns the clonend value of it
 func (rank *Rank) Clone() *Rank {
 	return NewRank(rank.Address, rank.PublicHash, rank.phase, rank.hashSpace)
 }
 
-// Score TODO
+// Score returns the score of the rank
 func (rank *Rank) Score() uint64 {
 	return rank.score
 }
 
-// Phase TODO
+// Phase returns the phase of the rank
 func (rank *Rank) Phase() uint32 {
 	return rank.phase
 }
 
-// HashSpace TODO
+// HashSpace returns the hash space of the rank
 func (rank *Rank) HashSpace() hash.Hash256 {
 	return rank.hashSpace
 }
 
-// Less TODO
+// Less returns a < b
 func (rank *Rank) Less(b *Rank) bool {
 	return rank.score < b.score || (rank.score == b.score && bytes.Compare(rank.Address[:], b.Address[:]) < 0)
 }
 
-// Equal TODO
+// Equal checks compare two values and returns true or false
 func (rank *Rank) Equal(b *Rank) bool {
 	return rank.score == b.score && bytes.Equal(rank.Address[:], b.Address[:])
 }
 
-// IsZero TODO
+// IsZero returns a == 0
 func (rank *Rank) IsZero() bool {
 	var empty common.Address
 	return rank.score == 0 && bytes.Compare(rank.Address[:], empty[:]) == 0
 }
 
-// Set TODO
+// Set set the rank properties and update the score
 func (rank *Rank) Set(phase uint32, hashSpace hash.Hash256) {
 	rank.phase = phase
 	rank.hashSpace = hashSpace
 	rank.update()
 }
 
-// SetPhase TODO
+// SetPhase set the phase and update the score
 func (rank *Rank) SetPhase(phase uint32) {
 	rank.phase = phase
 	rank.update()
 }
 
-// SetHashSpace TODO
+// SetHashSpace set the hash space and update the score
 func (rank *Rank) SetHashSpace(hashSpace hash.Hash256) {
 	rank.hashSpace = hashSpace
 	rank.update()
@@ -145,20 +144,16 @@ func (rank *Rank) update() {
 	rank.score = uint64(rank.phase)<<32 + uint64(binary.LittleEndian.Uint32(rank.hashSpace[:4]))
 }
 
-// Key TODO
+// Key returns unique key of the rank
 func (rank *Rank) Key() string {
 	bs := make([]byte, 8)
 	binary.LittleEndian.PutUint64(bs, rank.score)
 	return string(rank.Address[:]) + "," + string(bs)
 }
 
-// String TODO TEMP
+// String returns the string of the rank using the byte array of rank value
 func (rank *Rank) String() string {
-	/*
-		bs := make([]byte, 8)
-		binary.LittleEndian.PutUint64(bs, rank.score)
-		return string(rank.PublicHash[:]) + "," + string(bs)
-	*/
-	key := rank.Address.String()
-	return "{" + key + "," + strconv.FormatUint(uint64(rank.phase), 10) + "," + strconv.FormatUint(rank.score, 10) + "}"
+	bs := make([]byte, 8)
+	binary.LittleEndian.PutUint64(bs, rank.score)
+	return string(rank.PublicHash[:]) + "," + string(bs)
 }

@@ -78,7 +78,7 @@ func init() {
 	})
 }
 
-// CreateFormulation TODO
+// CreateFormulation is formulation.CreateFormulation
 type CreateFormulation struct {
 	transaction.Base
 	Seq_    uint64
@@ -86,22 +86,22 @@ type CreateFormulation struct {
 	KeyHash common.PublicHash
 }
 
-// IsUTXO TODO
+// IsUTXO retuns false
 func (tx *CreateFormulation) IsUTXO() bool {
 	return false
 }
 
-// From TODO
+// From returns the creator of the transaction
 func (tx *CreateFormulation) From() common.Address {
 	return tx.From_
 }
 
-// Seq TODO
+// Seq returns the sequence of the transaction
 func (tx *CreateFormulation) Seq() uint64 {
 	return tx.Seq_
 }
 
-// Hash TODO
+// Hash retuns the hash value of it
 func (tx *CreateFormulation) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := tx.WriteTo(&buffer); err != nil {
@@ -110,7 +110,7 @@ func (tx *CreateFormulation) Hash() hash.Hash256 {
 	return hash.DoubleHash(buffer.Bytes())
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := tx.Base.WriteTo(w); err != nil {
@@ -136,7 +136,7 @@ func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
