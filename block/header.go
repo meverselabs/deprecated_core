@@ -9,7 +9,7 @@ import (
 	"git.fleta.io/fleta/common/util"
 )
 
-// Header TODO
+// Header is validation informations
 type Header struct {
 	ChainCoord         common.Coordinate
 	Height             uint32
@@ -21,7 +21,7 @@ type Header struct {
 	TimeoutCount       uint32
 }
 
-// Hash TODO
+// Hash retuns the hash value of it
 func (bh *Header) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := bh.WriteTo(&buffer); err != nil {
@@ -30,7 +30,7 @@ func (bh *Header) Hash() hash.Hash256 {
 	return hash.DoubleHash(buffer.Bytes())
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := bh.ChainCoord.WriteTo(w); err != nil {
@@ -76,7 +76,7 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := bh.ChainCoord.ReadFrom(r); err != nil {

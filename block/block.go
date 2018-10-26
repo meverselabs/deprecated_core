@@ -9,14 +9,14 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 )
 
-// Block TODO
+// Block is the set of transactions with validation informations
 type Block struct {
 	Header                Header
 	Transactions          []transaction.Transaction //MAXLEN : 65535
 	TransactionSignatures [][]common.Signature      //MAXLEN : 65536
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (b *Block) WriteTo(w io.Writer) (int64, error) {
 	if len(b.Transactions) > 65535 {
 		return 0, ErrExceedTransactionCount
@@ -67,7 +67,7 @@ func (b *Block) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFromWith TODO
+// ReadFromWith is a deserialization function
 func (b *Block) ReadFromWith(r io.Reader, tran *data.Transactor) (int64, error) {
 	var read int64
 	if n, err := b.Header.ReadFrom(r); err != nil {

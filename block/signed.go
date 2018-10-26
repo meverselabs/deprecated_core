@@ -9,13 +9,13 @@ import (
 	"git.fleta.io/fleta/common/util"
 )
 
-// Signed TODO
+// Signed is the generator signature of the block
 type Signed struct {
 	BlockHash          hash.Hash256
 	GeneratorSignature common.Signature
 }
 
-// Hash TODO
+// Hash retuns the hash value of it
 func (s *Signed) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := s.WriteTo(&buffer); err != nil {
@@ -24,7 +24,7 @@ func (s *Signed) Hash() hash.Hash256 {
 	return hash.DoubleHash(buffer.Bytes())
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (s *Signed) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := s.BlockHash.WriteTo(w); err != nil {
@@ -41,7 +41,7 @@ func (s *Signed) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (s *Signed) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := s.BlockHash.ReadFrom(r); err != nil {
@@ -58,13 +58,13 @@ func (s *Signed) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// ObserverSigned TODO
+// ObserverSigned is the observer signatures and the generator signature of the block
 type ObserverSigned struct {
 	Signed
 	ObserverSignatures []common.Signature //MAXLEN : 255
 }
 
-// Hash TODO
+// Hash retuns the hash value of it
 func (s *ObserverSigned) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := s.WriteTo(&buffer); err != nil {
@@ -73,7 +73,7 @@ func (s *ObserverSigned) Hash() hash.Hash256 {
 	return hash.DoubleHash(buffer.Bytes())
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (s *ObserverSigned) WriteTo(w io.Writer) (int64, error) {
 	if len(s.ObserverSignatures) > 255 {
 		return 0, ErrExceedSignatureCount
@@ -102,7 +102,7 @@ func (s *ObserverSigned) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (s *ObserverSigned) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := s.Signed.ReadFrom(r); err != nil {
