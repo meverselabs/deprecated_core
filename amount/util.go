@@ -1,6 +1,5 @@
 package amount
 
-// formatFractional TODO
 func formatFractional(str string) string {
 	pads := []byte("000000000000000000")
 	bs := []byte(str)
@@ -19,7 +18,6 @@ func formatFractional(str string) string {
 	return string(pads[:lastZero])
 }
 
-// padFractional TODO
 func padFractional(str string) string {
 	pads := []byte("000000000000000000")
 	bs := []byte(str)
