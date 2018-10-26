@@ -58,7 +58,7 @@ func (s *Signed) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// ObserverSigned is the observer signatures and the generator signature of the block
+// ObserverSigned is observer signatures and the generator signature of the block
 type ObserverSigned struct {
 	Signed
 	ObserverSignatures []common.Signature //MAXLEN : 255
