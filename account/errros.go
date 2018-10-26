@@ -4,7 +4,7 @@ import (
 	"errors"
 )
 
-// chain errors
+// amount errors
 var (
 	ErrMismatchSignaturesCount = errors.New("mismatch signatures count")
 )
