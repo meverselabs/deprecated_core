@@ -11,7 +11,7 @@ import (
 // Type is using when serealization and deserialization account
 type Type uint8
 
-// Account is a interface that define the basic account functions
+// Account is a interface that defines common account functions
 type Account interface {
 	Address() common.Address
 	SetType(t Type)
