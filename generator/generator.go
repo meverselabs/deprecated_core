@@ -15,7 +15,7 @@ import (
 	"git.fleta.io/fleta/core/wallet/key"
 )
 
-// Config TODO
+// Config is a generator's config
 type Config struct {
 	Address          common.Address
 	BlockVersion     uint16
@@ -23,12 +23,12 @@ type Config struct {
 	Signer           key.Key
 }
 
-// Generator TODO
+// Generator makes block using the config and chain informations
 type Generator struct {
 	config *Config
 }
 
-// NewGenerator TODO
+// NewGenerator retuns a Generator
 func NewGenerator(config *Config) *Generator {
 	gn := &Generator{
 		config: config,
@@ -36,12 +36,12 @@ func NewGenerator(config *Config) *Generator {
 	return gn
 }
 
-// Address TODO
+// Address retuns the address of the formulator
 func (gn *Generator) Address() common.Address {
 	return gn.config.Address.Clone()
 }
 
-// GenerateBlock TODO
+// GenerateBlock generate a next block and its signature using transactions in the pool
 func (gn *Generator) GenerateBlock(Transactor *data.Transactor, TxPool *txpool.TransactionPool, ctx *data.Context, TimeoutCount uint32, ChainCoord *common.Coordinate, PrevHeight uint32, PrevHash hash.Hash256) (*block.Block, *block.Signed, error) {
 	b := &block.Block{
 		Header: block.Header{
