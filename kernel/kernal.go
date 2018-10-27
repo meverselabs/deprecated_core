@@ -2,7 +2,6 @@ package kernel
 
 import (
 	"bytes"
-	"errors"
 	"runtime"
 	"sync"
 
@@ -23,17 +22,9 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 )
 
-// kernel errors
-var (
-	ErrInvalidChainCoordinate    = errors.New("invalid chain coordinate")
-	ErrInvalidHashLevelRoot      = errors.New("invalid hash level root")
-	ErrInvalidGenesisHash        = errors.New("invalid genesis hash")
-	ErrNotExistConsensusSaveData = errors.New("invalid consensus save data")
-	ErrDirtyContext              = errors.New("dirty context")
-	ErrInvalidGenerateRequest    = errors.New("invalid generate request")
-)
-
-// Kernel TODO
+// Kernel processes the block chain using its components and stores state of the block chain
+// It based on Proof-of-Formulation and Account/UTXO hybrid model
+// All kinds of accounts and transactions processed the out side of kernel
 type Kernel struct {
 	ChainCoord    *common.Coordinate
 	Consensus     *consensus.Consensus
@@ -44,7 +35,7 @@ type Kernel struct {
 	ObserverProxy observer_proxy.ObserverProxy
 }
 
-// Init TODO
+// Init builds the genesis if it is not generated and stored yet.
 func (kn *Kernel) Init(ObserverSignatures []string, GenesisContextData *data.ContextData) error {
 	if bs := kn.Store.CustomData("chaincoord"); bs != nil {
 		var coord common.Coordinate
@@ -97,13 +88,13 @@ func (kn *Kernel) Init(ObserverSignatures []string, GenesisContextData *data.Con
 	return nil
 }
 
-// Reward TODO
+// Reward returns the mining reward
 func (kn *Kernel) Reward(Height uint32) *amount.Amount {
 	// TEMP
 	return amount.COIN.Clone()
 }
 
-// RecvBlock TODO
+// RecvBlock proccesses and connect the new block
 func (kn *Kernel) RecvBlock(b *block.Block, s *block.ObserverSigned) error {
 	if !b.Header.ChainCoord.Equal(kn.ChainCoord) {
 		return ErrInvalidChainCoordinate
@@ -205,8 +196,11 @@ func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
 	return nil
 }
 
-// GenerateBlock TODO
+// GenerateBlock generates the next block (*only for a formulator)
 func (kn *Kernel) GenerateBlock(TimeoutCount uint32) (*block.Block, *block.ObserverSigned, error) {
+	if kn.Generator != nil {
+		return nil, nil, ErrNotFormulator
+	}
 	ctx := data.NewContext(kn.Store)
 	PrevHeight := kn.Store.Height()
 	PrevHash, err := kn.Store.BlockHash(PrevHeight)
@@ -247,14 +241,16 @@ func (kn *Kernel) GenerateBlock(TimeoutCount uint32) (*block.Block, *block.Obser
 	return nb, nos, nil
 }
 
-// RecvTransaction TODO
+// RecvTransaction validate the transaction and push it to the pool
 func (kn *Kernel) RecvTransaction(tx transaction.Transaction, sigs []common.Signature) error {
 	if !tx.ChainCoord().Equal(kn.ChainCoord) {
 		return ErrInvalidChainCoordinate
 	}
-	//TODO : check IsExist in pool
-	signers := make([]common.PublicHash, 0, len(sigs))
 	TxHash := tx.Hash()
+	if kn.TxPool.IsExist(TxHash) {
+		return txpool.ErrExistTransaction
+	}
+	signers := make([]common.PublicHash, 0, len(sigs))
 	for _, sig := range sigs {
 		pubkey, err := common.RecoverPubkey(TxHash, sig)
 		if err != nil {
