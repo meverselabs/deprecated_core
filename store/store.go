@@ -17,7 +17,8 @@ import (
 	"github.com/dgraph-io/badger"
 )
 
-// Store TODO
+// Store saves the target chain state
+// All updates are executed in one transaction with FileSync option
 type Store struct {
 	db         *badger.DB
 	lockfile   *os.File
@@ -34,7 +35,7 @@ type storeCache struct {
 	heightBlockHash hash.Hash256
 }
 
-// NewStore TODO
+// NewStore returns a Store
 func NewStore(path string, act *data.Accounter, tran *data.Transactor) (*Store, error) {
 	if !act.ChainCoord().Equal(tran.ChainCoord()) {
 		return nil, ErrInvalidChainCoord
@@ -89,27 +90,27 @@ func NewStore(path string, act *data.Accounter, tran *data.Transactor) (*Store, 
 	}, nil
 }
 
-// ChainCoord TODO
+// ChainCoord returns the coordinate of the target chain
 func (st *Store) ChainCoord() *common.Coordinate {
 	return st.accounter.ChainCoord()
 }
 
-// Accounter TODO
+// Accounter returns the accounter of the target chain
 func (st *Store) Accounter() *data.Accounter {
 	return st.accounter
 }
 
-// Transactor TODO
+// Transactor returns the transactor of the target chain
 func (st *Store) Transactor() *data.Transactor {
 	return st.transactor
 }
 
-// TargetHeight TODO
+// TargetHeight returns the height of the processing block
 func (st *Store) TargetHeight() uint32 {
 	return st.Height() + 1
 }
 
-// Accounts TODO
+// Accounts returns all accounts in the store
 func (st *Store) Accounts() ([]account.Account, error) {
 	list := []account.Account{}
 	if err := st.db.View(func(txn *badger.Txn) error {
@@ -137,7 +138,7 @@ func (st *Store) Accounts() ([]account.Account, error) {
 	return list, nil
 }
 
-// Seq TODO
+// Seq returns the sequence of the transaction
 func (st *Store) Seq(addr common.Address) uint64 {
 	if seq, has := st.SeqHash[addr]; has {
 		return seq
@@ -162,7 +163,7 @@ func (st *Store) Seq(addr common.Address) uint64 {
 	}
 }
 
-// Account TODO
+// Account returns the account instance of the address from the store
 func (st *Store) Account(addr common.Address) (account.Account, error) {
 	var acc account.Account
 	if err := st.db.View(func(txn *badger.Txn) error {
@@ -196,7 +197,7 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 	return acc, nil
 }
 
-// IsExistAccount TODO
+// IsExistAccount checks that the account of the address is exist or not
 func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
 	if _, err := st.Account(addr); err != nil {
 		if err != data.ErrNotExistAccount {
@@ -208,7 +209,7 @@ func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
 	}
 }
 
-// AccountData TODO
+// AccountData returns the account data from the store
 func (st *Store) AccountData(addr common.Address, name []byte) []byte {
 	key := string(addr[:]) + string(name)
 	var data []byte
@@ -229,7 +230,7 @@ func (st *Store) AccountData(addr common.Address, name []byte) []byte {
 	return data
 }
 
-// UTXOs TODO
+// UTXOs returns all UTXOs in the store
 func (st *Store) UTXOs() ([]*transaction.UTXO, error) {
 	list := []*transaction.UTXO{}
 	if err := st.db.View(func(txn *badger.Txn) error {
@@ -257,7 +258,7 @@ func (st *Store) UTXOs() ([]*transaction.UTXO, error) {
 	return list, nil
 }
 
-// UTXO TODO
+// UTXO returns the UTXO from the top store
 func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
 	var utxo *transaction.UTXO
 	if err := st.db.View(func(txn *badger.Txn) error {
@@ -287,7 +288,7 @@ func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
 	return utxo, nil
 }
 
-// BlockHash TODO
+// BlockHash returns the hash of the block by height
 func (st *Store) BlockHash(height uint32) (hash.Hash256, error) {
 	if st.cache.cached {
 		if st.cache.height == height {
@@ -319,7 +320,7 @@ func (st *Store) BlockHash(height uint32) (hash.Hash256, error) {
 	return h, nil
 }
 
-// Block TODO
+// Block returns the block by height
 func (st *Store) Block(height uint32) (*block.Block, error) {
 	var b *block.Block
 	if err := st.db.View(func(txn *badger.Txn) error {
@@ -346,7 +347,7 @@ func (st *Store) Block(height uint32) (*block.Block, error) {
 	return b, nil
 }
 
-// ObserverSigned TODO
+// ObserverSigned returns the observer signatures of the block by height
 func (st *Store) ObserverSigned(height uint32) (*block.ObserverSigned, error) {
 	var s *block.ObserverSigned
 	if err := st.db.View(func(txn *badger.Txn) error {
@@ -373,7 +374,7 @@ func (st *Store) ObserverSigned(height uint32) (*block.ObserverSigned, error) {
 	return s, nil
 }
 
-// Height TODO
+// Height returns the current height of the target chain
 func (st *Store) Height() uint32 {
 	if st.cache.cached {
 		return st.cache.height
@@ -399,7 +400,7 @@ func (st *Store) Height() uint32 {
 	return height
 }
 
-// CustomData TODO
+// CustomData returns the custom data by the key from the store
 func (st *Store) CustomData(key string) []byte {
 	var bs []byte
 	st.db.View(func(txn *badger.Txn) error {
@@ -421,7 +422,7 @@ func (st *Store) CustomData(key string) []byte {
 	return bs
 }
 
-// SetCustomData TODO
+// SetCustomData updates the custom data
 func (st *Store) SetCustomData(key string, value []byte) error {
 	return st.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Set(toCustomData(key), value); err != nil {
@@ -431,7 +432,7 @@ func (st *Store) SetCustomData(key string, value []byte) error {
 	})
 }
 
-// DeleteCustomData TODO
+// DeleteCustomData deletes the custom data
 func (st *Store) DeleteCustomData(key string) error {
 	return st.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Delete(toCustomData(key)); err != nil {
@@ -441,7 +442,7 @@ func (st *Store) DeleteCustomData(key string) error {
 	})
 }
 
-// StoreGenesis TODO
+// StoreGenesis stores the genesis data with custom data
 func (st *Store) StoreGenesis(ctd *data.ContextData, GenesisHash hash.Hash256, customHash map[string][]byte) error {
 	if _, err := st.BlockHash(0); err != nil {
 		if err != db.ErrNotExistKey {
@@ -484,7 +485,7 @@ func (st *Store) StoreGenesis(ctd *data.ContextData, GenesisHash hash.Hash256, c
 	return nil
 }
 
-// StoreBlock TODO
+// StoreBlock stores the block data with custom data
 func (st *Store) StoreBlock(ctd *data.ContextData, b *block.Block, s *block.ObserverSigned, customHash map[string][]byte) error {
 	blockHash := b.Header.Hash()
 	if err := st.db.Update(func(txn *badger.Txn) error {
