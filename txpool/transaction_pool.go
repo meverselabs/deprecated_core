@@ -1,7 +1,6 @@
 package txpool
 
 import (
-	"errors"
 	"sync"
 
 	"git.fleta.io/fleta/common"
@@ -10,35 +9,33 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 )
 
-// AccountTransaction TODO
+// AccountTransaction is an interface that defines common functions of account model based transactions
 type AccountTransaction interface {
 	Seq() uint64
 	From() common.Address
 }
 
-// TransactionPool errors
-var (
-	ErrEmptyQueue            = errors.New("empty queue")
-	ErrNotAccountTransaction = errors.New("not account transaction")
-)
-
-// TransactionPool TODO
+// TransactionPool provides a transaction queue
+// User can push transaction regardless of UTXO model based transactions or account model based transactions
+// If the sequence of the account model based transaction is not reached to the next of the last sequence, it doens't poped
 type TransactionPool struct {
 	sync.Mutex
 	turnQ         *queue.Queue
 	numberQ       *queue.Queue
 	utxoQ         *queue.LinkedQueue
+	txidHash      map[hash.Hash256]bool
 	turnOutHash   map[bool]int
 	numberOutHash map[common.Address]int
 	bucketHash    map[common.Address]*queue.SortedQueue
 }
 
-// NewTransactionPool TODO
+// NewTransactionPool returns a TransactionPool
 func NewTransactionPool() *TransactionPool {
 	tp := &TransactionPool{
 		turnQ:         queue.NewQueue(),
 		numberQ:       queue.NewQueue(),
 		utxoQ:         queue.NewLinkedQueue(),
+		txidHash:      map[hash.Hash256]bool{},
 		turnOutHash:   map[bool]int{},
 		numberOutHash: map[common.Address]int{},
 		bucketHash:    map[common.Address]*queue.SortedQueue{},
@@ -46,20 +43,34 @@ func NewTransactionPool() *TransactionPool {
 	return tp
 }
 
-// Push TODO
+// IsExist checks that the transaction hash is inserted or not
+func (tp *TransactionPool) IsExist(TxHash hash.Hash256) bool {
+	tp.Lock()
+	defer tp.Unlock()
+
+	return tp.txidHash[TxHash]
+}
+
+// Push inserts the transaction and signatures of it by base model and sequence
+// An UTXO model based transaction will be handled by FIFO
+// An account model based transaction will be sorted by the sequence value
 func (tp *TransactionPool) Push(t transaction.Transaction, sigs []common.Signature) error {
 	tp.Lock()
 	defer tp.Unlock()
 
+	TxHash := t.Hash()
+	if tp.txidHash[TxHash] {
+		return ErrExistTransaction
+	}
+
 	item := &PoolItem{
 		Transaction: t,
-		TxHash:      t.Hash(),
+		TxHash:      TxHash,
 		Signatures:  sigs,
 	}
 	if t.IsUTXO() {
 		tp.utxoQ.Push(t.Hash(), item)
 		tp.turnQ.Push(true)
-		return nil
 	} else {
 		tx, is := t.(AccountTransaction)
 		if !is {
@@ -74,18 +85,22 @@ func (tp *TransactionPool) Push(t transaction.Transaction, sigs []common.Signatu
 		q.Insert(item, tx.Seq())
 		tp.numberQ.Push(addr)
 		tp.turnQ.Push(false)
-		return nil
 	}
+	tp.txidHash[TxHash] = true
+	return nil
 }
 
-// Remove TODO
+// Remove deletes the target transaction from the queue
+// If it is an account model based transaction, it will be sorted by the sequence in the address
 func (tp *TransactionPool) Remove(t transaction.Transaction) {
 	tp.Lock()
 	defer tp.Unlock()
 
+	TxHash := t.Hash()
 	if t.IsUTXO() {
-		if tp.utxoQ.Remove(t.Hash()) != nil {
+		if tp.utxoQ.Remove(TxHash) != nil {
 			tp.turnOutHash[true]++
+			delete(tp.txidHash, TxHash)
 		}
 	} else {
 		tx := t.(AccountTransaction)
@@ -100,6 +115,7 @@ func (tp *TransactionPool) Remove(t transaction.Transaction) {
 					break
 				}
 				q.Pop()
+				delete(tp.txidHash, item.Transaction.Hash())
 				tp.turnOutHash[false]++
 				tp.numberOutHash[addr]++
 			}
@@ -110,7 +126,7 @@ func (tp *TransactionPool) Remove(t transaction.Transaction) {
 	}
 }
 
-// Pop TODO
+// Pop returns and removes the proper transaction
 func (tp *TransactionPool) Pop(SeqCache SeqCache) *PoolItem {
 	tp.Lock()
 	defer tp.Unlock()
@@ -130,7 +146,9 @@ func (tp *TransactionPool) Pop(SeqCache SeqCache) *PoolItem {
 		break
 	}
 	if bTurn {
-		return tp.utxoQ.Pop().(*PoolItem)
+		item := tp.utxoQ.Pop().(*PoolItem)
+		delete(tp.txidHash, item.Transaction.Hash())
+		return item
 	} else {
 		remain := tp.numberQ.Size()
 		ignoreHash := map[common.Address]bool{}
@@ -175,6 +193,7 @@ func (tp *TransactionPool) Pop(SeqCache SeqCache) *PoolItem {
 				}
 			}
 			q.Pop()
+			delete(tp.txidHash, item.Transaction.Hash())
 			if q.Size() == 0 {
 				delete(tp.bucketHash, addr)
 			}
@@ -183,7 +202,7 @@ func (tp *TransactionPool) Pop(SeqCache SeqCache) *PoolItem {
 	}
 }
 
-// PoolItem TODO
+// PoolItem represents the item of the queue
 type PoolItem struct {
 	Transaction transaction.Transaction
 	TxHash      hash.Hash256
