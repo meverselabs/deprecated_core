@@ -4,7 +4,7 @@ import (
 	"git.fleta.io/fleta/core/block"
 )
 
-// ObserverProxy TODO
+// ObserverProxy provides a sign operation
 type ObserverProxy interface {
 	RequestSign(b *block.Block, s *block.Signed) (*block.ObserverSigned, error)
 }
