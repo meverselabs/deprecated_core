@@ -15,7 +15,7 @@ type Signed struct {
 	GeneratorSignature common.Signature
 }
 
-// Hash retuns the hash value of it
+// Hash returns the hash value of it
 func (s *Signed) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := s.WriteTo(&buffer); err != nil {
@@ -64,7 +64,7 @@ type ObserverSigned struct {
 	ObserverSignatures []common.Signature //MAXLEN : 255
 }
 
-// Hash retuns the hash value of it
+// Hash returns the hash value of it
 func (s *ObserverSigned) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := s.WriteTo(&buffer); err != nil {

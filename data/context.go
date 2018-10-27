@@ -61,7 +61,7 @@ func (ctx *Context) AddSeq(addr common.Address) {
 	ctx.Top().AddSeq(addr)
 }
 
-// Account retuns the account instance of the address
+// Account returns the account instance of the address
 func (ctx *Context) Account(addr common.Address) (account.Account, error) {
 	return ctx.Top().Account(addr)
 }
@@ -168,7 +168,7 @@ func (ctx *Context) Commit(sn int) {
 	}
 }
 
-// StackSize retuns the size of the context data stack
+// StackSize returns the size of the context data stack
 func (ctx *Context) StackSize() int {
 	return len(ctx.stack)
 }
@@ -188,7 +188,7 @@ type ContextData struct {
 	DeletedUTXOHash        map[uint64]bool
 }
 
-// NewContextData retuns a ContextData
+// NewContextData returns a ContextData
 func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 	ctd := &ContextData{
 		loader:                 loader,
@@ -206,7 +206,7 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 	return ctd
 }
 
-// Hash retuns the hash value of it
+// Hash returns the hash value of it
 func (ctd *ContextData) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	buffer.WriteString("SeqHash")
@@ -377,7 +377,7 @@ func (ctd *ContextData) AddSeq(addr common.Address) {
 	ctd.SeqHash[addr] = ctd.Seq(addr) + 1
 }
 
-// Account retuns the account instance of the address
+// Account returns the account instance of the address
 func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 	if _, has := ctd.DeletedAccountHash[addr]; has {
 		return nil, ErrNotExistAccount

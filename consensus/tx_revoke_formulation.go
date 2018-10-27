@@ -87,7 +87,7 @@ type RevokeFormulation struct {
 	To    common.Address
 }
 
-// IsUTXO retuns false
+// IsUTXO returns false
 func (tx *RevokeFormulation) IsUTXO() bool {
 	return false
 }
@@ -102,7 +102,7 @@ func (tx *RevokeFormulation) Seq() uint64 {
 	return tx.Seq_
 }
 
-// Hash retuns the hash value of it
+// Hash returns the hash value of it
 func (tx *RevokeFormulation) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := tx.WriteTo(&buffer); err != nil {

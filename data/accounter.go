@@ -13,7 +13,7 @@ type Accounter struct {
 	typeHash        map[account.Type]*accountTypeItem
 }
 
-// NewAccounter retuns a Accounter
+// NewAccounter returns a Accounter
 func NewAccounter(coord *common.Coordinate) *Accounter {
 	act := &Accounter{
 		coord:           coord,

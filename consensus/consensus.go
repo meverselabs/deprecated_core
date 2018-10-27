@@ -18,7 +18,7 @@ type Consensus struct {
 	FormulationAccountType account.Type
 }
 
-// NewConsensus retuns a Consensus
+// NewConsensus returns a Consensus
 func NewConsensus(ObserverSignatureHash map[common.PublicHash]bool, FormulationAccountType account.Type) *Consensus {
 	cs := &Consensus{
 		RankTable:              NewRankTable(),

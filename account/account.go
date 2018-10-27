@@ -72,7 +72,7 @@ func (acc *Base) SetBalance(coord *common.Coordinate, a *amount.Amount) {
 	}
 }
 
-// TokenCoords retuns chain's coordinates of usable tokens
+// TokenCoords returns chain's coordinates of usable tokens
 func (acc *Base) TokenCoords() []*common.Coordinate {
 	list := make([]*common.Coordinate, 0, len(acc.BalanceHash))
 	for k := range acc.BalanceHash {

@@ -102,7 +102,7 @@ func (rt *RankTable) Add(s *Rank) error {
 	return nil
 }
 
-// LargestPhase retuns the largest phase of ranks
+// LargestPhase returns the largest phase of ranks
 func (rt *RankTable) LargestPhase() uint32 {
 	if len(rt.candidates) == 0 {
 		return 0
@@ -123,7 +123,7 @@ func (rt *RankTable) Remove(addr common.Address) {
 	}
 }
 
-// Rank retuns the cloned rank by the formulation account address
+// Rank returns the cloned rank by the formulation account address
 func (rt *RankTable) Rank(addr common.Address) *Rank {
 	return rt.rankHash[addr]
 }
@@ -133,7 +133,7 @@ func (rt *RankTable) CandidateCount() int {
 	return len(rt.candidates)
 }
 
-// Candidates retuns next miners
+// Candidates returns next miners
 func (rt *RankTable) Candidates(cnt int) []*Rank {
 	if cnt > len(rt.candidates) {
 		return nil

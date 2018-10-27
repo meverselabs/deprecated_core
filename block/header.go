@@ -21,7 +21,7 @@ type Header struct {
 	TimeoutCount       uint32
 }
 
-// Hash retuns the hash value of it
+// Hash returns the hash value of it
 func (bh *Header) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := bh.WriteTo(&buffer); err != nil {

@@ -86,7 +86,7 @@ type CreateFormulation struct {
 	KeyHash common.PublicHash
 }
 
-// IsUTXO retuns false
+// IsUTXO returns false
 func (tx *CreateFormulation) IsUTXO() bool {
 	return false
 }
@@ -101,7 +101,7 @@ func (tx *CreateFormulation) Seq() uint64 {
 	return tx.Seq_
 }
 
-// Hash retuns the hash value of it
+// Hash returns the hash value of it
 func (tx *CreateFormulation) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	if _, err := tx.WriteTo(&buffer); err != nil {

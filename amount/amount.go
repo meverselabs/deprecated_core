@@ -117,12 +117,12 @@ func (am *Amount) MulC(b int64) *Amount {
 	return c
 }
 
-// IsZero retuns a == 0
+// IsZero returns a == 0
 func (am *Amount) IsZero() bool {
 	return am.Int.Cmp(zeroInt) == 0
 }
 
-// Less retuns a < b
+// Less returns a < b
 func (am *Amount) Less(b *Amount) bool {
 	return am.Int.Cmp(b.Int) < 0
 }

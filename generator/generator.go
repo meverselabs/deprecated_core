@@ -28,7 +28,7 @@ type Generator struct {
 	config *Config
 }
 
-// NewGenerator retuns a Generator
+// NewGenerator returns a Generator
 func NewGenerator(config *Config) *Generator {
 	gn := &Generator{
 		config: config,
@@ -36,7 +36,7 @@ func NewGenerator(config *Config) *Generator {
 	return gn
 }
 
-// Address retuns the address of the formulator
+// Address returns the address of the formulator
 func (gn *Generator) Address() common.Address {
 	return gn.config.Address.Clone()
 }
