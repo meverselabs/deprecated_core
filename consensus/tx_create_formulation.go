@@ -78,7 +78,8 @@ func init() {
 	})
 }
 
-// CreateFormulation is formulation.CreateFormulation
+// CreateFormulation is a formulation.CreateFormulation
+// It is used to make formulation account
 type CreateFormulation struct {
 	transaction.Base
 	Seq_    uint64

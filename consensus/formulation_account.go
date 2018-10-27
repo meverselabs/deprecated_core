@@ -37,7 +37,8 @@ func init() {
 	})
 }
 
-// Account is formulation.Account
+// Account is a formulation.Account
+// It is used to indentify formulator
 type Account struct {
 	account.Base
 	KeyHash common.PublicHash

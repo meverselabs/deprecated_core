@@ -79,7 +79,8 @@ func init() {
 	})
 }
 
-// RevokeFormulation is formulation.RevokeFormulation
+// RevokeFormulation is a formulation.RevokeFormulation
+// It is used to remove formulation account and get back staked coin
 type RevokeFormulation struct {
 	transaction.Base
 	Seq_  uint64

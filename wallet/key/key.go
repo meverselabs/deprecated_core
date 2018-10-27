@@ -7,7 +7,7 @@ import (
 	"git.fleta.io/fleta/common/hash"
 )
 
-// Key TODO
+// Key is an interface that defines crypto key functions
 type Key interface {
 	io.ReaderFrom
 	io.WriterTo
