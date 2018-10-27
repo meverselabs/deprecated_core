@@ -9,13 +9,13 @@ import (
 	"git.fleta.io/fleta/common/util"
 )
 
-// Signed TODO
+// Signed is the signature of the transaction creator
 type Signed struct {
 	TransactionHash hash.Hash256
 	Signatures      []common.Signature
 }
 
-// Hash TODO
+// Hash returns the hash value of it
 func (s *Signed) Hash() (hash.Hash256, error) {
 	var buffer bytes.Buffer
 	if _, err := s.WriteTo(&buffer); err != nil {
@@ -24,7 +24,7 @@ func (s *Signed) Hash() (hash.Hash256, error) {
 	return hash.DoubleHash(buffer.Bytes()), nil
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (s *Signed) WriteTo(w io.Writer) (int64, error) {
 	if len(s.Signatures) > 255 {
 		return 0, ErrExceedSignatureCount
@@ -53,7 +53,7 @@ func (s *Signed) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (s *Signed) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := s.TransactionHash.ReadFrom(r); err != nil {

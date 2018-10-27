@@ -8,7 +8,7 @@ import (
 	"git.fleta.io/fleta/common/util"
 )
 
-// Transaction TODO
+// Transaction is an interface that defines common transaction functions
 type Transaction interface {
 	io.WriterTo
 	io.ReaderFrom
@@ -20,34 +20,34 @@ type Transaction interface {
 	IsUTXO() bool
 }
 
-// Base TODO
+// Base is the parts of transaction functions that are not changed by derived one
 type Base struct {
 	ChainCoord_ *common.Coordinate
 	Timestamp_  uint64
 	Type_       Type
 }
 
-// ChainCoord TODO
+// ChainCoord returns the coordinate of the target chain
 func (tx *Base) ChainCoord() *common.Coordinate {
 	return tx.ChainCoord_.Clone()
 }
 
-// Timestamp TODO
+// Timestamp returns the timestamp
 func (tx *Base) Timestamp() uint64 {
 	return tx.Timestamp_
 }
 
-// SetType TODO
+// SetType updates the type of the transaction
 func (tx *Base) SetType(t Type) {
 	tx.Type_ = t
 }
 
-// Type TODO
+// Type returns the type of the transaction
 func (tx *Base) Type() Type {
 	return tx.Type_
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := tx.ChainCoord_.WriteTo(w); err != nil {
@@ -68,7 +68,7 @@ func (tx *Base) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (tx *Base) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.ChainCoord_.ReadFrom(r); err != nil {

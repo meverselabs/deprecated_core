@@ -7,13 +7,13 @@ import (
 	"git.fleta.io/fleta/core/amount"
 )
 
-// TxOut TODO
+// TxOut represents recipient of the UTXO
 type TxOut struct {
 	Amount     *amount.Amount
 	PublicHash common.PublicHash
 }
 
-// NewTxOut TODO
+// NewTxOut returns a TxOut
 func NewTxOut() *TxOut {
 	out := &TxOut{
 		Amount: amount.NewCoinAmount(0, 0),
@@ -21,7 +21,7 @@ func NewTxOut() *TxOut {
 	return out
 }
 
-// Clone TODO
+// Clone returns the clonend value of it
 func (out *TxOut) Clone() *TxOut {
 	return &TxOut{
 		Amount:     out.Amount.Clone(),
@@ -29,7 +29,7 @@ func (out *TxOut) Clone() *TxOut {
 	}
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (out *TxOut) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := out.Amount.WriteTo(w); err != nil {
@@ -45,7 +45,7 @@ func (out *TxOut) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (out *TxOut) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := out.Amount.ReadFrom(r); err != nil {

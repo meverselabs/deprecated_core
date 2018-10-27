@@ -1,4 +1,4 @@
 package transaction
 
-// Type TODO
+// Type is a transaction type
 type Type uint8
