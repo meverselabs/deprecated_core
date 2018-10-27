@@ -5,7 +5,7 @@ import (
 	"git.fleta.io/fleta/core/account"
 )
 
-// Accounter TODO
+// Accounter provide account's handlers of the target chain
 type Accounter struct {
 	coord           *common.Coordinate
 	handlerTypeHash map[account.Type]*accountHandler
@@ -13,7 +13,7 @@ type Accounter struct {
 	typeHash        map[account.Type]*accountTypeItem
 }
 
-// NewAccounter TODO
+// NewAccounter retuns a Accounter
 func NewAccounter(coord *common.Coordinate) *Accounter {
 	act := &Accounter{
 		coord:           coord,
@@ -24,12 +24,12 @@ func NewAccounter(coord *common.Coordinate) *Accounter {
 	return act
 }
 
-// ChainCoord TODO
+// ChainCoord returns the coordinate of the target chain
 func (act *Accounter) ChainCoord() *common.Coordinate {
 	return act.coord
 }
 
-// Validate TODO
+// Validate supports the validation of the account with signers
 func (act *Accounter) Validate(loader Loader, acc account.Account, signers []common.PublicHash) error {
 	if item, has := act.handlerTypeHash[acc.Type()]; !has {
 		return ErrNotExistHandler
@@ -41,28 +41,23 @@ func (act *Accounter) Validate(loader Loader, acc account.Account, signers []com
 	}
 }
 
-// RegisterType TODO
+// RegisterType add the account type with handler loaded by the name from the global account registry
 func (act *Accounter) RegisterType(Name string, t account.Type) error {
 	item, err := loadAccountHandler(Name)
 	if err != nil {
 		return err
 	}
-	act.AddType(t, Name, item.Factory)
+	act.typeHash[t] = &accountTypeItem{
+		Type:    t,
+		Name:    Name,
+		Factory: item.Factory,
+	}
 	act.handlerTypeHash[t] = item
 	act.typeNameHash[Name] = t
 	return nil
 }
 
-// AddType TODO
-func (act *Accounter) AddType(Type account.Type, Name string, Factory AccountFactory) {
-	act.typeHash[Type] = &accountTypeItem{
-		Type:    Type,
-		Name:    Name,
-		Factory: Factory,
-	}
-}
-
-// NewByType TODO
+// NewByType generate an account instance by the type
 func (act *Accounter) NewByType(t account.Type) (account.Account, error) {
 	if item, has := act.typeHash[t]; has {
 		acc := item.Factory(t)
@@ -73,7 +68,7 @@ func (act *Accounter) NewByType(t account.Type) (account.Account, error) {
 	}
 }
 
-// NewByTypeName TODO
+// NewByTypeName generate an account instance by the name
 func (act *Accounter) NewByTypeName(name string) (account.Account, error) {
 	if t, has := act.typeNameHash[name]; has {
 		return act.NewByType(t)
@@ -82,7 +77,7 @@ func (act *Accounter) NewByTypeName(name string) (account.Account, error) {
 	}
 }
 
-// TypeByName TODO
+// TypeByName returns the type by the name
 func (act *Accounter) TypeByName(name string) (account.Type, error) {
 	if t, has := act.typeNameHash[name]; has {
 		return t, nil
@@ -93,7 +88,7 @@ func (act *Accounter) TypeByName(name string) (account.Type, error) {
 
 var accounterHandlerHash = map[string]*accountHandler{}
 
-// RegisterAccount TODO
+// RegisterAccount register account handlers to the global account registry
 func RegisterAccount(Name string, Factory AccountFactory, Validator AccountValidator) error {
 	if _, has := accounterHandlerHash[Name]; has {
 		return ErrExistHandler
@@ -123,8 +118,8 @@ type accountTypeItem struct {
 	Factory AccountFactory
 }
 
-// AccountFactory TODO
+// AccountFactory is a function type to generate an account instance by the type
 type AccountFactory func(t account.Type) account.Account
 
-// AccountValidator TODO
+// TransactionValidator is a function type to support the validation of the account with signers
 type AccountValidator func(loader Loader, acc account.Account, signers []common.PublicHash) error

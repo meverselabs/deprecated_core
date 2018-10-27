@@ -6,7 +6,7 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 )
 
-// Loader TODO
+// Loader is an interface to provide data from the target chain
 type Loader interface {
 	ChainCoord() *common.Coordinate
 	Accounter() *Accounter
@@ -25,7 +25,7 @@ type emptyLoader struct {
 	tran  *Transactor
 }
 
-// NewEmptyLoader TODO
+// NewEmptyLoader is used for generating genesis state
 func NewEmptyLoader(coord *common.Coordinate, act *Accounter, tran *Transactor) Loader {
 	return &emptyLoader{
 		coord: coord,
@@ -34,38 +34,47 @@ func NewEmptyLoader(coord *common.Coordinate, act *Accounter, tran *Transactor) 
 	}
 }
 
+// ChainCoord returns the coordinate of the target chain
 func (st *emptyLoader) ChainCoord() *common.Coordinate {
 	return st.coord
 }
 
+// Accounter returns the accounter of the target chain
 func (st *emptyLoader) Accounter() *Accounter {
 	return st.act
 }
 
+// Transactor returns the transactor of the target chain
 func (st *emptyLoader) Transactor() *Transactor {
 	return st.tran
 }
 
+// TargetHeight returns 0
 func (st *emptyLoader) TargetHeight() uint32 {
 	return 0
 }
 
+// Seq returns 0
 func (st *emptyLoader) Seq(addr common.Address) uint64 {
 	return 0
 }
 
+// Account returns ErrNotExistAccount
 func (st *emptyLoader) Account(addr common.Address) (account.Account, error) {
 	return nil, ErrNotExistAccount
 }
 
+// IsExistAccount returns false
 func (st *emptyLoader) IsExistAccount(addr common.Address) (bool, error) {
 	return false, nil
 }
 
+// AccountData returns nil
 func (st *emptyLoader) AccountData(addr common.Address, name []byte) []byte {
 	return nil
 }
 
+// UTXO returns ErrNotExistUTXO
 func (st *emptyLoader) UTXO(id uint64) (*transaction.UTXO, error) {
 	return nil, ErrNotExistUTXO
 }

@@ -6,7 +6,7 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 )
 
-// Transactor TODO
+// Transactor provide transaction's handlers of the target chain
 type Transactor struct {
 	coord           *common.Coordinate
 	handlerTypeHash map[transaction.Type]*transactionHandler
@@ -15,7 +15,7 @@ type Transactor struct {
 	typeHash        map[transaction.Type]*transactionTypeItem
 }
 
-// NewTransactor TODO
+// NewTransactor retuns a Transactor
 func NewTransactor(coord *common.Coordinate) *Transactor {
 	tran := &Transactor{
 		coord:           coord,
@@ -27,12 +27,12 @@ func NewTransactor(coord *common.Coordinate) *Transactor {
 	return tran
 }
 
-// ChainCoord TODO
+// ChainCoord returns the coordinate of the target chain
 func (tran *Transactor) ChainCoord() *common.Coordinate {
 	return tran.coord
 }
 
-// Validate TODO
+// Validate supports the validation of the transaction with signers
 func (tran *Transactor) Validate(loader Loader, tx transaction.Transaction, signers []common.PublicHash) error {
 	if !tran.coord.Equal(loader.ChainCoord()) {
 		return ErrInvalidChainCoordinate
@@ -51,7 +51,7 @@ func (tran *Transactor) Validate(loader Loader, tx transaction.Transaction, sign
 	}
 }
 
-// Execute TODO
+// Execute updates the context using the transaction and the coordinate of it
 func (tran *Transactor) Execute(ctx *Context, tx transaction.Transaction, coord *common.Coordinate) (interface{}, error) {
 	t := tx.Type()
 	if !tran.coord.Equal(ctx.ChainCoord()) {
@@ -72,29 +72,24 @@ func (tran *Transactor) Execute(ctx *Context, tx transaction.Transaction, coord 
 	}
 }
 
-// RegisterType TODO
+// RegisterType add the transaction type with handler loaded by the name from the global transaction registry
 func (tran *Transactor) RegisterType(Name string, t transaction.Type, Fee *amount.Amount) error {
 	item, err := loadTransactionHandler(Name)
 	if err != nil {
 		return err
 	}
-	tran.AddType(t, Name, item.Factory)
+	tran.typeHash[t] = &transactionTypeItem{
+		Type:    t,
+		Name:    Name,
+		Factory: item.Factory,
+	}
 	tran.handlerTypeHash[t] = item
 	tran.feeHash[t] = Fee
 	tran.typeNameHash[Name] = t
 	return nil
 }
 
-// AddType TODO
-func (tran *Transactor) AddType(Type transaction.Type, Name string, Factory TransactionFactory) {
-	tran.typeHash[Type] = &transactionTypeItem{
-		Type:    Type,
-		Name:    Name,
-		Factory: Factory,
-	}
-}
-
-// NewByType TODO
+// NewByType generate an transaction instance by the type
 func (tran *Transactor) NewByType(t transaction.Type) (transaction.Transaction, error) {
 	if item, has := tran.typeHash[t]; has {
 		tx := item.Factory(t)
@@ -105,7 +100,7 @@ func (tran *Transactor) NewByType(t transaction.Type) (transaction.Transaction, 
 	}
 }
 
-// NewByTypeName TODO
+// NewByTypeName generate an transaction instance by the name
 func (tran *Transactor) NewByTypeName(name string) (transaction.Transaction, error) {
 	if t, has := tran.typeNameHash[name]; has {
 		return tran.NewByType(t)
@@ -114,7 +109,7 @@ func (tran *Transactor) NewByTypeName(name string) (transaction.Transaction, err
 	}
 }
 
-// TypeByName TODO
+// TypeByName returns the type by the name
 func (tran *Transactor) TypeByName(name string) (transaction.Type, error) {
 	if t, has := tran.typeNameHash[name]; has {
 		return t, nil
@@ -125,7 +120,7 @@ func (tran *Transactor) TypeByName(name string) (transaction.Type, error) {
 
 var transactionHandlerHash = map[string]*transactionHandler{}
 
-// RegisterTransaction TODO
+// RegisterTransaction register transaction handlers to the global account registry
 func RegisterTransaction(Name string, Factory TransactionFactory, Validator TransactionValidator, Executor TransactionExecutor) error {
 	if _, has := transactionHandlerHash[Name]; has {
 		return ErrExistHandler
@@ -157,11 +152,11 @@ type transactionTypeItem struct {
 	Factory TransactionFactory
 }
 
-// TransactionFactory TODO
+// TransactionFactory is a function type to generate an account instance by the type
 type TransactionFactory func(t transaction.Type) transaction.Transaction
 
-// TransactionValidator TODO
+// TransactionValidator is a function type to support the validation of the transaction with signers
 type TransactionValidator func(loader Loader, tx transaction.Transaction, signers []common.PublicHash) error
 
-// TransactionExecutor TODO
+// TransactionExecutor is a function type to update the context using the transaction and the coordinate of it
 type TransactionExecutor func(ctx *Context, Fee *amount.Amount, tx transaction.Transaction, coord *common.Coordinate) (interface{}, error)

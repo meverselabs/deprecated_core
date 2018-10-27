@@ -11,13 +11,13 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 )
 
-// Context TODO
+// Context is an intermediate in-memory state using the context data stack between blocks
 type Context struct {
 	loader Loader
 	stack  []*ContextData
 }
 
-// NewContext TODO
+// NewContext returns a Context
 func NewContext(loader Loader) *Context {
 	ctx := &Context{
 		loader: loader,
@@ -26,47 +26,47 @@ func NewContext(loader Loader) *Context {
 	return ctx
 }
 
-// ChainCoord TODO
+// ChainCoord returns the coordinate of the target chain
 func (ctx *Context) ChainCoord() *common.Coordinate {
 	return ctx.loader.ChainCoord()
 }
 
-// Accounter TODO
+// Accounter returns the accounter of the target chain
 func (ctx *Context) Accounter() *Accounter {
 	return ctx.loader.Accounter()
 }
 
-// Transactor TODO
+// Transactor returns the transactor of the target chain
 func (ctx *Context) Transactor() *Transactor {
 	return ctx.loader.Transactor()
 }
 
-// TargetHeight TODO
+// TargetHeight returns the height of the processing block
 func (ctx *Context) TargetHeight() uint32 {
 	return ctx.loader.TargetHeight()
 }
 
-// Top TODO
+// Top returns the top snapshot
 func (ctx *Context) Top() *ContextData {
 	return ctx.stack[len(ctx.stack)-1]
 }
 
-// Seq TODO
+// Seq returns the sequence of the target account
 func (ctx *Context) Seq(addr common.Address) uint64 {
 	return ctx.Top().Seq(addr)
 }
 
-// AddSeq TODO
+// AddSeq update the sequence of the target account
 func (ctx *Context) AddSeq(addr common.Address) {
 	ctx.Top().AddSeq(addr)
 }
 
-// Account TODO
+// Account retuns the account instance of the address
 func (ctx *Context) Account(addr common.Address) (account.Account, error) {
 	return ctx.Top().Account(addr)
 }
 
-// IsExistAccount TODO
+// IsExistAccount checks that the account of the address is exist or not
 func (ctx *Context) IsExistAccount(addr common.Address) (bool, error) {
 	if _, err := ctx.Account(addr); err != nil {
 		if err != ErrNotExistAccount {
@@ -78,56 +78,56 @@ func (ctx *Context) IsExistAccount(addr common.Address) (bool, error) {
 	}
 }
 
-// CreateAccount TODO
+// CreateAccount inserts the account to the top snapshot
 func (ctx *Context) CreateAccount(acc account.Account) error {
 	return ctx.Top().CreateAccount(acc)
 }
 
-// DeleteAccount TODO
+// DeleteAccount deletes the account from the top snapshot
 func (ctx *Context) DeleteAccount(acc account.Account) error {
 	return ctx.Top().DeleteAccount(acc)
 }
 
-// AccountData TODO
+// AccountData returns the account data from the top snapshot
 func (ctx *Context) AccountData(addr common.Address, name []byte) []byte {
 	return ctx.Top().AccountData(addr, name)
 }
 
-// SetAccountData TODO
+// SetAccountData inserts the account data to the top snapshot
 func (ctx *Context) SetAccountData(addr common.Address, name []byte, value []byte) {
 	ctx.Top().SetAccountData(addr, name, value)
 }
 
-// UTXO TODO
+// UTXO returns the UTXO from the top snapshot
 func (ctx *Context) UTXO(id uint64) (*transaction.UTXO, error) {
 	return ctx.Top().UTXO(id)
 }
 
-// CreateUTXO TODO
+// CreateUTXO inserts the UTXO to the top snapshot
 func (ctx *Context) CreateUTXO(id uint64, vout *transaction.TxOut) error {
 	return ctx.Top().CreateUTXO(id, vout)
 }
 
-// DeleteUTXO TODO
+// DeleteUTXO deletes the UTXO from the top snapshot
 func (ctx *Context) DeleteUTXO(id uint64) error {
 	return ctx.Top().DeleteUTXO(id)
 }
 
-// Snapshot TODO
+// Snapshot push a snapshot and returns the snapshot number of it
 func (ctx *Context) Snapshot() int {
 	ctd := NewContextData(ctx.loader, ctx.Top())
 	ctx.stack = append(ctx.stack, ctd)
 	return len(ctx.stack)
 }
 
-// Revert TODO
+// Revert removes snapshots after the snapshot number
 func (ctx *Context) Revert(sn int) {
 	if len(ctx.stack) >= sn {
 		ctx.stack = ctx.stack[:sn-1]
 	}
 }
 
-// Commit TODO
+// Commit apply snapshots to the top after the snapshot number
 func (ctx *Context) Commit(sn int) {
 	for len(ctx.stack) >= sn {
 		ctd := ctx.Top()
@@ -168,12 +168,12 @@ func (ctx *Context) Commit(sn int) {
 	}
 }
 
-// StackSize TODO
+// StackSize retuns the size of the context data stack
 func (ctx *Context) StackSize() int {
 	return len(ctx.stack)
 }
 
-// ContextData TODO
+// ContextData is a state data of the context
 type ContextData struct {
 	loader                 Loader
 	Parent                 *ContextData
@@ -188,7 +188,7 @@ type ContextData struct {
 	DeletedUTXOHash        map[uint64]bool
 }
 
-// NewContextData TODO
+// NewContextData retuns a ContextData
 func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 	ctd := &ContextData{
 		loader:                 loader,
@@ -206,7 +206,7 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 	return ctd
 }
 
-// Hash TODO
+// Hash retuns the hash value of it
 func (ctd *ContextData) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
 	buffer.WriteString("SeqHash")
@@ -347,7 +347,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 	return hash.Hash(buffer.Bytes())
 }
 
-// Seq TODO
+// Seq returns the sequence of the account
 func (ctd *ContextData) Seq(addr common.Address) uint64 {
 	if _, has := ctd.DeletedAccountHash[addr]; has {
 		return 0
@@ -369,7 +369,7 @@ func (ctd *ContextData) Seq(addr common.Address) uint64 {
 	}
 }
 
-// AddSeq TODO
+// AddSeq update the sequence of the target account
 func (ctd *ContextData) AddSeq(addr common.Address) {
 	if _, has := ctd.DeletedAccountHash[addr]; has {
 		return
@@ -377,7 +377,7 @@ func (ctd *ContextData) AddSeq(addr common.Address) {
 	ctd.SeqHash[addr] = ctd.Seq(addr) + 1
 }
 
-// Account TODO
+// Account retuns the account instance of the address
 func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 	if _, has := ctd.DeletedAccountHash[addr]; has {
 		return nil, ErrNotExistAccount
@@ -405,7 +405,7 @@ func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 
 }
 
-// CreateAccount TODO
+// CreateAccount inserts the account
 func (ctd *ContextData) CreateAccount(acc account.Account) error {
 	if _, err := ctd.Account(acc.Address()); err != nil {
 		if err != ErrNotExistAccount {
@@ -418,7 +418,7 @@ func (ctd *ContextData) CreateAccount(acc account.Account) error {
 	return nil
 }
 
-// DeleteAccount TODO
+// DeleteAccount deletes the account
 func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 	if _, err := ctd.Account(acc.Address()); err != nil {
 		return err
@@ -428,7 +428,7 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 	return nil
 }
 
-// AccountData TODO
+// AccountData returns the account data
 func (ctd *ContextData) AccountData(addr common.Address, name []byte) []byte {
 	key := string(addr[:]) + string(name)
 	if ctd.DeletedAccountDataHash[key] {
@@ -457,7 +457,7 @@ func (ctd *ContextData) AccountData(addr common.Address, name []byte) []byte {
 	}
 }
 
-// SetAccountData TODO
+// SetAccountData inserts the account data
 func (ctd *ContextData) SetAccountData(addr common.Address, name []byte, value []byte) {
 	key := string(addr[:]) + string(name)
 	if len(value) == 0 {
@@ -469,7 +469,7 @@ func (ctd *ContextData) SetAccountData(addr common.Address, name []byte, value [
 	}
 }
 
-// UTXO TODO
+// UTXO returns the UTXO
 func (ctd *ContextData) UTXO(id uint64) (*transaction.UTXO, error) {
 	if ctd.DeletedUTXOHash[id] {
 		return nil, ErrDoubleSpent
@@ -494,7 +494,7 @@ func (ctd *ContextData) UTXO(id uint64) (*transaction.UTXO, error) {
 	}
 }
 
-// CreateUTXO TODO
+// CreateUTXO inserts the UTXO
 func (ctd *ContextData) CreateUTXO(id uint64, vout *transaction.TxOut) error {
 	if _, err := ctd.UTXO(id); err != nil {
 		if err != ErrNotExistUTXO {
@@ -507,7 +507,7 @@ func (ctd *ContextData) CreateUTXO(id uint64, vout *transaction.TxOut) error {
 	return nil
 }
 
-// DeleteUTXO TODO
+// DeleteUTXO deletes the UTXO
 func (ctd *ContextData) DeleteUTXO(id uint64) error {
 	if _, err := ctd.UTXO(id); err != nil {
 		return err

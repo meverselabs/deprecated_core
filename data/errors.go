@@ -2,7 +2,7 @@ package data
 
 import "errors"
 
-// transaction errors
+// data errors
 var (
 	ErrExistAccount           = errors.New("exist account")
 	ErrNotExistAccount        = errors.New("not exist account")
