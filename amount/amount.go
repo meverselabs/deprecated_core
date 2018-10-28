@@ -127,7 +127,7 @@ func (am *Amount) Less(b *Amount) bool {
 	return am.Int.Cmp(b.Int) < 0
 }
 
-// Equal checks compare two values and returns true or false
+// Equal checks that two values is same or not
 func (am *Amount) Equal(b *Amount) bool {
 	return am.Int.Cmp(b.Int) == 0
 }

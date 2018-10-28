@@ -110,7 +110,7 @@ func (rank *Rank) Less(b *Rank) bool {
 	return rank.score < b.score || (rank.score == b.score && bytes.Compare(rank.Address[:], b.Address[:]) < 0)
 }
 
-// Equal checks compare two values and returns true or false
+// Equal checks that two values is same or not
 func (rank *Rank) Equal(b *Rank) bool {
 	return rank.score == b.score && bytes.Equal(rank.Address[:], b.Address[:])
 }
@@ -121,7 +121,7 @@ func (rank *Rank) IsZero() bool {
 	return rank.score == 0 && bytes.Compare(rank.Address[:], empty[:]) == 0
 }
 
-// Set set the rank properties and update the score
+// Set updates rank's properties and update the score
 func (rank *Rank) Set(phase uint32, hashSpace hash.Hash256) {
 	rank.phase = phase
 	rank.hashSpace = hashSpace
