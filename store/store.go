@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"git.fleta.io/fleta/common"
@@ -20,13 +21,14 @@ import (
 // Store saves the target chain state
 // All updates are executed in one transaction with FileSync option
 type Store struct {
-	db         *badger.DB
-	lockfile   *os.File
-	ticker     *time.Ticker
-	cache      storeCache
-	accounter  *data.Accounter
-	transactor *data.Transactor
-	SeqHash    map[common.Address]uint64
+	db          *badger.DB
+	lockfile    *os.File
+	ticker      *time.Ticker
+	cache       storeCache
+	accounter   *data.Accounter
+	transactor  *data.Transactor
+	SeqHashLock sync.Mutex
+	SeqHash     map[common.Address]uint64
 }
 
 type storeCache struct {
@@ -140,6 +142,8 @@ func (st *Store) Accounts() ([]account.Account, error) {
 
 // Seq returns the sequence of the transaction
 func (st *Store) Seq(addr common.Address) uint64 {
+	st.SeqHashLock.Lock()
+	defer st.SeqHashLock.Unlock()
 	if seq, has := st.SeqHash[addr]; has {
 		return seq
 	} else {
@@ -479,9 +483,11 @@ func (st *Store) StoreGenesis(ctd *data.ContextData, GenesisHash hash.Hash256, c
 	st.cache.height = 0
 	st.cache.heightBlockHash = GenesisHash
 	st.cache.cached = true
+	st.SeqHashLock.Lock()
 	for k, v := range ctd.SeqHash {
 		st.SeqHash[k] = v
 	}
+	st.SeqHashLock.Unlock()
 	return nil
 }
 
@@ -534,9 +540,11 @@ func (st *Store) StoreBlock(ctd *data.ContextData, b *block.Block, s *block.Obse
 	st.cache.height = b.Header.Height
 	st.cache.heightBlockHash = blockHash
 	st.cache.cached = true
+	st.SeqHashLock.Lock()
 	for k, v := range ctd.SeqHash {
 		st.SeqHash[k] = v
 	}
+	st.SeqHashLock.Unlock()
 	return nil
 }
 
