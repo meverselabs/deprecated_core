@@ -60,13 +60,14 @@ func (gn *Generator) GenerateBlock(Transactor *data.Transactor, TxPool *txpool.T
 	timer := time.NewTimer(gn.config.GenTimeThreshold)
 	TxHashes := make([]hash.Hash256, 0, 65535)
 
+	TxPool.Lock() // Prevent delaying from TxPool.Push
 TxLoop:
 	for {
 		select {
 		case <-timer.C:
 			break TxLoop
 		default:
-			item := TxPool.Pop(ctx)
+			item := TxPool.UnsafePop(ctx)
 			if item == nil {
 				break TxLoop
 			}
@@ -82,6 +83,7 @@ TxLoop:
 			TxHashes = append(TxHashes, item.TxHash)
 		}
 	}
+	TxPool.Unlock() // Prevent delaying from TxPool.Push
 
 	if h, err := level.BuildLevelRoot(TxHashes); err != nil {
 		return nil, nil, err

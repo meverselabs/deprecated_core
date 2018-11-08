@@ -51,6 +51,11 @@ func (tp *TransactionPool) IsExist(TxHash hash.Hash256) bool {
 	return tp.txidHash[TxHash]
 }
 
+// Size returns the size of TxPool
+func (tp *TransactionPool) Size() int {
+	return tp.turnQ.Size() - len(tp.turnOutHash)
+}
+
 // Push inserts the transaction and signatures of it by base model and sequence
 // An UTXO model based transaction will be handled by FIFO
 // An account model based transaction will be sorted by the sequence value
@@ -131,6 +136,11 @@ func (tp *TransactionPool) Pop(SeqCache SeqCache) *PoolItem {
 	tp.Lock()
 	defer tp.Unlock()
 
+	return tp.UnsafePop(SeqCache)
+}
+
+// UnsafePop returns and removes the proper transaction without mutex locking
+func (tp *TransactionPool) UnsafePop(SeqCache SeqCache) *PoolItem {
 	var bTurn bool
 	for {
 		turn := tp.turnQ.Pop()
