@@ -198,7 +198,7 @@ func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
 
 // GenerateBlock generates the next block (*only for a formulator)
 func (kn *Kernel) GenerateBlock(TimeoutCount uint32) (*block.Block, *block.ObserverSigned, error) {
-	if kn.Generator != nil {
+	if kn.Generator == nil {
 		return nil, nil, ErrNotFormulator
 	}
 	ctx := data.NewContext(kn.Store)
