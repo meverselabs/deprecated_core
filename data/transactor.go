@@ -118,6 +118,15 @@ func (tran *Transactor) TypeByName(name string) (transaction.Type, error) {
 	}
 }
 
+// NameByType returns the name by the type
+func (tran *Transactor) NameByType(t transaction.Type) (string, error) {
+	if item, has := tran.typeHash[t]; has {
+		return item.Name, nil
+	} else {
+		return "", ErrUnknownTransactionType
+	}
+}
+
 var transactionHandlerHash = map[string]*transactionHandler{}
 
 // RegisterTransaction register transaction handlers to the global account registry

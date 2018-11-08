@@ -86,6 +86,15 @@ func (act *Accounter) TypeByName(name string) (account.Type, error) {
 	}
 }
 
+// NameByType returns the name by the type
+func (act *Accounter) NameByType(t account.Type) (string, error) {
+	if item, has := act.typeHash[t]; has {
+		return item.Name, nil
+	} else {
+		return "", ErrUnknownTransactionType
+	}
+}
+
 var accounterHandlerHash = map[string]*accountHandler{}
 
 // RegisterAccount register account handlers to the global account registry
