@@ -92,6 +92,16 @@ func NewStore(path string, act *data.Accounter, tran *data.Transactor) (*Store, 
 	}, nil
 }
 
+// Close terminate and clean store
+func (st *Store) Close() {
+	st.db.Close()
+	st.lockfile.Close()
+	st.ticker.Stop()
+	st.db = nil
+	st.lockfile = nil
+	st.ticker = nil
+}
+
 // ChainCoord returns the coordinate of the target chain
 func (st *Store) ChainCoord() *common.Coordinate {
 	return st.accounter.ChainCoord()
