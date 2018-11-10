@@ -28,7 +28,6 @@ import (
 type Kernel struct {
 	ChainCoord    *common.Coordinate
 	Consensus     *consensus.Consensus
-	Transactor    *data.Transactor
 	Store         *store.Store
 	TxPool        *txpool.TransactionPool
 	Generator     *generator.Generator
@@ -171,7 +170,7 @@ func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
 					}
 					signers = append(signers, common.NewPublicHash(pubkey))
 				}
-				if err := kn.Transactor.Validate(kn.Store, tx, signers); err != nil {
+				if err := kn.Store.Transactor().Validate(kn.Store, tx, signers); err != nil {
 					errs <- err
 					return
 				}
@@ -189,7 +188,7 @@ func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
 		return ErrInvalidHashLevelRoot
 	}
 	for i, tx := range b.Transactions {
-		if _, err := kn.Transactor.Execute(ctx, tx, &common.Coordinate{Height: b.Header.Height, Index: uint16(i)}); err != nil {
+		if _, err := kn.Store.Transactor().Execute(ctx, tx, &common.Coordinate{Height: b.Header.Height, Index: uint16(i)}); err != nil {
 			return err
 		}
 	}
@@ -212,7 +211,7 @@ func (kn *Kernel) GenerateBlock(TimeoutCount uint32) (*block.Block, *block.Obser
 	} else if !is {
 		return nil, nil, ErrInvalidGenerateRequest
 	}
-	nb, ns, err := kn.Generator.GenerateBlock(kn.Transactor, kn.TxPool, ctx, TimeoutCount, kn.ChainCoord, PrevHeight, PrevHash)
+	nb, ns, err := kn.Generator.GenerateBlock(kn.Store.Transactor(), kn.TxPool, ctx, TimeoutCount, kn.ChainCoord, PrevHeight, PrevHash)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -258,7 +257,7 @@ func (kn *Kernel) RecvTransaction(tx transaction.Transaction, sigs []common.Sign
 		}
 		signers = append(signers, common.NewPublicHash(pubkey))
 	}
-	if err := kn.Transactor.Validate(kn.Store, tx, signers); err != nil {
+	if err := kn.Store.Transactor().Validate(kn.Store, tx, signers); err != nil {
 		return err
 	}
 	if err := kn.TxPool.Push(tx, sigs); err != nil {
