@@ -32,6 +32,8 @@ type Kernel struct {
 	TxPool        *txpool.TransactionPool
 	Generator     *generator.Generator
 	ObserverProxy observer_proxy.ObserverProxy
+	closeLock     sync.RWMutex
+	isClose       bool
 }
 
 // Init builds the genesis if it is not generated and stored yet.
@@ -87,6 +89,23 @@ func (kn *Kernel) Init(ObserverSignatures []string, GenesisContextData *data.Con
 	return nil
 }
 
+// Close terminate and clean kernel
+func (kn *Kernel) Close() {
+	kn.closeLock.Lock()
+	defer kn.closeLock.Unlock()
+
+	kn.Store.Close()
+	kn.isClose = true
+}
+
+// IsClose returns the close status of kernel
+func (kn *Kernel) IsClose() bool {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+
+	return kn.isClose
+}
+
 // Reward returns the mining reward
 func (kn *Kernel) Reward(Height uint32) *amount.Amount {
 	// TEMP
@@ -95,6 +114,12 @@ func (kn *Kernel) Reward(Height uint32) *amount.Amount {
 
 // RecvBlock proccesses and connect the new block
 func (kn *Kernel) RecvBlock(b *block.Block, s *block.ObserverSigned) error {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return ErrClosed
+	}
+
 	if !b.Header.ChainCoord.Equal(kn.ChainCoord) {
 		return ErrInvalidChainCoordinate
 	}
@@ -197,9 +222,16 @@ func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
 
 // GenerateBlock generates the next block (*only for a formulator)
 func (kn *Kernel) GenerateBlock(TimeoutCount uint32) (*block.Block, *block.ObserverSigned, error) {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return nil, nil, ErrClosed
+	}
+
 	if kn.Generator == nil {
 		return nil, nil, ErrNotFormulator
 	}
+
 	ctx := data.NewContext(kn.Store)
 	PrevHeight := kn.Store.Height()
 	PrevHash, err := kn.Store.BlockHash(PrevHeight)
@@ -242,6 +274,12 @@ func (kn *Kernel) GenerateBlock(TimeoutCount uint32) (*block.Block, *block.Obser
 
 // RecvTransaction validate the transaction and push it to the pool
 func (kn *Kernel) RecvTransaction(tx transaction.Transaction, sigs []common.Signature) error {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return ErrClosed
+	}
+
 	if !tx.ChainCoord().Equal(kn.ChainCoord) {
 		return ErrInvalidChainCoordinate
 	}

@@ -11,4 +11,5 @@ var (
 	ErrDirtyContext              = errors.New("dirty context")
 	ErrInvalidGenerateRequest    = errors.New("invalid generate request")
 	ErrNotFormulator             = errors.New("not formulator")
+	ErrClosed                    = errors.New("closed")
 )
