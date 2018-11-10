@@ -53,6 +53,9 @@ func (tp *TransactionPool) IsExist(TxHash hash.Hash256) bool {
 
 // Size returns the size of TxPool
 func (tp *TransactionPool) Size() int {
+	tp.Lock()
+	defer tp.Unlock()
+
 	return tp.turnQ.Size() - len(tp.turnOutHash)
 }
 

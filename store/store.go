@@ -144,6 +144,7 @@ func (st *Store) Accounts() ([]account.Account, error) {
 func (st *Store) Seq(addr common.Address) uint64 {
 	st.SeqHashLock.Lock()
 	defer st.SeqHashLock.Unlock()
+
 	if seq, has := st.SeqHash[addr]; has {
 		return seq
 	} else {
