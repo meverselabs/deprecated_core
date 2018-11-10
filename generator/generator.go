@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"git.fleta.io/fleta/core/data"
+	"git.fleta.io/fleta/core/key"
 	"git.fleta.io/fleta/core/level"
 	"git.fleta.io/fleta/core/txpool"
 
@@ -12,33 +13,39 @@ import (
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/transaction"
-	"git.fleta.io/fleta/core/wallet/key"
 )
 
 // Config is a generator's config
 type Config struct {
-	Address          common.Address
+	Address          string
 	BlockVersion     uint16
 	GenTimeThreshold time.Duration
-	Signer           key.Key
 }
 
 // Generator makes block using the config and chain informations
 type Generator struct {
-	config *Config
+	config  *Config
+	address common.Address
+	signer  key.Key
 }
 
 // NewGenerator returns a Generator
-func NewGenerator(config *Config) *Generator {
-	gn := &Generator{
-		config: config,
+func NewGenerator(config *Config, Signer key.Key) (*Generator, error) {
+	addr, err := common.ParseAddress(config.Address)
+	if err != nil {
+		return nil, err
 	}
-	return gn
+	gn := &Generator{
+		config:  config,
+		address: addr,
+		signer:  Signer,
+	}
+	return gn, nil
 }
 
 // Address returns the address of the formulator
 func (gn *Generator) Address() common.Address {
-	return gn.config.Address.Clone()
+	return gn.address.Clone()
 }
 
 // GenerateBlock generate a next block and its signature using transactions in the pool
@@ -92,7 +99,7 @@ TxLoop:
 	}
 
 	blockHash := b.Header.Hash()
-	if sig, err := gn.config.Signer.Sign(blockHash); err != nil {
+	if sig, err := gn.signer.Sign(blockHash); err != nil {
 		return nil, nil, err
 	} else {
 		s := &block.Signed{
