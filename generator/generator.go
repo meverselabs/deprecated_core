@@ -19,26 +19,38 @@ import (
 type Config struct {
 	Address          string
 	BlockVersion     uint16
-	GenTimeThreshold time.Duration
+	GenTimeThreshold uint16
 }
 
 // Generator makes block using the config and chain informations
 type Generator struct {
-	config  *Config
-	address common.Address
-	signer  key.Key
+	config           *Config
+	address          common.Address
+	genTimeThreshold time.Duration
+	signer           key.Key
 }
 
 // NewGenerator returns a Generator
-func NewGenerator(config *Config, Signer key.Key) (*Generator, error) {
-	addr, err := common.ParseAddress(config.Address)
+func NewGenerator(Config *Config, Signer key.Key) (*Generator, error) {
+	if len(Config.Address) == 0 {
+		return nil, ErrInvalidGeneratorAddress
+	}
+	if Config.BlockVersion == 0 {
+		return nil, ErrInvalidBlockVersion
+	}
+	if Config.GenTimeThreshold == 0 {
+		return nil, ErrInvalidGenTimeThreshold
+	}
+
+	addr, err := common.ParseAddress(Config.Address)
 	if err != nil {
 		return nil, err
 	}
 	gn := &Generator{
-		config:  config,
-		address: addr,
-		signer:  Signer,
+		config:           Config,
+		address:          addr,
+		genTimeThreshold: time.Duration(Config.GenTimeThreshold) * time.Millisecond,
+		signer:           Signer,
 	}
 	return gn, nil
 }
@@ -64,7 +76,7 @@ func (gn *Generator) GenerateBlock(Transactor *data.Transactor, TxPool *txpool.T
 		TransactionSignatures: [][]common.Signature{},
 	}
 
-	timer := time.NewTimer(gn.config.GenTimeThreshold)
+	timer := time.NewTimer(gn.genTimeThreshold)
 	TxHashes := make([]hash.Hash256, 0, 65535)
 
 	TxPool.Lock() // Prevent delaying from TxPool.Push
@@ -88,9 +100,14 @@ TxLoop:
 			b.TransactionSignatures = append(b.TransactionSignatures, item.Signatures)
 
 			TxHashes = append(TxHashes, item.TxHash)
+
+			if len(TxHashes) >= 20000 {
+				break TxLoop
+			}
 		}
 	}
 	TxPool.Unlock() // Prevent delaying from TxPool.Push
+	log.Println("HERE", len(TxHashes), TxPool.Size())
 
 	if h, err := level.BuildLevelRoot(TxHashes); err != nil {
 		return nil, nil, err
