@@ -7,7 +7,7 @@ import (
 
 	"git.fleta.io/fleta/common/hash"
 
-	"git.fleta.io/fleta/core/observer_proxy"
+	"git.fleta.io/fleta/core/observer_connector"
 	"git.fleta.io/fleta/core/txpool"
 
 	"git.fleta.io/fleta/common"
@@ -26,14 +26,14 @@ import (
 // It based on Proof-of-Formulation and Account/UTXO hybrid model
 // All kinds of accounts and transactions processed the out side of kernel
 type Kernel struct {
-	ChainCoord    *common.Coordinate
-	Consensus     *consensus.Consensus
-	Store         *store.Store
-	TxPool        *txpool.TransactionPool
-	Generator     *generator.Generator
-	ObserverProxy observer_proxy.ObserverProxy
-	closeLock     sync.RWMutex
-	isClose       bool
+	ChainCoord        *common.Coordinate
+	Consensus         *consensus.Consensus
+	Store             *store.Store
+	TxPool            *txpool.TransactionPool
+	Generator         *generator.Generator
+	ObserverConnector observer_connector.ObserverConnector
+	closeLock         sync.RWMutex
+	isClose           bool
 }
 
 // Init builds the genesis if it is not generated and stored yet.
@@ -248,7 +248,7 @@ func (kn *Kernel) GenerateBlock(TimeoutCount uint32) (*block.Block, *block.Obser
 		return nil, nil, err
 	}
 	// TODO : EventBlockGenerated
-	nos, err := kn.ObserverProxy.RequestSign(nb, ns)
+	nos, err := kn.ObserverConnector.RequestSign(nb, ns)
 	if err != nil {
 		return nil, nil, err
 	}
