@@ -17,9 +17,10 @@ import (
 
 // Config is a generator's config
 type Config struct {
-	Address          string
-	BlockVersion     uint16
-	GenTimeThreshold uint16
+	Address           string
+	BlockVersion      uint16
+	GenTimeThreshold  uint16
+	ObserverAddresses []string
 }
 
 // Generator makes block using the config and chain informations
