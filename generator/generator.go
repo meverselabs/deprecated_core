@@ -108,7 +108,6 @@ TxLoop:
 		}
 	}
 	TxPool.Unlock() // Prevent delaying from TxPool.Push
-	log.Println("HERE", len(TxHashes), TxPool.Size())
 
 	if h, err := level.BuildLevelRoot(TxHashes); err != nil {
 		return nil, nil, err
