@@ -54,23 +54,21 @@ func init() {
 		}
 
 		chainCoord := ctx.ChainCoord()
-		fromBalance := fromAcc.Balance(chainCoord)
-		if fromBalance.Less(Fee) {
-			return nil, ErrInsuffcientBalance
-		}
-		fromBalance = fromBalance.Sub(Fee)
-		fromAcc.SetBalance(chainCoord, fromBalance)
-
-		toAcc, err := ctx.Account(tx.To)
+		fromBalance, err := ctx.AccountBalance(tx.From())
 		if err != nil {
 			return nil, err
 		}
-		for _, TokenCoord := range fromAcc.TokenCoords() {
-			fromBalance := fromAcc.Balance(TokenCoord)
-			fromAcc.SetBalance(TokenCoord, amount.NewCoinAmount(0, 0))
-			toBalance := toAcc.Balance(TokenCoord)
-			toBalance = toBalance.Add(fromBalance)
-			toAcc.SetBalance(TokenCoord, toBalance)
+		if err := fromBalance.SubBalance(chainCoord, Fee); err != nil {
+			return nil, err
+		}
+
+		toBalance, err := ctx.AccountBalance(tx.To)
+		if err != nil {
+			return nil, err
+		}
+		for _, TokenCoord := range fromBalance.TokenCoords() {
+			balance := fromBalance.ClearBalance(TokenCoord)
+			toBalance.AddBalance(TokenCoord, balance)
 		}
 		ctx.DeleteAccount(fromAcc)
 
