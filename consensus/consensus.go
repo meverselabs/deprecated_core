@@ -29,13 +29,7 @@ func NewConsensus(ObserverSignatureHash map[common.PublicHash]bool, FormulationA
 }
 
 // ValidateBlock validate the block with signatures and previus block's information
-func (cs *Consensus) ValidateBlock(b *block.Block, s *block.ObserverSigned, PrevHeight uint32, LastBlockHash hash.Hash256) error {
-	if b.Header.Height != PrevHeight+1 {
-		return ErrInvalidPrevBlockHeight
-	}
-	if !b.Header.HashPrevBlock.Equal(LastBlockHash) {
-		return ErrInvalidPrevBlockHash
-	}
+func (cs *Consensus) ValidateBlock(b *block.Block, s *block.ObserverSigned) error {
 	members := cs.RankTable.Candidates(int(b.Header.TimeoutCount) + 1)
 	if members == nil {
 		return ErrInsufficientCandidateCount

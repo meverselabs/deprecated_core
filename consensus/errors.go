@@ -4,8 +4,6 @@ import "errors"
 
 // consensus errors
 var (
-	ErrInvalidPrevBlockHash          = errors.New("invalid prev block hash")
-	ErrInvalidPrevBlockHeight        = errors.New("invalid prev block height")
 	ErrInsufficientCandidateCount    = errors.New("insufficient candidate count")
 	ErrInvalidTopMember              = errors.New("invalid top member")
 	ErrInvalidTopSignature           = errors.New("invalid top signature")
