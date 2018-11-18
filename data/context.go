@@ -13,17 +13,32 @@ import (
 
 // Context is an intermediate in-memory state using the context data stack between blocks
 type Context struct {
-	loader Loader
-	stack  []*ContextData
+	loader          Loader
+	genTargetHeight uint32
+	getPrevHash     hash.Hash256
+	stack           []*ContextData
+	isOldHash       bool
+	dataHash        hash.Hash256
 }
 
 // NewContext returns a Context
 func NewContext(loader Loader) *Context {
 	ctx := &Context{
-		loader: loader,
-		stack:  []*ContextData{NewContextData(loader, nil)},
+		loader:          loader,
+		genTargetHeight: loader.TargetHeight(),
+		getPrevHash:     loader.LastBlockHash(),
+		stack:           []*ContextData{NewContextData(loader, nil)},
 	}
 	return ctx
+}
+
+// Hash returns the hash value of it
+func (ctx *Context) Hash() hash.Hash256 {
+	if ctx.isOldHash {
+		ctx.dataHash = ctx.Top().Hash()
+		ctx.isOldHash = false
+	}
+	return ctx.dataHash
 }
 
 // ChainCoord returns the coordinate of the target chain
@@ -41,9 +56,14 @@ func (ctx *Context) Transactor() *Transactor {
 	return ctx.loader.Transactor()
 }
 
-// TargetHeight returns the height of the processing block
+// TargetHeight returns the recorded target height when context generation
 func (ctx *Context) TargetHeight() uint32 {
-	return ctx.loader.TargetHeight()
+	return ctx.genTargetHeight
+}
+
+// LastBlockHash returns the last block hash of the target chain
+func (ctx *Context) LastBlockHash() hash.Hash256 {
+	return ctx.getPrevHash
 }
 
 // Top returns the top snapshot
@@ -58,34 +78,37 @@ func (ctx *Context) Seq(addr common.Address) uint64 {
 
 // AddSeq update the sequence of the target account
 func (ctx *Context) AddSeq(addr common.Address) {
+	ctx.isOldHash = true
 	ctx.Top().AddSeq(addr)
 }
 
 // Account returns the account instance of the address
 func (ctx *Context) Account(addr common.Address) (account.Account, error) {
+	ctx.isOldHash = true
 	return ctx.Top().Account(addr)
 }
 
 // IsExistAccount checks that the account of the address is exist or not
 func (ctx *Context) IsExistAccount(addr common.Address) (bool, error) {
-	if _, err := ctx.Account(addr); err != nil {
-		if err != ErrNotExistAccount {
-			return true, err
-		}
-		return false, nil
-	} else {
-		return true, nil
-	}
+	return ctx.Top().IsExistAccount(addr)
 }
 
 // CreateAccount inserts the account to the top snapshot
 func (ctx *Context) CreateAccount(acc account.Account) error {
+	ctx.isOldHash = true
 	return ctx.Top().CreateAccount(acc)
 }
 
 // DeleteAccount deletes the account from the top snapshot
 func (ctx *Context) DeleteAccount(acc account.Account) error {
+	ctx.isOldHash = true
 	return ctx.Top().DeleteAccount(acc)
+}
+
+// AccountBalance returns the account balance
+func (ctx *Context) AccountBalance(addr common.Address) (*account.Balance, error) {
+	ctx.isOldHash = true
+	return ctx.Top().AccountBalance(addr)
 }
 
 // AccountData returns the account data from the top snapshot
@@ -95,6 +118,7 @@ func (ctx *Context) AccountData(addr common.Address, name []byte) []byte {
 
 // SetAccountData inserts the account data to the top snapshot
 func (ctx *Context) SetAccountData(addr common.Address, name []byte, value []byte) {
+	ctx.isOldHash = true
 	ctx.Top().SetAccountData(addr, name, value)
 }
 
@@ -105,16 +129,19 @@ func (ctx *Context) UTXO(id uint64) (*transaction.UTXO, error) {
 
 // CreateUTXO inserts the UTXO to the top snapshot
 func (ctx *Context) CreateUTXO(id uint64, vout *transaction.TxOut) error {
+	ctx.isOldHash = true
 	return ctx.Top().CreateUTXO(id, vout)
 }
 
 // DeleteUTXO deletes the UTXO from the top snapshot
 func (ctx *Context) DeleteUTXO(id uint64) error {
+	ctx.isOldHash = true
 	return ctx.Top().DeleteUTXO(id)
 }
 
 // Snapshot push a snapshot and returns the snapshot number of it
 func (ctx *Context) Snapshot() int {
+	ctx.isOldHash = true
 	ctd := NewContextData(ctx.loader, ctx.Top())
 	ctx.stack = append(ctx.stack, ctd)
 	return len(ctx.stack)
@@ -122,6 +149,7 @@ func (ctx *Context) Snapshot() int {
 
 // Revert removes snapshots after the snapshot number
 func (ctx *Context) Revert(sn int) {
+	ctx.isOldHash = true
 	if len(ctx.stack) >= sn {
 		ctx.stack = ctx.stack[:sn-1]
 	}
@@ -129,6 +157,7 @@ func (ctx *Context) Revert(sn int) {
 
 // Commit apply snapshots to the top after the snapshot number
 func (ctx *Context) Commit(sn int) {
+	ctx.isOldHash = true
 	for len(ctx.stack) >= sn {
 		ctd := ctx.Top()
 		ctx.stack = ctx.stack[:len(ctx.stack)-1]
@@ -146,6 +175,9 @@ func (ctx *Context) Commit(sn int) {
 			delete(top.AccountHash, k)
 			delete(top.CreatedAccountHash, k)
 			top.DeletedAccountHash[k] = v
+		}
+		for k, v := range ctd.AccountBalanceHash {
+			top.AccountBalanceHash[k] = v
 		}
 		for k, v := range ctd.AccountDataHash {
 			top.AccountDataHash[k] = v
@@ -181,6 +213,7 @@ type ContextData struct {
 	AccountHash            map[common.Address]account.Account
 	CreatedAccountHash     map[common.Address]account.Account
 	DeletedAccountHash     map[common.Address]account.Account
+	AccountBalanceHash     map[common.Address]*account.Balance
 	AccountDataHash        map[string][]byte
 	DeletedAccountDataHash map[string]bool
 	UTXOHash               map[uint64]*transaction.UTXO
@@ -197,6 +230,7 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 		AccountHash:            map[common.Address]account.Account{},
 		CreatedAccountHash:     map[common.Address]account.Account{},
 		DeletedAccountHash:     map[common.Address]account.Account{},
+		AccountBalanceHash:     map[common.Address]*account.Balance{},
 		AccountDataHash:        map[string][]byte{},
 		DeletedAccountDataHash: map[string]bool{},
 		UTXOHash:               map[uint64]*transaction.UTXO{},
@@ -269,6 +303,23 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
 			if _, err := k.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("AccountBalanceHash")
+	{
+		keys := []common.Address{}
+		for k := range ctd.AccountBalanceHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			v := ctd.AccountBalanceHash[k]
+			if _, err := k.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+			if _, err := v.WriteTo(&buffer); err != nil {
 				panic(err)
 			}
 		}
@@ -402,7 +453,22 @@ func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 			return acc, nil
 		}
 	}
+}
 
+// IsExistAccount checks that the account of the address is exist or not
+func (ctd *ContextData) IsExistAccount(addr common.Address) (bool, error) {
+	if _, has := ctd.DeletedAccountHash[addr]; has {
+		return false, nil
+	}
+	if _, has := ctd.AccountHash[addr]; has {
+		return true, nil
+	} else if _, has := ctd.CreatedAccountHash[addr]; has {
+		return true, nil
+	} else if ctd.Parent != nil {
+		return ctd.Parent.IsExistAccount(addr)
+	} else {
+		return ctd.loader.IsExistAccount(addr)
+	}
 }
 
 // CreateAccount inserts the account
@@ -426,6 +492,31 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 	ctd.DeletedAccountHash[acc.Address()] = acc
 	delete(ctd.AccountHash, acc.Address())
 	return nil
+}
+
+// AccountBalance returns the account balance
+func (ctd *ContextData) AccountBalance(addr common.Address) (*account.Balance, error) {
+	if _, has := ctd.AccountBalanceHash[addr]; has {
+		return nil, ErrNotExistAccount
+	}
+	if bc, has := ctd.AccountBalanceHash[addr]; has {
+		return bc, nil
+	} else if ctd.Parent != nil {
+		if bc, err := ctd.Parent.AccountBalance(addr); err != nil {
+			return nil, err
+		} else {
+			nbc := bc.Clone()
+			ctd.AccountBalanceHash[addr] = nbc
+			return nbc, nil
+		}
+	} else {
+		if bc, err := ctd.loader.AccountBalance(addr); err != nil {
+			return nil, err
+		} else {
+			ctd.AccountBalanceHash[addr] = bc
+			return bc, nil
+		}
+	}
 }
 
 // AccountData returns the account data

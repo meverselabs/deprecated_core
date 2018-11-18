@@ -2,6 +2,7 @@ package data
 
 import (
 	"git.fleta.io/fleta/common"
+	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/core/account"
 	"git.fleta.io/fleta/core/transaction"
 )
@@ -12,9 +13,11 @@ type Loader interface {
 	Accounter() *Accounter
 	Transactor() *Transactor
 	TargetHeight() uint32
+	LastBlockHash() hash.Hash256
 	Seq(addr common.Address) uint64
 	Account(addr common.Address) (account.Account, error)
 	IsExistAccount(addr common.Address) (bool, error)
+	AccountBalance(addr common.Address) (*account.Balance, error)
 	AccountData(addr common.Address, name []byte) []byte
 	UTXO(id uint64) (*transaction.UTXO, error)
 }
@@ -54,6 +57,11 @@ func (st *emptyLoader) TargetHeight() uint32 {
 	return 0
 }
 
+// LastBlockHash returns hash.Hash256{}
+func (st *emptyLoader) LastBlockHash() hash.Hash256 {
+	return hash.Hash256{}
+}
+
 // Seq returns 0
 func (st *emptyLoader) Seq(addr common.Address) uint64 {
 	return 0
@@ -61,6 +69,11 @@ func (st *emptyLoader) Seq(addr common.Address) uint64 {
 
 // Account returns ErrNotExistAccount
 func (st *emptyLoader) Account(addr common.Address) (account.Account, error) {
+	return nil, ErrNotExistAccount
+}
+
+// AccountBalance returns ErrNotExistAccount
+func (st *emptyLoader) AccountBalance(addr common.Address) (*account.Balance, error) {
 	return nil, ErrNotExistAccount
 }
 
