@@ -250,7 +250,7 @@ func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
 func (st *Store) AccountBalance(addr common.Address) (*account.Balance, error) {
 	var bc *account.Balance
 	if err := st.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(toAccountKey(addr))
+		item, err := txn.Get(toAccountBalanceKey(addr))
 		if err != nil {
 			if err == badger.ErrKeyNotFound {
 				return db.ErrNotExistKey
@@ -262,7 +262,7 @@ func (st *Store) AccountBalance(addr common.Address) (*account.Balance, error) {
 		if err != nil {
 			return err
 		}
-		bc := account.NewBalance()
+		bc = account.NewBalance()
 		if _, err := bc.ReadFrom(bytes.NewReader(value)); err != nil {
 			return err
 		}

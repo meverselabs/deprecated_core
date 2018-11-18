@@ -496,7 +496,7 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 
 // AccountBalance returns the account balance
 func (ctd *ContextData) AccountBalance(addr common.Address) (*account.Balance, error) {
-	if _, has := ctd.AccountBalanceHash[addr]; has {
+	if _, has := ctd.DeletedAccountHash[addr]; has {
 		return nil, ErrNotExistAccount
 	}
 	if bc, has := ctd.AccountBalanceHash[addr]; has {

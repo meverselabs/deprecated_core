@@ -48,11 +48,13 @@ type Config struct {
 	SeedNodes  []string
 	Chain      chain.Config
 	Peer       peer.Config
+	Generator  generator.Config
+	Observer   observer.Config
 	StorePath  string
 }
 
 // NewKernel returns a Kernel
-func NewKernel(Config *Config, st *store.Store, GenesisContextData *data.ContextData) (*Kernel, error) {
+func NewKernel(Config *Config, st *store.Store, Rewarder reward.Rewarder, GenesisContextData *data.ContextData) (*Kernel, error) {
 	cn, err := chain.NewChain(&Config.Chain, st)
 	if err != nil {
 		return nil, err
@@ -68,7 +70,7 @@ func NewKernel(Config *Config, st *store.Store, GenesisContextData *data.Context
 	kn := &Kernel{
 		Config:         Config,
 		Chain:          cn,
-		Rewarder:       nil, //TEMP
+		Rewarder:       Rewarder,
 		TxPool:         txpool.NewTransactionPool(),
 		BlockPool:      blockpool.NewBlockPool(),
 		peerMsgHandler: mm,
@@ -128,7 +130,7 @@ func (kn *Kernel) TryGenerateBlock() error {
 		return ErrClosedKernel
 	}
 
-	if kn.generator != nil {
+	if kn.generator == nil {
 		return ErrNotFormulator
 	}
 
@@ -151,9 +153,7 @@ func (kn *Kernel) TryGenerateBlock() error {
 		return err
 	}
 	cb := func() error {
-		if err := kn.TryGenerateBlock(); err != nil {
-			return err
-		}
+		go kn.TryGenerateBlock()
 		return nil
 	}
 	if err := kn.BlockPool.Append(nb, nos, ctx, cb); err != nil {
@@ -288,12 +288,13 @@ func (kn *Kernel) blockMessageHandler(m message.Message) error {
 func (kn *Kernel) observerBlockMessageHandler(m message.Message) error {
 	msg := m.(*message_def.BlockMessage)
 	cb := func() error {
-		if err := kn.TryGenerateBlock(); err != nil {
-			return err
-		}
+		go kn.TryGenerateBlock()
 		return nil
 	}
 	if err := kn.BlockPool.Append(msg.Block, msg.ObserverSigned, nil, cb); err != nil {
+		return err
+	}
+	if err := kn.TryProcessBlock(); err != nil {
 		return err
 	}
 	return nil
