@@ -1,104 +1,118 @@
 package kernel
 
 import (
-	"bytes"
-	"runtime"
+	"io"
+	"log"
 	"sync"
 
-	"git.fleta.io/fleta/common/hash"
-
-	"git.fleta.io/fleta/core/observer"
-	"git.fleta.io/fleta/core/txpool"
+	"git.fleta.io/fleta/core/message_def"
+	"git.fleta.io/fleta/core/store"
 
 	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/amount"
-	"git.fleta.io/fleta/core/block"
-	"git.fleta.io/fleta/core/consensus"
+	"git.fleta.io/fleta/core/blockpool"
+	"git.fleta.io/fleta/core/chain"
 	"git.fleta.io/fleta/core/data"
-	"git.fleta.io/fleta/core/db"
 	"git.fleta.io/fleta/core/generator"
-	"git.fleta.io/fleta/core/level"
-	"git.fleta.io/fleta/core/store"
+	"git.fleta.io/fleta/core/observer"
+	"git.fleta.io/fleta/core/reward"
 	"git.fleta.io/fleta/core/transaction"
+	"git.fleta.io/fleta/core/txpool"
+	"git.fleta.io/fleta/framework/message"
+	"git.fleta.io/fleta/framework/peer"
 )
 
 // Kernel processes the block chain using its components and stores state of the block chain
 // It based on Proof-of-Formulation and Account/UTXO hybrid model
 // All kinds of accounts and transactions processed the out side of kernel
 type Kernel struct {
-	ChainCoord        *common.Coordinate
-	Consensus         *consensus.Consensus
-	Store             *store.Store
-	TxPool            *txpool.TransactionPool
-	Generator         *generator.Generator
-	ObserverConnector observer.Connector
-	closeLock         sync.RWMutex
-	isClose           bool
+	peer.BaseEventHandler
+	Config           *Config
+	Chain            *chain.Chain
+	Rewarder         reward.Rewarder
+	TxPool           *txpool.TransactionPool
+	BlockPool        *blockpool.BlockPool
+	peerMsgHandler   *message.Manager
+	PeerManager      peer.Manager
+	processBlockLock sync.Mutex
+	closeLock        sync.RWMutex
+	isClose          bool
+	// Formulator
+	generator         *generator.Generator
+	observerConnector *observer.Connector
+	genBlockLock      sync.Mutex
 }
 
-// Init builds the genesis if it is not generated and stored yet.
-func (kn *Kernel) Init(ObserverSignatures []string, GenesisContextData *data.ContextData) error {
-	if bs := kn.Store.CustomData("chaincoord"); bs != nil {
-		var coord common.Coordinate
-		if _, err := coord.ReadFrom(bytes.NewReader(bs)); err != nil {
-			return err
-		}
-		if !coord.Equal(kn.ChainCoord) {
-			return ErrInvalidChainCoordinate
-		}
-	} else {
-		var buffer bytes.Buffer
-		if _, err := kn.ChainCoord.WriteTo(&buffer); err != nil {
-			return err
-		}
-		if err := kn.Store.SetCustomData("chaincoord", buffer.Bytes()); err != nil {
-			return err
-		}
-	}
+// Config TODO
+type Config struct {
+	ChainCoord *common.Coordinate
+	SeedNodes  []string
+	Chain      chain.Config
+	Peer       peer.Config
+	StorePath  string
+}
 
-	var buffer bytes.Buffer
-	for _, str := range ObserverSignatures {
-		buffer.WriteString(str)
-		buffer.WriteString(":")
+// NewKernel returns a Kernel
+func NewKernel(Config *Config, st *store.Store, GenesisContextData *data.ContextData) (*Kernel, error) {
+	cn, err := chain.NewChain(&Config.Chain, st)
+	if err != nil {
+		return nil, err
 	}
-	GenesisHash := hash.TwoHash(hash.Hash(buffer.Bytes()), GenesisContextData.Hash())
-	if h, err := kn.Store.BlockHash(0); err != nil {
-		if err != db.ErrNotExistKey {
-			return err
-		}
-		CustomHash := map[string][]byte{}
-		if SaveData, err := kn.Consensus.ApplyGenesis(GenesisContextData); err != nil {
-			return err
-		} else {
-			CustomHash["consensus"] = SaveData
-		}
-		if err := kn.Store.StoreGenesis(GenesisContextData, GenesisHash, CustomHash); err != nil {
-			return err
-		}
-		// TODO : EventInitGenesis
-	} else {
-		if !h.Equal(GenesisHash) {
-			return ErrInvalidGenesisHash
-		}
-		if SaveData := kn.Store.CustomData("consensus"); SaveData == nil {
-			return ErrNotExistConsensusSaveData
-		} else if err := kn.Consensus.LoadFromSaveData(SaveData); err != nil {
-			return err
-		}
+	mm := message.NewManager()
+	pm, err := peer.NewManager(Config.ChainCoord, mm, &Config.Peer)
+	if err != nil {
+		return nil, err
 	}
+	for _, v := range Config.SeedNodes {
+		pm.AddNode(v)
+	}
+	kn := &Kernel{
+		Config:         Config,
+		Chain:          cn,
+		Rewarder:       nil, //TEMP
+		TxPool:         txpool.NewTransactionPool(),
+		BlockPool:      blockpool.NewBlockPool(),
+		peerMsgHandler: mm,
+		PeerManager:    pm,
+	}
+	if err := cn.Init(GenesisContextData); err != nil {
+		return nil, err
+	}
+	kn.peerMsgHandler.ApplyMessage(message_def.BlockMessageType, kn.blockMessageCreator, kn.blockMessageHandler)
+	kn.peerMsgHandler.ApplyMessage(message_def.TransactionMessageType, kn.transactionMessageCreator, kn.transactionMessageHandler)
+	kn.peerMsgHandler.ApplyMessage(message_def.StatusMessageType, kn.statusMessageCreator, kn.statusMessageHandler)
+	kn.PeerManager.RegisterEventHandler(kn)
+	return kn, nil
+}
+
+// InitFormulator updates the node as a formulator
+func (kn *Kernel) InitFormulator(Generator *generator.Generator, ObserverConnector *observer.Connector) error {
+	kn.generator = Generator
+	kn.observerConnector = ObserverConnector
+	kn.observerConnector.AddMessageHandler(message_def.BlockMessageType, kn.blockMessageCreator, kn.observerBlockMessageHandler)
 	return nil
 }
 
-// Close terminate and clean kernel
+// Start runs kernel
+func (kn *Kernel) Start() {
+	kn.PeerManager.StartManage()
+	kn.PeerManager.EnforceConnect()
+	if kn.observerConnector != nil {
+		kn.observerConnector.Start()
+	}
+	// TODO : start tx cast manager
+	// TODO : start block syncer
+}
+
+// Close terminates and cleans the kernel
 func (kn *Kernel) Close() {
 	kn.closeLock.Lock()
 	defer kn.closeLock.Unlock()
 
-	kn.Store.Close()
 	kn.isClose = true
+	kn.Chain.Close()
 }
 
-// IsClose returns the close status of kernel
+// IsClose returns the close status of the kernel
 func (kn *Kernel) IsClose() bool {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
@@ -106,182 +120,98 @@ func (kn *Kernel) IsClose() bool {
 	return kn.isClose
 }
 
-// Reward returns the mining reward
-func (kn *Kernel) Reward(Height uint32) *amount.Amount {
-	// TEMP
-	return amount.COIN.Clone()
-}
-
-// RecvBlock proccesses and connect the new block
-func (kn *Kernel) RecvBlock(b *block.Block, s *block.ObserverSigned) error {
+// TryGenerateBlock generate the next block when this formulator is the top rank
+func (kn *Kernel) TryGenerateBlock() error {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
-		return ErrClosed
+		return ErrClosedKernel
 	}
 
-	if !b.Header.ChainCoord.Equal(kn.ChainCoord) {
-		return ErrInvalidChainCoordinate
+	if kn.generator != nil {
+		return ErrNotFormulator
 	}
-	PrevHeight := kn.Store.Height()
-	PrevHash, err := kn.Store.BlockHash(PrevHeight)
+
+	kn.genBlockLock.Lock()
+	defer kn.genBlockLock.Unlock()
+
+	if is, err := kn.Chain.IsMinable(kn.generator.Address(), 0); err != nil {
+		return err
+	} else if !is {
+		return nil
+	}
+
+	ctx := data.NewContext(kn.Chain.Loader())
+	nb, ns, err := kn.generator.GenerateBlock(kn.TxPool, ctx, 0, kn.Rewarder)
 	if err != nil {
 		return err
 	}
-	if err := kn.Consensus.ValidateBlock(b, s, PrevHeight, PrevHash); err != nil {
+	nos, err := kn.observerConnector.RequestSign(nb, ns)
+	if err != nil {
 		return err
 	}
-	ctx := data.NewContext(kn.Store)
-	if err := kn.processBlock(ctx, b); err != nil {
-		return err
-	}
-	if ctx.StackSize() > 1 {
-		return ErrDirtyContext
-	}
-	top := ctx.Top()
-	if acc, err := top.Account(b.Header.FormulationAddress); err != nil {
-		return err
-	} else {
-		acc.SetBalance(kn.ChainCoord, acc.Balance(kn.ChainCoord).Add(kn.Reward(b.Header.Height)))
-	}
-	CustomHash := map[string][]byte{}
-	if SaveData, err := kn.Consensus.ApplyBlock(top, b); err != nil {
-		return err
-	} else {
-		CustomHash["consensus"] = SaveData
-	}
-	if err := kn.Store.StoreBlock(top, b, s, CustomHash); err != nil {
-		return err
-	}
-	// TODO : EventBlockConnected
-
-	for _, tx := range b.Transactions {
-		kn.TxPool.Remove(tx)
-	}
-	return nil
-}
-
-func (kn *Kernel) processBlock(ctx *data.Context, b *block.Block) error {
-	var wg sync.WaitGroup
-	cpuCnt := runtime.NumCPU()
-	if len(b.Transactions) < 1000 {
-		cpuCnt = 1
-	}
-	txCnt := len(b.Transactions) / cpuCnt
-	TxHashes := make([]hash.Hash256, len(b.Transactions))
-	if len(b.Transactions)%cpuCnt != 0 {
-		txCnt++
-	}
-	errs := make(chan error, cpuCnt)
-	for i := 0; i < cpuCnt; i++ {
-		lastCnt := (i + 1) * txCnt
-		if lastCnt > len(b.Transactions) {
-			lastCnt = len(b.Transactions)
-		}
-		wg.Add(1)
-		go func(sidx int, txs []transaction.Transaction) {
-			defer wg.Done()
-			for q, tx := range txs {
-				sigs := b.TransactionSignatures[sidx+q]
-				TxHash := tx.Hash()
-				TxHashes[sidx+q] = TxHash
-
-				signers := make([]common.PublicHash, 0, len(sigs))
-				for _, sig := range sigs {
-					pubkey, err := common.RecoverPubkey(TxHash, sig)
-					if err != nil {
-						errs <- err
-						return
-					}
-					signers = append(signers, common.NewPublicHash(pubkey))
-				}
-				if err := kn.Store.Transactor().Validate(kn.Store, tx, signers); err != nil {
-					errs <- err
-					return
-				}
-			}
-		}(i*txCnt, b.Transactions[i*txCnt:lastCnt])
-	}
-	wg.Wait()
-	if len(errs) > 0 {
-		err := <-errs
-		return err
-	}
-	if h, err := level.BuildLevelRoot(TxHashes); err != nil {
-		return err
-	} else if !b.Header.HashLevelRoot.Equal(h) {
-		return ErrInvalidHashLevelRoot
-	}
-	for i, tx := range b.Transactions {
-		if _, err := kn.Store.Transactor().Execute(ctx, tx, &common.Coordinate{Height: b.Header.Height, Index: uint16(i)}); err != nil {
+	cb := func() error {
+		if err := kn.TryGenerateBlock(); err != nil {
 			return err
 		}
+		return nil
+	}
+	if err := kn.BlockPool.Append(nb, nos, ctx, cb); err != nil {
+		return err
+	}
+	if err := kn.TryProcessBlock(); err != nil {
+		return err
 	}
 	return nil
 }
 
-// GenerateBlock generates the next block (*only for a formulator)
-func (kn *Kernel) GenerateBlock(TimeoutCount uint32) (*block.Block, *block.ObserverSigned, error) {
+// TryProcessBlock pops the block from blockpool and processes it when it is the next block of the chain
+func (kn *Kernel) TryProcessBlock() error {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
-		return nil, nil, ErrClosed
+		return ErrClosedKernel
 	}
 
-	if kn.Generator == nil {
-		return nil, nil, ErrNotFormulator
-	}
+	kn.processBlockLock.Lock()
+	defer kn.processBlockLock.Unlock()
 
-	ctx := data.NewContext(kn.Store)
-	PrevHeight := kn.Store.Height()
-	PrevHash, err := kn.Store.BlockHash(PrevHeight)
-	if err != nil {
-		return nil, nil, err
+	item := kn.BlockPool.Pop(kn.Chain.Loader().TargetHeight())
+	for item != nil {
+		if item.Context == nil {
+			ctx, err := kn.Chain.ProcessBlock(item.Block, item.ObserverSigned, kn.Rewarder)
+			if err != nil {
+				return err
+			}
+			item.Context = ctx
+		}
+		if err := kn.Chain.AppendBlock(item.Block, item.ObserverSigned, item.Context); err != nil {
+			return err
+		}
+		for _, tx := range item.Block.Transactions {
+			kn.TxPool.Remove(tx)
+		}
+		if item.Callback != nil {
+			if err := item.Callback(); err != nil {
+				return err
+			}
+		}
+		item = kn.BlockPool.Pop(kn.Chain.Loader().TargetHeight())
 	}
-	if is, err := kn.Consensus.IsMinable(kn.Generator.Address(), TimeoutCount); err != nil {
-		return nil, nil, err
-	} else if !is {
-		return nil, nil, ErrInvalidGenerateRequest
-	}
-	nb, ns, err := kn.Generator.GenerateBlock(kn.Store.Transactor(), kn.TxPool, ctx, TimeoutCount, kn.ChainCoord, PrevHeight, PrevHash)
-	if err != nil {
-		return nil, nil, err
-	}
-	// TODO : EventBlockGenerated
-	nos, err := kn.ObserverConnector.RequestSign(nb, ns, kn.Store.Transactor())
-	if err != nil {
-		return nil, nil, err
-	}
-	// TODO : EventBlockObserverSigned
-
-	CustomHash := map[string][]byte{}
-	if ctx.StackSize() > 1 {
-		return nil, nil, ErrDirtyContext
-	}
-	top := ctx.Top()
-	if SaveData, err := kn.Consensus.ApplyBlock(top, nb); err != nil {
-		return nil, nil, err
-	} else {
-		CustomHash["consensus"] = SaveData
-	}
-	if err := kn.Store.StoreBlock(top, nb, nos, CustomHash); err != nil {
-		return nil, nil, err
-	}
-	// TODO : save consensus
-	// TODO : EventBlockConnected
-	return nb, nos, nil
+	return nil
 }
 
-// RecvTransaction validate the transaction and push it to the pool
-func (kn *Kernel) RecvTransaction(tx transaction.Transaction, sigs []common.Signature) error {
+// AddTransaction validate the transaction and push it to the transaction pool
+func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signature) error {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
-		return ErrClosed
+		return ErrClosedKernel
 	}
 
-	if !tx.ChainCoord().Equal(kn.ChainCoord) {
-		return ErrInvalidChainCoordinate
+	loader := kn.Chain.Loader()
+	if !tx.ChainCoord().Equal(loader.ChainCoord()) {
+		return chain.ErrInvalidChainCoordinate
 	}
 	TxHash := tx.Hash()
 	if kn.TxPool.IsExist(TxHash) {
@@ -295,12 +225,89 @@ func (kn *Kernel) RecvTransaction(tx transaction.Transaction, sigs []common.Sign
 		}
 		signers = append(signers, common.NewPublicHash(pubkey))
 	}
-	if err := kn.Store.Transactor().Validate(kn.Store, tx, signers); err != nil {
+	if err := loader.Transactor().Validate(loader, tx, signers); err != nil {
 		return err
 	}
 	if err := kn.TxPool.Push(tx, sigs); err != nil {
 		return err
 	}
 	// TODO : EventTransactionAdded
+	return nil
+}
+
+// PeerConnected is the callback function to be called when peer connected
+func (kn *Kernel) PeerConnected(p peer.Peer) {
+	log.Println("PeerConnected ", p.LocalAddr().String(), " : ", p.RemoteAddr().String())
+	kn.sendStatusMessage(p)
+}
+
+// PeerDisconnected is the callback function to be called when peer disconnected
+func (kn *Kernel) PeerDisconnected(p peer.Peer) {
+	log.Println("PeerDisconnected ", p.LocalAddr().String(), " : ", p.RemoteAddr().String())
+}
+
+func (kn *Kernel) sendStatusMessage(p peer.Peer) {
+	loader := kn.Chain.Loader()
+	msg := &message_def.StatusMessage{
+		Version:       kn.Chain.Config.Version,
+		Height:        loader.TargetHeight() - 1,
+		LastBlockHash: loader.LastBlockHash(),
+	}
+	p.Send(msg)
+}
+
+func (kn *Kernel) transactionMessageCreator(r io.Reader) message.Message {
+	p := &message_def.TransactionMessage{}
+	p.Tran = kn.Chain.Loader().Transactor()
+	p.ReadFrom(r)
+	return p
+}
+
+func (kn *Kernel) transactionMessageHandler(m message.Message) error {
+	msg := m.(*message_def.TransactionMessage)
+	if err := kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (kn *Kernel) blockMessageCreator(r io.Reader) message.Message {
+	p := message_def.NewBlockMessage(kn.Chain.Loader().Transactor())
+	p.ReadFrom(r)
+	return p
+}
+
+func (kn *Kernel) blockMessageHandler(m message.Message) error {
+	msg := m.(*message_def.BlockMessage)
+	if err := kn.BlockPool.Append(msg.Block, msg.ObserverSigned, nil, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (kn *Kernel) observerBlockMessageHandler(m message.Message) error {
+	msg := m.(*message_def.BlockMessage)
+	cb := func() error {
+		if err := kn.TryGenerateBlock(); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := kn.BlockPool.Append(msg.Block, msg.ObserverSigned, nil, cb); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (kn *Kernel) statusMessageCreator(r io.Reader) message.Message {
+	p := &message_def.StatusMessage{}
+	p.ReadFrom(r)
+	return p
+}
+
+func (kn *Kernel) statusMessageHandler(m message.Message) error {
+	msg := m.(*message_def.StatusMessage)
+	//TODO
+	log.Println(msg)
 	return nil
 }
