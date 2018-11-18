@@ -16,6 +16,7 @@ type Header struct {
 	Version            uint16
 	HashPrevBlock      hash.Hash256
 	HashLevelRoot      hash.Hash256
+	HashContext        hash.Hash256
 	Timestamp          uint64
 	FormulationAddress common.Address
 	TimeoutCount       uint32

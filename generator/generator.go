@@ -7,6 +7,7 @@ import (
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/key"
 	"git.fleta.io/fleta/core/level"
+	"git.fleta.io/fleta/core/reward"
 	"git.fleta.io/fleta/core/txpool"
 
 	"git.fleta.io/fleta/common"
@@ -62,13 +63,13 @@ func (gn *Generator) Address() common.Address {
 }
 
 // GenerateBlock generate a next block and its signature using transactions in the pool
-func (gn *Generator) GenerateBlock(Transactor *data.Transactor, TxPool *txpool.TransactionPool, ctx *data.Context, TimeoutCount uint32, ChainCoord *common.Coordinate, PrevHeight uint32, PrevHash hash.Hash256) (*block.Block, *block.Signed, error) {
+func (gn *Generator) GenerateBlock(TxPool *txpool.TransactionPool, ctx *data.Context, TimeoutCount uint32, Rewarder reward.Rewarder) (*block.Block, *block.Signed, error) {
 	b := &block.Block{
 		Header: block.Header{
-			ChainCoord:         *ChainCoord,
-			Height:             PrevHeight + 1,
+			ChainCoord:         *ctx.ChainCoord(),
+			Height:             ctx.TargetHeight(),
 			Version:            gn.config.BlockVersion,
-			HashPrevBlock:      PrevHash,
+			HashPrevBlock:      ctx.LastBlockHash(),
 			Timestamp:          uint64(time.Now().UnixNano()),
 			FormulationAddress: gn.Address(),
 			TimeoutCount:       TimeoutCount,
@@ -92,7 +93,7 @@ TxLoop:
 				break TxLoop
 			}
 			idx := uint16(len(b.Transactions))
-			if _, err := Transactor.Execute(ctx, item.Transaction, &common.Coordinate{Height: b.Header.Height, Index: idx}); err != nil {
+			if _, err := ctx.Transactor().Execute(ctx, item.Transaction, &common.Coordinate{Height: b.Header.Height, Index: idx}); err != nil {
 				log.Println(err)
 				//TODO : EventTransactionPendingFail
 				break
@@ -108,6 +109,12 @@ TxLoop:
 		}
 	}
 	TxPool.Unlock() // Prevent delaying from TxPool.Push
+
+	if err := Rewarder.ProcessReward(b.Header.FormulationAddress, ctx); err != nil {
+		return nil, nil, err
+	}
+
+	b.Header.HashContext = ctx.Hash()
 
 	if h, err := level.BuildLevelRoot(TxHashes); err != nil {
 		return nil, nil, err
