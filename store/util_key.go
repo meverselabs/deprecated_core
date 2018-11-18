@@ -14,7 +14,8 @@ var (
 	tagHeightObserverSigned = []byte{2, 0}
 	tagAccount              = []byte{3, 0}
 	tagAccountSeq           = []byte{3, 1}
-	tagAccountData          = []byte{3, 2}
+	tagAccountBalance       = []byte{3, 2}
+	tagAccountData          = []byte{3, 3}
 	tagUTXO                 = []byte{4, 0}
 	tagCustomData           = []byte{5, 0}
 )
@@ -57,6 +58,13 @@ func toAccountKey(addr common.Address) []byte {
 func toAccountSeqKey(addr common.Address) []byte {
 	bs := make([]byte, 2+common.AddressSize)
 	copy(bs, tagAccountSeq)
+	copy(bs[2:], addr[:])
+	return bs
+}
+
+func toAccountBalanceKey(addr common.Address) []byte {
+	bs := make([]byte, 2+common.AddressSize)
+	copy(bs, tagAccountBalance)
 	copy(bs[2:], addr[:])
 	return bs
 }

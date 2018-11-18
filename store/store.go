@@ -122,6 +122,16 @@ func (st *Store) TargetHeight() uint32 {
 	return st.Height() + 1
 }
 
+// LastBlockHash returns the last block hash of the target chain
+func (st *Store) LastBlockHash() hash.Hash256 {
+	h, err := st.BlockHash(st.Height())
+	if err != nil {
+		// should have not reach
+		panic(err)
+	}
+	return h
+}
+
 // Accounts returns all accounts in the store
 func (st *Store) Accounts() ([]account.Account, error) {
 	list := []account.Account{}
@@ -214,14 +224,75 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 
 // IsExistAccount checks that the account of the address is exist or not
 func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
-	if _, err := st.Account(addr); err != nil {
-		if err != data.ErrNotExistAccount {
-			return true, err
+	var isExist bool
+	if err := st.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(toAccountKey(addr))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return db.ErrNotExistKey
+			} else {
+				return err
+			}
 		}
-		return false, nil
-	} else {
-		return true, nil
+		isExist = !item.IsDeletedOrExpired()
+		return nil
+	}); err != nil {
+		if err == db.ErrNotExistKey {
+			return false, nil
+		} else {
+			return false, err
+		}
 	}
+	return isExist, nil
+}
+
+// AccountBalance returns the account balance
+func (st *Store) AccountBalance(addr common.Address) (*account.Balance, error) {
+	var bc *account.Balance
+	if err := st.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(toAccountKey(addr))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return db.ErrNotExistKey
+			} else {
+				return err
+			}
+		}
+		value, err := item.Value()
+		if err != nil {
+			return err
+		}
+		bc := account.NewBalance()
+		if _, err := bc.ReadFrom(bytes.NewReader(value)); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		if err == db.ErrNotExistKey {
+			return nil, data.ErrNotExistAccount
+		} else {
+			return nil, err
+		}
+	}
+	return bc, nil
+}
+
+// AccountDataKeys returns all data keys of the account in the store
+func (st *Store) AccountDataKeys(addr common.Address) ([][]byte, error) {
+	list := [][]byte{}
+	if err := st.db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+		prefix := toAccountDataKey(string(addr[:]))
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			list = append(list, item.Key())
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 // AccountData returns the account data from the store
@@ -584,9 +655,33 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 		if err := txn.Set(toAccountKey(k), buffer.Bytes()); err != nil {
 			return err
 		}
+		if _, has := ctd.AccountBalanceHash[k]; !has {
+			ctd.AccountBalanceHash[k] = account.NewBalance()
+		}
 	}
 	for k := range ctd.DeletedAccountHash {
 		if err := txn.Delete(toAccountKey(k)); err != nil {
+			return err
+		}
+		if err := txn.Delete(toAccountBalanceKey(k)); err != nil {
+			return err
+		}
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+		prefix := toAccountDataKey(string(k[:]))
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			if err := txn.Delete(item.Key()); err != nil {
+				return err
+			}
+		}
+	}
+	for k, v := range ctd.AccountBalanceHash {
+		var buffer bytes.Buffer
+		if _, err := v.WriteTo(&buffer); err != nil {
+			return err
+		}
+		if err := txn.Set(toAccountBalanceKey(k), buffer.Bytes()); err != nil {
 			return err
 		}
 	}
