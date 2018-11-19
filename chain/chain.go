@@ -125,13 +125,52 @@ func (cn *Chain) Loader() data.Loader {
 	return cn.store
 }
 
+// Provider returns the provider of the chain
+func (cn *Chain) Provider() block.Provider {
+	return cn.store
+}
+
 // IsMinable returns true when the target address is the top rank's address
 func (cn *Chain) IsMinable(addr common.Address, TimeoutCount uint32) (bool, error) {
 	return cn.consensus.IsMinable(addr, TimeoutCount)
 }
 
+// ValidateObserverSigned validates observer signatures
+func (cn *Chain) ValidateObserverSigned(b *block.Block, s *block.ObserverSigned) error {
+	cn.closeLock.RLock()
+	defer cn.closeLock.RUnlock()
+	if cn.isClose {
+		return ErrClosedChain
+	}
+
+	if err := cn.consensus.ValidateBlock(b, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ValidateContext validates the context using the block
+func (cn *Chain) ValidateContext(b *block.Block, ctx *data.Context) error {
+	if !b.Header.ChainCoord.Equal(ctx.ChainCoord()) {
+		return ErrInvalidChainCoordinate
+	}
+	if b.Header.Height != ctx.TargetHeight() {
+		return ErrExpiredContextHeight
+	}
+	if !b.Header.HashPrevBlock.Equal(ctx.LastBlockHash()) {
+		return ErrExpiredContextBlockHash
+	}
+	if ctx.StackSize() > 1 {
+		return ErrDirtyContext
+	}
+	if !b.Header.HashContext.Equal(ctx.Hash()) {
+		return ErrInvalidAppendContextHash
+	}
+	return nil
+}
+
 // ProcessBlock returns a context as a processing result of the block
-func (cn *Chain) ProcessBlock(b *block.Block, s *block.ObserverSigned, Rewarder reward.Rewarder) (*data.Context, error) {
+func (cn *Chain) ProcessBlock(b *block.Block, Rewarder reward.Rewarder) (*data.Context, error) {
 	cn.closeLock.RLock()
 	defer cn.closeLock.RUnlock()
 	if cn.isClose {
@@ -144,15 +183,8 @@ func (cn *Chain) ProcessBlock(b *block.Block, s *block.ObserverSigned, Rewarder 
 	if b.Header.Height != cn.store.TargetHeight() {
 		return nil, ErrInvalidAppendBlockHeight
 	}
-	PrevHash, err := cn.store.BlockHash(cn.store.Height())
-	if err != nil {
-		return nil, err
-	}
-	if !b.Header.HashPrevBlock.Equal(PrevHash) {
+	if !b.Header.HashPrevBlock.Equal(cn.store.LastBlockHash()) {
 		return nil, ErrInvalidAppendBlockHash
-	}
-	if err := cn.consensus.ValidateBlock(b, s); err != nil {
-		return nil, err
 	}
 	if err := cn.validateBlockBody(b); err != nil {
 		return nil, err
@@ -241,29 +273,10 @@ func (cn *Chain) AppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.
 	cn.appendLock.Lock()
 	defer cn.appendLock.Unlock()
 
-	LastBlockHash := cn.store.LastBlockHash()
-	if !b.Header.ChainCoord.Equal(cn.store.ChainCoord()) || !b.Header.ChainCoord.Equal(ctx.ChainCoord()) {
-		return ErrInvalidChainCoordinate
+	if err := cn.ValidateContext(b, ctx); err != nil {
+		return err
 	}
-	if b.Header.Height != cn.store.TargetHeight() {
-		return ErrInvalidAppendBlockHeight
-	}
-	if !b.Header.HashPrevBlock.Equal(LastBlockHash) {
-		return ErrInvalidAppendBlockHash
-	}
-	if b.Header.Height != ctx.TargetHeight() {
-		return ErrExpiredContextHeight
-	}
-	if !b.Header.HashPrevBlock.Equal(ctx.LastBlockHash()) {
-		return ErrExpiredContextBlockHash
-	}
-	if ctx.StackSize() > 1 {
-		return ErrDirtyContext
-	}
-	if !b.Header.HashContext.Equal(ctx.Hash()) {
-		return ErrInvalidAppendContextHash
-	}
-	if err := cn.consensus.ValidateBlock(b, s); err != nil {
+	if err := cn.ValidateObserverSigned(b, s); err != nil {
 		return err
 	}
 	top := ctx.Top()

@@ -178,8 +178,11 @@ func (kn *Kernel) TryProcessBlock() error {
 
 	item := kn.BlockPool.Pop(kn.Chain.Loader().TargetHeight())
 	for item != nil {
+		if err := kn.Chain.ValidateObserverSigned(item.Block, item.ObserverSigned); err != nil {
+			return err
+		}
 		if item.Context == nil {
-			ctx, err := kn.Chain.ProcessBlock(item.Block, item.ObserverSigned, kn.Rewarder)
+			ctx, err := kn.Chain.ProcessBlock(item.Block, kn.Rewarder)
 			if err != nil {
 				return err
 			}
