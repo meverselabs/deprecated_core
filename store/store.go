@@ -22,7 +22,6 @@ import (
 // All updates are executed in one transaction with FileSync option
 type Store struct {
 	db          *badger.DB
-	lockfile    *os.File
 	ticker      *time.Ticker
 	cache       storeCache
 	accounter   *data.Accounter
@@ -58,11 +57,6 @@ func NewStore(path string, act *data.Accounter, tran *data.Transactor) (*Store, 
 		return nil, err
 	}
 
-	lockfile, err := os.OpenFile(lockfilePath, os.O_EXCL, 0)
-	if err != nil {
-		return nil, err
-	}
-
 	{
 	again:
 		if err := db.RunValueLogGC(0.7); err != nil {
@@ -84,7 +78,6 @@ func NewStore(path string, act *data.Accounter, tran *data.Transactor) (*Store, 
 
 	return &Store{
 		db:         db,
-		lockfile:   lockfile,
 		ticker:     ticker,
 		accounter:  act,
 		transactor: tran,
@@ -95,10 +88,8 @@ func NewStore(path string, act *data.Accounter, tran *data.Transactor) (*Store, 
 // Close terminate and clean store
 func (st *Store) Close() {
 	st.db.Close()
-	st.lockfile.Close()
 	st.ticker.Stop()
 	st.db = nil
-	st.lockfile = nil
 	st.ticker = nil
 }
 
@@ -140,7 +131,7 @@ func (st *Store) Accounts() ([]account.Account, error) {
 		defer it.Close()
 		for it.Seek(tagAccount); it.ValidForPrefix(tagAccount); it.Next() {
 			item := it.Item()
-			value, err := item.Value()
+			value, err := item.ValueCopy(nil)
 			if err != nil {
 				return err
 			}
@@ -174,7 +165,7 @@ func (st *Store) Seq(addr common.Address) uint64 {
 			if err != nil {
 				return err
 			}
-			value, err := item.Value()
+			value, err := item.ValueCopy(nil)
 			if err != nil {
 				return err
 			}
@@ -200,7 +191,7 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 				return err
 			}
 		}
-		value, err := item.Value()
+		value, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
@@ -258,7 +249,7 @@ func (st *Store) AccountBalance(addr common.Address) (*account.Balance, error) {
 				return err
 			}
 		}
-		value, err := item.Value()
+		value, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
@@ -304,7 +295,7 @@ func (st *Store) AccountData(addr common.Address, name []byte) []byte {
 		if err != nil {
 			return err
 		}
-		value, err := item.Value()
+		value, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
@@ -324,7 +315,7 @@ func (st *Store) UTXOs() ([]*transaction.UTXO, error) {
 		defer it.Close()
 		for it.Seek(tagUTXO); it.ValidForPrefix(tagUTXO); it.Next() {
 			item := it.Item()
-			value, err := item.Value()
+			value, err := item.ValueCopy(nil)
 			if err != nil {
 				return err
 			}
@@ -356,7 +347,7 @@ func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
 				return err
 			}
 		}
-		value, err := item.Value()
+		value, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
@@ -392,7 +383,7 @@ func (st *Store) BlockHash(height uint32) (hash.Hash256, error) {
 				return err
 			}
 		}
-		value, err := item.Value()
+		value, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
@@ -418,7 +409,7 @@ func (st *Store) Block(height uint32) (*block.Block, error) {
 				return err
 			}
 		}
-		value, err := item.Value()
+		value, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
@@ -445,7 +436,7 @@ func (st *Store) ObserverSigned(height uint32) (*block.ObserverSigned, error) {
 				return err
 			}
 		}
-		value, err := item.Value()
+		value, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
@@ -476,7 +467,7 @@ func (st *Store) Height() uint32 {
 				return err
 			}
 		}
-		value, err := item.Value()
+		value, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
@@ -498,7 +489,7 @@ func (st *Store) CustomData(key string) []byte {
 				return err
 			}
 		}
-		value, err := item.Value()
+		value, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
