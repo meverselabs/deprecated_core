@@ -59,6 +59,11 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := bh.HashContext.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := util.WriteUint64(w, bh.Timestamp); err != nil {
 		return wrote, err
 	} else {
@@ -103,6 +108,11 @@ func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 		read += n
 	}
 	if n, err := bh.HashLevelRoot.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if n, err := bh.HashContext.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
