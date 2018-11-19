@@ -2,6 +2,7 @@ package account
 
 import (
 	"io"
+	"sort"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/util"
@@ -92,7 +93,13 @@ func (bc *Balance) WriteTo(w io.Writer) (int64, error) {
 		return wrote, err
 	} else {
 		wrote += n
-		for k, a := range bc.amountHash {
+		keys := make([]uint64, 0, len(bc.amountHash))
+		for k := range bc.amountHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(uint64Slice(keys))
+		for _, k := range keys {
+			a := bc.amountHash[k]
 			if n, err := util.WriteUint64(w, k); err != nil {
 				return wrote, err
 			} else {
@@ -138,3 +145,9 @@ func (bc *Balance) ReadFrom(r io.Reader) (int64, error) {
 	}
 	return read, nil
 }
+
+type uint64Slice []uint64
+
+func (p uint64Slice) Len() int           { return len(p) }
+func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
