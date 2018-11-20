@@ -7,7 +7,7 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 )
 
-type Cache struct {
+type cache struct {
 	ctx                *Context
 	SeqHash            map[common.Address]uint64
 	AccountHash        map[common.Address]account.Account
@@ -17,8 +17,8 @@ type Cache struct {
 }
 
 // NewCache is used for generating genesis state
-func NewCache(ctx *Context) *Cache {
-	return &Cache{
+func newCache(ctx *Context) *cache {
+	return &cache{
 		ctx:                ctx,
 		SeqHash:            map[common.Address]uint64{},
 		AccountHash:        map[common.Address]account.Account{},
@@ -29,32 +29,32 @@ func NewCache(ctx *Context) *Cache {
 }
 
 // ChainCoord returns the coordinate of the target chain
-func (cc *Cache) ChainCoord() *common.Coordinate {
+func (cc *cache) ChainCoord() *common.Coordinate {
 	return cc.ctx.ChainCoord()
 }
 
 // Accounter returns the accounter of the target chain
-func (cc *Cache) Accounter() *Accounter {
+func (cc *cache) Accounter() *Accounter {
 	return cc.ctx.Accounter()
 }
 
 // Transactor returns the transactor of the target chain
-func (cc *Cache) Transactor() *Transactor {
+func (cc *cache) Transactor() *Transactor {
 	return cc.ctx.Transactor()
 }
 
 // TargetHeight returns 0
-func (cc *Cache) TargetHeight() uint32 {
+func (cc *cache) TargetHeight() uint32 {
 	return cc.ctx.TargetHeight()
 }
 
 // LastBlockHash returns hash.Hash256{}
-func (cc *Cache) LastBlockHash() hash.Hash256 {
+func (cc *cache) LastBlockHash() hash.Hash256 {
 	return cc.ctx.LastBlockHash()
 }
 
 // Seq returns the sequence of the account
-func (cc *Cache) Seq(addr common.Address) uint64 {
+func (cc *cache) Seq(addr common.Address) uint64 {
 	if seq, has := cc.SeqHash[addr]; has {
 		return seq
 	} else {
@@ -65,7 +65,7 @@ func (cc *Cache) Seq(addr common.Address) uint64 {
 }
 
 // Account returns the account instance of the address
-func (cc *Cache) Account(addr common.Address) (account.Account, error) {
+func (cc *cache) Account(addr common.Address) (account.Account, error) {
 	if acc, has := cc.AccountHash[addr]; has {
 		return acc, nil
 	} else {
@@ -79,7 +79,7 @@ func (cc *Cache) Account(addr common.Address) (account.Account, error) {
 }
 
 // IsExistAccount checks that the account of the address is exist or not
-func (cc *Cache) IsExistAccount(addr common.Address) (bool, error) {
+func (cc *cache) IsExistAccount(addr common.Address) (bool, error) {
 	if _, has := cc.AccountHash[addr]; has {
 		return true, nil
 	} else {
@@ -88,7 +88,7 @@ func (cc *Cache) IsExistAccount(addr common.Address) (bool, error) {
 }
 
 // AccountBalance returns the account balance
-func (cc *Cache) AccountBalance(addr common.Address) (*account.Balance, error) {
+func (cc *cache) AccountBalance(addr common.Address) (*account.Balance, error) {
 	if bc, has := cc.AccountBalanceHash[addr]; has {
 		return bc, nil
 	} else {
@@ -102,7 +102,7 @@ func (cc *Cache) AccountBalance(addr common.Address) (*account.Balance, error) {
 }
 
 // AccountData returns the account data
-func (cc *Cache) AccountData(addr common.Address, name []byte) []byte {
+func (cc *cache) AccountData(addr common.Address, name []byte) []byte {
 	key := string(addr[:]) + string(name)
 	if value, has := cc.AccountDataHash[key]; has {
 		return value
@@ -114,7 +114,7 @@ func (cc *Cache) AccountData(addr common.Address, name []byte) []byte {
 }
 
 // UTXO returns the UTXO
-func (cc *Cache) UTXO(id uint64) (*transaction.UTXO, error) {
+func (cc *cache) UTXO(id uint64) (*transaction.UTXO, error) {
 	if utxo, has := cc.UTXOHash[id]; has {
 		return utxo, nil
 	} else {

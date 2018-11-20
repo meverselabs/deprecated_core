@@ -17,7 +17,7 @@ type Context struct {
 	loader          Loader
 	genTargetHeight uint32
 	getPrevHash     hash.Hash256
-	cache           *Cache
+	cache           *cache
 	stack           []*ContextData
 	isOldHash       bool
 	dataHash        hash.Hash256
@@ -31,7 +31,7 @@ func NewContext(loader Loader) *Context {
 		getPrevHash:     loader.LastBlockHash(),
 		stack:           []*ContextData{NewContextData(loader, nil)},
 	}
-	ctx.cache = NewCache(ctx)
+	ctx.cache = newCache(ctx)
 	return ctx
 }
 
