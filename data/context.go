@@ -3,6 +3,7 @@ package data
 import (
 	"bytes"
 	"sort"
+	"strconv"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
@@ -16,6 +17,7 @@ type Context struct {
 	loader          Loader
 	genTargetHeight uint32
 	getPrevHash     hash.Hash256
+	cache           *Cache
 	stack           []*ContextData
 	isOldHash       bool
 	dataHash        hash.Hash256
@@ -29,6 +31,7 @@ func NewContext(loader Loader) *Context {
 		getPrevHash:     loader.LastBlockHash(),
 		stack:           []*ContextData{NewContextData(loader, nil)},
 	}
+	ctx.cache = NewCache(ctx)
 	return ctx
 }
 
@@ -139,10 +142,15 @@ func (ctx *Context) DeleteUTXO(id uint64) error {
 	return ctx.Top().DeleteUTXO(id)
 }
 
+func (ctx *Context) Dump() string {
+	return ctx.Top().Dump()
+}
+
 // Snapshot push a snapshot and returns the snapshot number of it
 func (ctx *Context) Snapshot() int {
 	ctx.isOldHash = true
-	ctd := NewContextData(ctx.loader, ctx.Top())
+	ctd := NewContextData(ctx.cache, ctx.Top())
+	ctx.stack[len(ctx.stack)-1].isTop = false
 	ctx.stack = append(ctx.stack, ctd)
 	return len(ctx.stack)
 }
@@ -153,6 +161,7 @@ func (ctx *Context) Revert(sn int) {
 	if len(ctx.stack) >= sn {
 		ctx.stack = ctx.stack[:sn-1]
 	}
+	ctx.stack[len(ctx.stack)-1].isTop = true
 }
 
 // Commit apply snapshots to the top after the snapshot number
@@ -219,6 +228,7 @@ type ContextData struct {
 	UTXOHash               map[uint64]*transaction.UTXO
 	CreatedUTXOHash        map[uint64]*transaction.TxOut
 	DeletedUTXOHash        map[uint64]bool
+	isTop                  bool
 }
 
 // NewContextData returns a ContextData
@@ -236,6 +246,7 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 		UTXOHash:               map[uint64]*transaction.UTXO{},
 		CreatedUTXOHash:        map[uint64]*transaction.TxOut{},
 		DeletedUTXOHash:        map[uint64]bool{},
+		isTop:                  true,
 	}
 	return ctd
 }
@@ -407,13 +418,13 @@ func (ctd *ContextData) Seq(addr common.Address) uint64 {
 		return seq
 	} else if ctd.Parent != nil {
 		seq := ctd.Parent.Seq(addr)
-		if seq > 0 {
+		if seq > 0 && ctd.isTop {
 			ctd.SeqHash[addr] = seq
 		}
 		return seq
 	} else {
 		seq := ctd.loader.Seq(addr)
-		if seq > 0 {
+		if seq > 0 && ctd.isTop {
 			ctd.SeqHash[addr] = seq
 		}
 		return seq
@@ -441,16 +452,25 @@ func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 		if acc, err := ctd.Parent.Account(addr); err != nil {
 			return nil, err
 		} else {
-			nacc := acc.Clone()
-			ctd.AccountHash[addr] = nacc
-			return nacc, nil
+			if ctd.isTop {
+				nacc := acc.Clone()
+				ctd.AccountHash[addr] = nacc
+				return nacc, nil
+			} else {
+				return acc, nil
+			}
 		}
 	} else {
 		if acc, err := ctd.loader.Account(addr); err != nil {
 			return nil, err
 		} else {
-			ctd.AccountHash[addr] = acc
-			return acc, nil
+			if ctd.isTop {
+				nacc := acc.Clone()
+				ctd.AccountHash[addr] = nacc
+				return nacc, nil
+			} else {
+				return acc, nil
+			}
 		}
 	}
 }
@@ -505,16 +525,25 @@ func (ctd *ContextData) AccountBalance(addr common.Address) (*account.Balance, e
 		if bc, err := ctd.Parent.AccountBalance(addr); err != nil {
 			return nil, err
 		} else {
-			nbc := bc.Clone()
-			ctd.AccountBalanceHash[addr] = nbc
-			return nbc, nil
+			if ctd.isTop {
+				nbc := bc.Clone()
+				ctd.AccountBalanceHash[addr] = nbc
+				return nbc, nil
+			} else {
+				return bc, nil
+			}
 		}
 	} else {
 		if bc, err := ctd.loader.AccountBalance(addr); err != nil {
 			return nil, err
 		} else {
-			ctd.AccountBalanceHash[addr] = bc
-			return bc, nil
+			if ctd.isTop {
+				nbc := bc.Clone()
+				ctd.AccountBalanceHash[addr] = nbc
+				return nbc, nil
+			} else {
+				return bc, nil
+			}
 		}
 	}
 }
@@ -530,18 +559,28 @@ func (ctd *ContextData) AccountData(addr common.Address, name []byte) []byte {
 	} else if ctd.Parent != nil {
 		value := ctd.Parent.AccountData(addr, name)
 		if len(value) > 0 {
-			nvalue := make([]byte, len(value))
-			copy(nvalue, value)
-			ctd.AccountDataHash[key] = nvalue
-			return nvalue
+			if ctd.isTop {
+				nvalue := make([]byte, len(value))
+				copy(nvalue, value)
+				ctd.AccountDataHash[key] = nvalue
+				return nvalue
+			} else {
+				return value
+			}
 		} else {
 			return nil
 		}
 	} else {
 		value := ctd.loader.AccountData(addr, name)
 		if len(value) > 0 {
-			ctd.AccountDataHash[key] = value
-			return value
+			if ctd.isTop {
+				nvalue := make([]byte, len(value))
+				copy(nvalue, value)
+				ctd.AccountDataHash[key] = nvalue
+				return nvalue
+			} else {
+				return value
+			}
 		} else {
 			return nil
 		}
@@ -571,16 +610,25 @@ func (ctd *ContextData) UTXO(id uint64) (*transaction.UTXO, error) {
 		if utxo, err := ctd.Parent.UTXO(id); err != nil {
 			return nil, err
 		} else {
-			nutxo := utxo.Clone()
-			ctd.UTXOHash[id] = nutxo
-			return nutxo, nil
+			if ctd.isTop {
+				nutxo := utxo.Clone()
+				ctd.UTXOHash[id] = nutxo
+				return nutxo, nil
+			} else {
+				return utxo, nil
+			}
 		}
 	} else {
 		if utxo, err := ctd.loader.UTXO(id); err != nil {
 			return nil, err
 		} else {
-			ctd.UTXOHash[id] = utxo
-			return utxo, nil
+			if ctd.isTop {
+				nutxo := utxo.Clone()
+				ctd.UTXOHash[id] = nutxo
+				return nutxo, nil
+			} else {
+				return utxo, nil
+			}
 		}
 	}
 }
@@ -605,6 +653,182 @@ func (ctd *ContextData) DeleteUTXO(id uint64) error {
 	}
 	ctd.DeletedUTXOHash[id] = true
 	return nil
+}
+
+// Hash returns the hash value of it
+func (ctd *ContextData) Dump() string {
+	var buffer bytes.Buffer
+	buffer.WriteString("SeqHash\n")
+	{
+		keys := []common.Address{}
+		for k := range ctd.SeqHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			v := ctd.SeqHash[k]
+			buffer.WriteString(k.String())
+			buffer.WriteString(": ")
+			buffer.WriteString(strconv.FormatInt(int64(v), 10))
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("AccountHash\n")
+	{
+		keys := []common.Address{}
+		for k := range ctd.AccountHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			v := ctd.AccountHash[k]
+			buffer.WriteString(k.String())
+			buffer.WriteString(": ")
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("CreatedAccountHash\n")
+	{
+		keys := []common.Address{}
+		for k := range ctd.CreatedAccountHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			v := ctd.CreatedAccountHash[k]
+			buffer.WriteString(k.String())
+			buffer.WriteString(": ")
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("DeletedAccountHash\n")
+	{
+		keys := []common.Address{}
+		for k := range ctd.DeletedAccountHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			buffer.WriteString(k.String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("AccountBalanceHash\n")
+	{
+		keys := []common.Address{}
+		for k := range ctd.AccountBalanceHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			v := ctd.AccountBalanceHash[k]
+			buffer.WriteString(k.String())
+			buffer.WriteString(": ")
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("AccountDataHash\n")
+	{
+		keys := []string{}
+		for k := range ctd.AccountDataHash {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := ctd.AccountDataHash[k]
+			buffer.WriteString(string(k))
+			buffer.WriteString(": ")
+			buffer.WriteString(string(v))
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("DeletedAccountDataHash\n")
+	{
+		keys := []string{}
+		for k := range ctd.DeletedAccountDataHash {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			buffer.WriteString(string(k))
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("UTXOHash\n")
+	{
+		keys := []uint64{}
+		for k := range ctd.UTXOHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(uint64Slice(keys))
+		for _, k := range keys {
+			v := ctd.UTXOHash[k]
+			buffer.WriteString(strconv.FormatInt(int64(k), 10))
+			buffer.WriteString(": ")
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("CreatedUTXOHash\n")
+	{
+		keys := []uint64{}
+		for k := range ctd.CreatedUTXOHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(uint64Slice(keys))
+		for _, k := range keys {
+			v := ctd.CreatedUTXOHash[k]
+			buffer.WriteString(strconv.FormatInt(int64(k), 10))
+			buffer.WriteString(": ")
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("DeletedUTXOHash\n")
+	{
+		keys := []uint64{}
+		for k := range ctd.DeletedUTXOHash {
+			keys = append(keys, k)
+		}
+		sort.Sort(uint64Slice(keys))
+		for _, k := range keys {
+			buffer.WriteString(strconv.FormatInt(int64(k), 10))
+			buffer.WriteString("\n")
+		}
+	}
+	return buffer.String()
 }
 
 type addressSlice []common.Address
