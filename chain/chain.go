@@ -160,6 +160,12 @@ func (cn *Chain) ValidateContext(b *block.Block, ctx *data.Context) error {
 	if !b.Header.HashPrevBlock.Equal(ctx.LastBlockHash()) {
 		return ErrExpiredContextBlockHash
 	}
+	if ctx.TargetHeight() != cn.store.TargetHeight() {
+		return ErrInvalidAppendBlockHeight
+	}
+	if !cn.store.LastBlockHash().Equal(ctx.LastBlockHash()) {
+		return ErrInvalidAppendBlockHash
+	}
 	if ctx.StackSize() > 1 {
 		return ErrDirtyContext
 	}
@@ -169,7 +175,6 @@ func (cn *Chain) ValidateContext(b *block.Block, ctx *data.Context) error {
 	return nil
 }
 
-// ProcessBlock returns a context as a processing result of the block
 func (cn *Chain) ProcessBlock(b *block.Block, Rewarder reward.Rewarder) (*data.Context, error) {
 	cn.closeLock.RLock()
 	defer cn.closeLock.RUnlock()
@@ -198,11 +203,8 @@ func (cn *Chain) ProcessBlock(b *block.Block, Rewarder reward.Rewarder) (*data.C
 	if err := Rewarder.ProcessReward(b.Header.FormulationAddress, ctx); err != nil {
 		return nil, err
 	}
-	if ctx.StackSize() > 1 {
-		return nil, ErrDirtyContext
-	}
-	if !b.Header.HashContext.Equal(ctx.Hash()) {
-		return nil, ErrInvalidAppendContextHash
+	if err := cn.ValidateContext(b, ctx); err != nil {
+		return nil, err
 	}
 	return ctx, nil
 }
