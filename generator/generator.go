@@ -88,7 +88,9 @@ TxLoop:
 		case <-timer.C:
 			break TxLoop
 		default:
+			sn := ctx.Snapshot()
 			item := TxPool.UnsafePop(ctx)
+			ctx.Revert(sn)
 			if item == nil {
 				break TxLoop
 			}
@@ -98,6 +100,7 @@ TxLoop:
 				//TODO : EventTransactionPendingFail
 				break
 			}
+
 			b.Transactions = append(b.Transactions, item.Transaction)
 			b.TransactionSignatures = append(b.TransactionSignatures, item.Signatures)
 

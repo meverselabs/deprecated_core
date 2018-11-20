@@ -72,14 +72,14 @@ func (st *emptyLoader) Account(addr common.Address) (account.Account, error) {
 	return nil, ErrNotExistAccount
 }
 
-// AccountBalance returns ErrNotExistAccount
-func (st *emptyLoader) AccountBalance(addr common.Address) (*account.Balance, error) {
-	return nil, ErrNotExistAccount
-}
-
 // IsExistAccount returns false
 func (st *emptyLoader) IsExistAccount(addr common.Address) (bool, error) {
 	return false, nil
+}
+
+// AccountBalance returns ErrNotExistAccount
+func (st *emptyLoader) AccountBalance(addr common.Address) (*account.Balance, error) {
+	return nil, ErrNotExistAccount
 }
 
 // AccountData returns nil
