@@ -19,6 +19,7 @@ import (
 	"git.fleta.io/fleta/core/txpool"
 	"git.fleta.io/fleta/framework/message"
 	"git.fleta.io/fleta/framework/peer"
+	"git.fleta.io/fleta/framework/router"
 )
 
 // Kernel processes the block chain using its components and stores state of the block chain
@@ -32,6 +33,7 @@ type Kernel struct {
 	TxPool           *txpool.TransactionPool
 	BlockPool        *blockpool.BlockPool
 	peerMsgHandler   *message.Manager
+	Router           router.Router
 	PeerManager      peer.Manager
 	processBlockLock sync.Mutex
 	closeLock        sync.RWMutex
@@ -48,6 +50,7 @@ type Config struct {
 	SeedNodes  []string
 	Chain      chain.Config
 	Peer       peer.Config
+	Router     router.Config
 	Generator  generator.Config
 	Observer   observer.Config
 	StorePath  string
@@ -60,7 +63,11 @@ func NewKernel(Config *Config, st *store.Store, Rewarder reward.Rewarder, Genesi
 		return nil, err
 	}
 	mm := message.NewManager()
-	pm, err := peer.NewManager(Config.ChainCoord, mm, &Config.Peer)
+	r, err := router.NewRouter(&Config.Router)
+	if err != nil {
+		return nil, err
+	}
+	pm, err := peer.NewManager(Config.ChainCoord, r, mm, &Config.Peer)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +81,7 @@ func NewKernel(Config *Config, st *store.Store, Rewarder reward.Rewarder, Genesi
 		TxPool:         txpool.NewTransactionPool(),
 		BlockPool:      blockpool.NewBlockPool(),
 		peerMsgHandler: mm,
+		Router:         r,
 		PeerManager:    pm,
 	}
 	if err := cn.Init(GenesisContextData); err != nil {
