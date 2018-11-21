@@ -167,7 +167,7 @@ func (kn *Kernel) TryGenerateBlock() error {
 	if err := kn.BlockPool.Append(nb, nos, ctx, cb); err != nil {
 		return err
 	}
-	if err := kn.TryProcessBlock(); err != nil {
+	if err := kn.tryProcessBlock(); err != nil {
 		return err
 	}
 	return nil
@@ -180,7 +180,10 @@ func (kn *Kernel) TryProcessBlock() error {
 	if kn.isClose {
 		return ErrClosedKernel
 	}
+	return kn.tryProcessBlock()
+}
 
+func (kn *Kernel) tryProcessBlock() error {
 	kn.processBlockLock.Lock()
 	defer kn.processBlockLock.Unlock()
 

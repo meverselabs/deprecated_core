@@ -132,6 +132,12 @@ func (cn *Chain) Provider() block.Provider {
 
 // IsMinable returns true when the target address is the top rank's address
 func (cn *Chain) IsMinable(addr common.Address, TimeoutCount uint32) (bool, error) {
+	cn.closeLock.RLock()
+	defer cn.closeLock.RUnlock()
+	if cn.isClose {
+		return false, ErrClosedChain
+	}
+
 	return cn.consensus.IsMinable(addr, TimeoutCount)
 }
 
@@ -142,7 +148,10 @@ func (cn *Chain) ValidateObserverSigned(b *block.Block, s *block.ObserverSigned)
 	if cn.isClose {
 		return ErrClosedChain
 	}
+	return cn.validateObserverSigned(b, s)
+}
 
+func (cn *Chain) validateObserverSigned(b *block.Block, s *block.ObserverSigned) error {
 	if err := cn.consensus.ValidateBlock(b, s); err != nil {
 		return err
 	}
@@ -151,6 +160,15 @@ func (cn *Chain) ValidateObserverSigned(b *block.Block, s *block.ObserverSigned)
 
 // ValidateContext validates the context using the block
 func (cn *Chain) ValidateContext(b *block.Block, ctx *data.Context) error {
+	cn.closeLock.RLock()
+	defer cn.closeLock.RUnlock()
+	if cn.isClose {
+		return ErrClosedChain
+	}
+	return cn.validateContext(b, ctx)
+}
+
+func (cn *Chain) validateContext(b *block.Block, ctx *data.Context) error {
 	if !b.Header.ChainCoord.Equal(ctx.ChainCoord()) {
 		return ErrInvalidChainCoordinate
 	}
@@ -175,6 +193,7 @@ func (cn *Chain) ValidateContext(b *block.Block, ctx *data.Context) error {
 	return nil
 }
 
+// ProcessBlock proccesses the block using the rewarder and generates the context of the block
 func (cn *Chain) ProcessBlock(b *block.Block, Rewarder reward.Rewarder) (*data.Context, error) {
 	cn.closeLock.RLock()
 	defer cn.closeLock.RUnlock()
@@ -203,7 +222,7 @@ func (cn *Chain) ProcessBlock(b *block.Block, Rewarder reward.Rewarder) (*data.C
 	if err := Rewarder.ProcessReward(b.Header.FormulationAddress, ctx); err != nil {
 		return nil, err
 	}
-	if err := cn.ValidateContext(b, ctx); err != nil {
+	if err := cn.validateContext(b, ctx); err != nil {
 		return nil, err
 	}
 	return ctx, nil
@@ -275,10 +294,10 @@ func (cn *Chain) AppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.
 	cn.appendLock.Lock()
 	defer cn.appendLock.Unlock()
 
-	if err := cn.ValidateContext(b, ctx); err != nil {
+	if err := cn.validateContext(b, ctx); err != nil {
 		return err
 	}
-	if err := cn.ValidateObserverSigned(b, s); err != nil {
+	if err := cn.validateObserverSigned(b, s); err != nil {
 		return err
 	}
 	top := ctx.Top()
