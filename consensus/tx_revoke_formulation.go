@@ -13,10 +13,10 @@ import (
 )
 
 func init() {
-	data.RegisterTransaction("formulation.RevokeFormulation", func(t transaction.Type) transaction.Transaction {
+	data.RegisterTransaction("formulation.RevokeFormulation", func(coord *common.Coordinate, t transaction.Type) transaction.Transaction {
 		return &RevokeFormulation{
 			Base: transaction.Base{
-				ChainCoord_: &common.Coordinate{},
+				ChainCoord_: coord,
 				Type_:       t,
 			},
 		}

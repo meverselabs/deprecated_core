@@ -92,7 +92,7 @@ func (tran *Transactor) RegisterType(Name string, t transaction.Type, Fee *amoun
 // NewByType generate an transaction instance by the type
 func (tran *Transactor) NewByType(t transaction.Type) (transaction.Transaction, error) {
 	if item, has := tran.typeHash[t]; has {
-		tx := item.Factory(t)
+		tx := item.Factory(tran.coord.Clone(), t)
 		tx.SetType(t)
 		return tx, nil
 	} else {
@@ -162,7 +162,7 @@ type transactionTypeItem struct {
 }
 
 // TransactionFactory is a function type to generate an account instance by the type
-type TransactionFactory func(t transaction.Type) transaction.Transaction
+type TransactionFactory func(coord *common.Coordinate, t transaction.Type) transaction.Transaction
 
 // TransactionValidator is a function type to support the validation of the transaction with signers
 type TransactionValidator func(loader Loader, tx transaction.Transaction, signers []common.PublicHash) error
