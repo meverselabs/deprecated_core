@@ -15,7 +15,7 @@ import (
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/message_def"
 	"git.fleta.io/fleta/framework/message"
-	"git.fleta.io/fleta/mocknet"
+	"git.fleta.io/fleta/network"
 )
 
 // Connector TODO
@@ -61,7 +61,7 @@ func (ob *Connector) run() {
 		go func(i int, addr string) {
 		DialLoop:
 			for {
-				Conn, err := mocknet.Dial(ob.Config.Network, addr)
+				Conn, err := network.Dial(ob.Config.Network, addr)
 				if err != nil {
 					log.Println(err)
 					time.Sleep(10 * time.Second) //TEMP
