@@ -331,7 +331,7 @@ func TestAccPushPopRemove(t *testing.T) {
 		{name: "test3", args: args{pushCount: 10, popCount: 0, removeCount: 5, order: 1}, want: 5},
 		{name: "test4", args: args{pushCount: 10, popCount: 5, removeCount: 5, order: 1}, want: 0},
 		{name: "test5", args: args{pushCount: 10, popCount: 5, removeCount: 0, order: 1}, want: 5},
-		{name: "test6", args: args{pushCount: 100, popCount: 0, removeCount: 100, order: 1}, want: 100},
+		{name: "test6", args: args{pushCount: 100, popCount: 0, removeCount: 100, order: 1}, want: 0},
 		{name: "test7", args: args{pushCount: 100, popCount: 0, removeCount: 1, order: -1}, want: 0},
 		{name: "test8", args: args{pushCount: 100, popCount: 10, removeCount: 50, order: 1}, want: 40},
 		{name: "test9", args: args{pushCount: 100, popCount: 10, removeCount: 1, order: -1}, want: 0},
@@ -361,7 +361,7 @@ func TestAccPushPopRemove(t *testing.T) {
 			for i := uint64(0); i < tt.args.removeCount; i++ {
 				var tx transaction.Transaction
 				if tt.args.order == 1 {
-					tx = txs[i]
+					tx = txs[i+tt.args.popCount]
 				} else {
 					tx = txs[uint64(len(txs))-i-1]
 				}

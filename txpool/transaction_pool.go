@@ -56,7 +56,11 @@ func (tp *TransactionPool) Size() int {
 	tp.Lock()
 	defer tp.Unlock()
 
-	return tp.turnQ.Size() - len(tp.turnOutHash)
+	sum := 0
+	for _, v := range tp.turnOutHash {
+		sum += v
+	}
+	return tp.turnQ.Size() - sum
 }
 
 // Push inserts the transaction and signatures of it by base model and sequence
