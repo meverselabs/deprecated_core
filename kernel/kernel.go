@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 
+	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/message_def"
 	"git.fleta.io/fleta/core/store"
 
@@ -28,7 +29,7 @@ import (
 type Kernel struct {
 	peer.BaseEventHandler
 	Config           *Config
-	Chain            *chain.Chain
+	chain            *chain.Chain
 	Rewarder         reward.Rewarder
 	TxPool           *txpool.TransactionPool
 	BlockPool        *blockpool.BlockPool
@@ -77,7 +78,7 @@ func NewKernel(Config *Config, st *store.Store, Rewarder reward.Rewarder, Genesi
 	}
 	kn := &Kernel{
 		Config:         Config,
-		Chain:          cn,
+		chain:          cn,
 		Rewarder:       Rewarder,
 		TxPool:         txpool.NewTransactionPool(),
 		BlockPool:      blockpool.NewBlockPool(),
@@ -98,6 +99,47 @@ func NewKernel(Config *Config, st *store.Store, Rewarder reward.Rewarder, Genesi
 // AddEventHandler adds a event handler to kernel
 func (kn *Kernel) AddEventHandler(eh EventHandler) {
 	kn.eventHandlers = append(kn.eventHandlers, eh)
+}
+
+// Loader returns the loader of the chain
+func (kn *Kernel) Loader() data.Loader {
+	return kn.chain.Loader()
+}
+
+// Provider returns the provider of the chain
+func (kn *Kernel) Provider() block.Provider {
+	return kn.chain.Provider()
+}
+
+// IsMinable returns true when the target address is the top rank's address
+func (kn *Kernel) IsMinable(addr common.Address, TimeoutCount uint32) (bool, error) {
+	return kn.chain.IsMinable(addr, TimeoutCount)
+}
+
+// ValidateObserverSigned validates observer signatures
+func (kn *Kernel) ValidateObserverSigned(b *block.Block, s *block.ObserverSigned) error {
+	return kn.chain.ValidateObserverSigned(b, s)
+}
+
+// ValidateContext validates the context using the block
+func (kn *Kernel) ValidateContext(b *block.Block, ctx *data.Context) error {
+	return kn.chain.ValidateContext(b, ctx)
+}
+
+// AppendBlock stores the block data
+func (kn *Kernel) AppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
+	for _, eh := range kn.eventHandlers {
+		if err := eh.BeforeAppendBlock(b, s, ctx); err != nil {
+			return err
+		}
+	}
+	if err := kn.chain.AppendBlock(b, s, ctx); err != nil {
+		return err
+	}
+	for _, eh := range kn.eventHandlers {
+		eh.AfterAppendBlock(b, s, ctx)
+	}
+	return nil
 }
 
 // InitFormulator updates the node as a formulator
@@ -125,7 +167,7 @@ func (kn *Kernel) Close() {
 	defer kn.closeLock.Unlock()
 
 	kn.isClose = true
-	kn.Chain.Close()
+	kn.chain.Close()
 }
 
 // IsClose returns the close status of the kernel
@@ -151,13 +193,13 @@ func (kn *Kernel) TryGenerateBlock() error {
 	kn.genBlockLock.Lock()
 	defer kn.genBlockLock.Unlock()
 
-	if is, err := kn.Chain.IsMinable(kn.generator.Address(), 0); err != nil {
+	if is, err := kn.chain.IsMinable(kn.generator.Address(), 0); err != nil {
 		return err
 	} else if !is {
 		return nil
 	}
 
-	ctx := data.NewContext(kn.Chain.Loader())
+	ctx := data.NewContext(kn.chain.Loader())
 	for _, eh := range kn.eventHandlers {
 		if err := eh.OnCreateContext(ctx); err != nil {
 			return err
@@ -198,33 +240,20 @@ func (kn *Kernel) tryProcessBlock() error {
 	kn.processBlockLock.Lock()
 	defer kn.processBlockLock.Unlock()
 
-	item := kn.BlockPool.Pop(kn.Chain.Loader().TargetHeight())
+	item := kn.BlockPool.Pop(kn.chain.Loader().TargetHeight())
 	for item != nil {
-		if err := kn.Chain.ValidateObserverSigned(item.Block, item.ObserverSigned); err != nil {
+		if err := kn.chain.ValidateObserverSigned(item.Block, item.ObserverSigned); err != nil {
 			return err
 		}
 		if item.Context == nil {
-			ctx := data.NewContext(kn.Chain.Loader())
-			for _, eh := range kn.eventHandlers {
-				if err := eh.OnCreateContext(ctx); err != nil {
-					return err
-				}
-			}
-			if err := kn.Chain.ProcessBlock(ctx, item.Block, kn.Rewarder); err != nil {
+			ctx, err := kn.ContextByBlock(item.Block)
+			if err != nil {
 				return err
 			}
 			item.Context = ctx
 		}
-		for _, eh := range kn.eventHandlers {
-			if err := eh.BeforeAppendBlock(item.Block, item.ObserverSigned, item.Context); err != nil {
-				return err
-			}
-		}
-		if err := kn.Chain.AppendBlock(item.Block, item.ObserverSigned, item.Context); err != nil {
+		if err := kn.AppendBlock(item.Block, item.ObserverSigned, item.Context); err != nil {
 			return err
-		}
-		for _, eh := range kn.eventHandlers {
-			eh.AfterAppendBlock(item.Block, item.ObserverSigned, item.Context)
 		}
 		for _, tx := range item.Block.Transactions {
 			kn.TxPool.Remove(tx)
@@ -234,9 +263,23 @@ func (kn *Kernel) tryProcessBlock() error {
 				return err
 			}
 		}
-		item = kn.BlockPool.Pop(kn.Chain.Loader().TargetHeight())
+		item = kn.BlockPool.Pop(kn.chain.Loader().TargetHeight())
 	}
 	return nil
+}
+
+// ContextByBlock TODO
+func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
+	ctx := data.NewContext(kn.chain.Loader())
+	for _, eh := range kn.eventHandlers {
+		if err := eh.OnCreateContext(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if err := kn.chain.ProcessBlock(ctx, b, kn.Rewarder); err != nil {
+		return nil, err
+	}
+	return ctx, nil
 }
 
 // AddTransaction validate the transaction and push it to the transaction pool
@@ -247,7 +290,7 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 		return ErrClosedKernel
 	}
 
-	loader := kn.Chain.Loader()
+	loader := kn.chain.Loader()
 	if !tx.ChainCoord().Equal(loader.ChainCoord()) {
 		return chain.ErrInvalidChainCoordinate
 	}
@@ -266,16 +309,8 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	if err := loader.Transactor().Validate(loader, tx, signers); err != nil {
 		return err
 	}
-	for _, eh := range kn.eventHandlers {
-		if err := eh.BeforePushTransaction(tx, sigs); err != nil {
-			return err
-		}
-	}
 	if err := kn.TxPool.Push(tx, sigs); err != nil {
 		return err
-	}
-	for _, eh := range kn.eventHandlers {
-		eh.AfterPushTransaction(tx, sigs)
 	}
 	return nil
 }
@@ -292,9 +327,9 @@ func (kn *Kernel) PeerDisconnected(p peer.Peer) {
 }
 
 func (kn *Kernel) sendStatusMessage(p peer.Peer) {
-	loader := kn.Chain.Loader()
+	loader := kn.chain.Loader()
 	msg := &message_def.StatusMessage{
-		Version:       kn.Chain.Config.Version,
+		Version:       kn.chain.Config.Version,
 		Height:        loader.TargetHeight() - 1,
 		LastBlockHash: loader.LastBlockHash(),
 	}
@@ -303,7 +338,7 @@ func (kn *Kernel) sendStatusMessage(p peer.Peer) {
 
 func (kn *Kernel) transactionMessageCreator(r io.Reader) message.Message {
 	p := &message_def.TransactionMessage{}
-	p.Tran = kn.Chain.Loader().Transactor()
+	p.Tran = kn.chain.Loader().Transactor()
 	p.ReadFrom(r)
 	return p
 }
@@ -317,7 +352,7 @@ func (kn *Kernel) transactionMessageHandler(m message.Message) error {
 }
 
 func (kn *Kernel) blockMessageCreator(r io.Reader) message.Message {
-	p := message_def.NewBlockMessage(kn.Chain.Loader().Transactor())
+	p := message_def.NewBlockMessage(kn.chain.Loader().Transactor())
 	p.ReadFrom(r)
 	return p
 }
