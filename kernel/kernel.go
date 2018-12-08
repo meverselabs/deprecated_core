@@ -270,6 +270,12 @@ func (kn *Kernel) tryProcessBlock() error {
 
 // ContextByBlock TODO
 func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return nil, ErrClosedKernel
+	}
+
 	ctx := data.NewContext(kn.chain.Loader())
 	for _, eh := range kn.eventHandlers {
 		if err := eh.OnCreateContext(ctx); err != nil {
