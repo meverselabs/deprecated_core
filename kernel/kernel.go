@@ -152,6 +152,7 @@ func (kn *Kernel) TryGenerateBlock() error {
 	}
 
 	ctx := data.NewContext(kn.Chain.Loader())
+	// TODO : OnInitContext(ctx)
 	nb, ns, err := kn.generator.GenerateBlock(kn.TxPool, ctx, 0, kn.Rewarder)
 	if err != nil {
 		return err
@@ -193,15 +194,18 @@ func (kn *Kernel) tryProcessBlock() error {
 			return err
 		}
 		if item.Context == nil {
-			ctx, err := kn.Chain.ProcessBlock(item.Block, kn.Rewarder)
-			if err != nil {
+			ctx := data.NewContext(kn.Chain.Loader())
+			// TODO : OnInitContext(ctx)
+			if err := kn.Chain.ProcessBlock(ctx, item.Block, kn.Rewarder); err != nil {
 				return err
 			}
 			item.Context = ctx
 		}
+		// TODO : OnBeforeAppendBlock(item.Block, item.ObserverSigned, item.Context)
 		if err := kn.Chain.AppendBlock(item.Block, item.ObserverSigned, item.Context); err != nil {
 			return err
 		}
+		// TODO : OnAfterAppendBlock(item.Block, item.ObserverSigned, item.Context)
 		for _, tx := range item.Block.Transactions {
 			kn.TxPool.Remove(tx)
 		}

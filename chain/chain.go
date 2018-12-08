@@ -194,38 +194,37 @@ func (cn *Chain) validateContext(b *block.Block, ctx *data.Context) error {
 }
 
 // ProcessBlock proccesses the block using the rewarder and generates the context of the block
-func (cn *Chain) ProcessBlock(b *block.Block, Rewarder reward.Rewarder) (*data.Context, error) {
+func (cn *Chain) ProcessBlock(ctx *data.Context, b *block.Block, Rewarder reward.Rewarder) error {
 	cn.closeLock.RLock()
 	defer cn.closeLock.RUnlock()
 	if cn.isClose {
-		return nil, ErrClosedChain
+		return ErrClosedChain
 	}
 
 	if !b.Header.ChainCoord.Equal(cn.store.ChainCoord()) {
-		return nil, ErrInvalidChainCoordinate
+		return ErrInvalidChainCoordinate
 	}
 	if b.Header.Height != cn.store.TargetHeight() {
-		return nil, ErrInvalidAppendBlockHeight
+		return ErrInvalidAppendBlockHeight
 	}
 	if !b.Header.HashPrevBlock.Equal(cn.store.LastBlockHash()) {
-		return nil, ErrInvalidAppendBlockHash
+		return ErrInvalidAppendBlockHash
 	}
 	if err := cn.validateBlockBody(b); err != nil {
-		return nil, err
+		return err
 	}
-	ctx := data.NewContext(cn.store)
 	for i, tx := range b.Transactions {
 		if _, err := cn.store.Transactor().Execute(ctx, tx, &common.Coordinate{Height: b.Header.Height, Index: uint16(i)}); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if err := Rewarder.ProcessReward(b.Header.FormulationAddress, ctx); err != nil {
-		return nil, err
+		return err
 	}
 	if err := cn.validateContext(b, ctx); err != nil {
-		return nil, err
+		return err
 	}
-	return ctx, nil
+	return nil
 }
 
 func (cn *Chain) validateBlockBody(b *block.Block) error {
@@ -310,6 +309,5 @@ func (cn *Chain) AppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.
 	if err := cn.store.StoreBlock(top, b, s, CustomHash); err != nil {
 		return err
 	}
-	// TODO : EventBlockConnected
 	return nil
 }
