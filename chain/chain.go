@@ -38,7 +38,7 @@ func NewChain(Config *Config, st *store.Store) (*Chain, error) {
 		}
 	}
 
-	FormulationAccountType, err := st.Accounter().TypeByName("formulation.Account")
+	FormulationAccountType, err := st.Accounter().TypeByName("consensus.FormulationAccount")
 	if err != nil {
 		return nil, err
 	}

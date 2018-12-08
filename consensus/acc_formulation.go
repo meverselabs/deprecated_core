@@ -16,14 +16,14 @@ var (
 )
 
 func init() {
-	data.RegisterAccount("formulation.Account", func(t account.Type) account.Account {
-		return &Account{
+	data.RegisterAccount("consensus.FormulationAccount", func(t account.Type) account.Account {
+		return &FormulationAccount{
 			Base: account.Base{
 				Type_: t,
 			},
 		}
 	}, func(loader data.Loader, a account.Account, signers []common.PublicHash) error {
-		acc := a.(*Account)
+		acc := a.(*FormulationAccount)
 		if len(signers) != 1 {
 			return ErrInvalidSignerCount
 		}
@@ -35,16 +35,16 @@ func init() {
 	})
 }
 
-// Account is a formulation.Account
+// FormulationAccount is a consensus.FormulationAccount
 // It is used to indentify formulator
-type Account struct {
+type FormulationAccount struct {
 	account.Base
 	KeyHash common.PublicHash
 }
 
 // Clone returns the clonend value of it
-func (acc *Account) Clone() account.Account {
-	return &Account{
+func (acc *FormulationAccount) Clone() account.Account {
+	return &FormulationAccount{
 		Base: account.Base{
 			Address_: acc.Address_,
 			Type_:    acc.Type_,
@@ -54,7 +54,7 @@ func (acc *Account) Clone() account.Account {
 }
 
 // WriteTo is a serialization function
-func (acc *Account) WriteTo(w io.Writer) (int64, error) {
+func (acc *FormulationAccount) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := acc.Base.WriteTo(w); err != nil {
 		return wrote, err
@@ -70,7 +70,7 @@ func (acc *Account) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom is a deserialization function
-func (acc *Account) ReadFrom(r io.Reader) (int64, error) {
+func (acc *FormulationAccount) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := acc.Base.ReadFrom(r); err != nil {
 		return read, err

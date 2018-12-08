@@ -81,7 +81,7 @@ func (cs *Consensus) ApplyGenesis(ctd *data.ContextData) ([]byte, error) {
 	phase := cs.RankTable.LargestPhase() + 1
 	for _, a := range ctd.CreatedAccountHash {
 		if a.Type() == cs.FormulationAccountType {
-			acc := a.(*Account)
+			acc := a.(*FormulationAccount)
 			addr := acc.Address()
 			if err := cs.RankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.Hash(addr[:]))); err != nil {
 				return nil, err
@@ -108,7 +108,7 @@ func (cs *Consensus) ApplyBlock(ctd *data.ContextData, b *block.Block) ([]byte, 
 	phase := cs.RankTable.LargestPhase() + 1
 	for _, a := range ctd.CreatedAccountHash {
 		if a.Type() == cs.FormulationAccountType {
-			acc := a.(*Account)
+			acc := a.(*FormulationAccount)
 			addr := acc.Address()
 			if err := cs.RankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.Hash(addr[:]))); err != nil {
 				return nil, err

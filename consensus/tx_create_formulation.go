@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	data.RegisterTransaction("formulation.CreateFormulation", func(coord *common.Coordinate, t transaction.Type) transaction.Transaction {
+	data.RegisterTransaction("consensus.CreateFormulation", func(coord *common.Coordinate, t transaction.Type) transaction.Transaction {
 		return &CreateFormulation{
 			Base: transaction.Base{
 				ChainCoord_: coord,
@@ -60,11 +60,11 @@ func init() {
 		} else if is {
 			return nil, ErrExistAddress
 		} else {
-			a, err := ctx.Accounter().NewByTypeName("formulation.Account")
+			a, err := ctx.Accounter().NewByTypeName("consensus.FormulationAccount")
 			if err != nil {
 				return nil, err
 			}
-			acc := a.(*Account)
+			acc := a.(*FormulationAccount)
 			acc.Address_ = addr
 			acc.KeyHash = tx.KeyHash
 			ctx.CreateAccount(acc)
@@ -74,7 +74,7 @@ func init() {
 	})
 }
 
-// CreateFormulation is a formulation.CreateFormulation
+// CreateFormulation is a consensus.CreateFormulation
 // It is used to make formulation account
 type CreateFormulation struct {
 	transaction.Base

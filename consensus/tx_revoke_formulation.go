@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	data.RegisterTransaction("formulation.RevokeFormulation", func(coord *common.Coordinate, t transaction.Type) transaction.Transaction {
+	data.RegisterTransaction("consensus.RevokeFormulation", func(coord *common.Coordinate, t transaction.Type) transaction.Transaction {
 		return &RevokeFormulation{
 			Base: transaction.Base{
 				ChainCoord_: coord,
@@ -77,7 +77,7 @@ func init() {
 	})
 }
 
-// RevokeFormulation is a formulation.RevokeFormulation
+// RevokeFormulation is a consensus.RevokeFormulation
 // It is used to remove formulation account and get back staked coin
 type RevokeFormulation struct {
 	transaction.Base
