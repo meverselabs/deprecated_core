@@ -37,6 +37,7 @@ type Kernel struct {
 	PeerManager      peer.Manager
 	processBlockLock sync.Mutex
 	closeLock        sync.RWMutex
+	eventHandlers    []EventHandler
 	isClose          bool
 	// Formulator
 	generator         *generator.Generator
@@ -92,6 +93,11 @@ func NewKernel(Config *Config, st *store.Store, Rewarder reward.Rewarder, Genesi
 	kn.peerMsgHandler.ApplyMessage(message_def.StatusMessageType, kn.statusMessageCreator, kn.statusMessageHandler)
 	kn.PeerManager.RegisterEventHandler(kn)
 	return kn, nil
+}
+
+// AddEventHandler adds a event handler to kernel
+func (kn *Kernel) AddEventHandler(eh EventHandler) {
+	kn.eventHandlers = append(kn.eventHandlers, eh)
 }
 
 // InitFormulator updates the node as a formulator
@@ -152,7 +158,11 @@ func (kn *Kernel) TryGenerateBlock() error {
 	}
 
 	ctx := data.NewContext(kn.Chain.Loader())
-	// TODO : OnInitContext(ctx)
+	for _, eh := range kn.eventHandlers {
+		if err := eh.OnCreateContext(ctx); err != nil {
+			return err
+		}
+	}
 	nb, ns, err := kn.generator.GenerateBlock(kn.TxPool, ctx, 0, kn.Rewarder)
 	if err != nil {
 		return err
@@ -195,17 +205,27 @@ func (kn *Kernel) tryProcessBlock() error {
 		}
 		if item.Context == nil {
 			ctx := data.NewContext(kn.Chain.Loader())
-			// TODO : OnInitContext(ctx)
+			for _, eh := range kn.eventHandlers {
+				if err := eh.OnCreateContext(ctx); err != nil {
+					return err
+				}
+			}
 			if err := kn.Chain.ProcessBlock(ctx, item.Block, kn.Rewarder); err != nil {
 				return err
 			}
 			item.Context = ctx
 		}
-		// TODO : OnBeforeAppendBlock(item.Block, item.ObserverSigned, item.Context)
+		for _, eh := range kn.eventHandlers {
+			if err := eh.BeforeAppendBlock(item.Block, item.ObserverSigned, item.Context); err != nil {
+				return err
+			}
+		}
 		if err := kn.Chain.AppendBlock(item.Block, item.ObserverSigned, item.Context); err != nil {
 			return err
 		}
-		// TODO : OnAfterAppendBlock(item.Block, item.ObserverSigned, item.Context)
+		for _, eh := range kn.eventHandlers {
+			eh.AfterAppendBlock(item.Block, item.ObserverSigned, item.Context)
+		}
 		for _, tx := range item.Block.Transactions {
 			kn.TxPool.Remove(tx)
 		}
@@ -246,10 +266,17 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	if err := loader.Transactor().Validate(loader, tx, signers); err != nil {
 		return err
 	}
+	for _, eh := range kn.eventHandlers {
+		if err := eh.BeforePushTransaction(tx, sigs); err != nil {
+			return err
+		}
+	}
 	if err := kn.TxPool.Push(tx, sigs); err != nil {
 		return err
 	}
-	// TODO : EventTransactionAdded
+	for _, eh := range kn.eventHandlers {
+		eh.AfterPushTransaction(tx, sigs)
+	}
 	return nil
 }
 
