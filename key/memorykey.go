@@ -5,9 +5,8 @@ import (
 	"io"
 	"math/big"
 
-	ecrypto "github.com/ethereum/go-ethereum/crypto"
-
 	"git.fleta.io/fleta/common"
+	ecrypto "git.fleta.io/fleta/common/crypto"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 )
