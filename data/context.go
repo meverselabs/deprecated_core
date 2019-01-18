@@ -254,6 +254,12 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 // Hash returns the hash value of it
 func (ctd *ContextData) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
+
+	buffer.WriteString("ChainCoord")
+	if _, err := ctd.loader.ChainCoord().WriteTo(&buffer); err != nil {
+		panic(err)
+	}
+
 	buffer.WriteString("SeqHash")
 	{
 		keys := []common.Address{}
