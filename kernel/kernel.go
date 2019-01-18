@@ -59,16 +59,12 @@ type Config struct {
 }
 
 // NewKernel returns a Kernel
-func NewKernel(Config *Config, st *store.Store, Rewarder reward.Rewarder, GenesisContextData *data.ContextData) (*Kernel, error) {
+func NewKernel(Config *Config, r router.Router, st *store.Store, Rewarder reward.Rewarder, GenesisContextData *data.ContextData) (*Kernel, error) {
 	cn, err := chain.NewChain(&Config.Chain, st)
 	if err != nil {
 		return nil, err
 	}
 	mm := message.NewManager()
-	r, err := router.NewRouter(&Config.Router)
-	if err != nil {
-		return nil, err
-	}
 	pm, err := peer.NewManager(Config.ChainCoord, r, mm, &Config.Peer)
 	if err != nil {
 		return nil, err
@@ -145,8 +141,10 @@ func (kn *Kernel) AppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data
 // InitFormulator updates the node as a formulator
 func (kn *Kernel) InitFormulator(Generator *generator.Generator, ObserverConnector *observer.Connector) error {
 	kn.generator = Generator
-	kn.observerConnector = ObserverConnector
-	kn.observerConnector.AddMessageHandler(message_def.BlockMessageType, kn.blockMessageCreator, kn.observerBlockMessageHandler)
+	if ObserverConnector != nil {
+		kn.observerConnector = ObserverConnector
+		kn.observerConnector.AddMessageHandler(message_def.BlockMessageType, kn.blockMessageCreator, kn.observerBlockMessageHandler)
+	}
 	return nil
 }
 
