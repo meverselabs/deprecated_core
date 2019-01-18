@@ -85,9 +85,9 @@ func NewKernel(Config *Config, r router.Router, st *store.Store, Rewarder reward
 	if err := cn.Init(GenesisContextData); err != nil {
 		return nil, err
 	}
-	kn.peerMsgHandler.ApplyMessage(message_def.BlockMessageType, kn.blockMessageCreator, kn.blockMessageHandler)
-	kn.peerMsgHandler.ApplyMessage(message_def.TransactionMessageType, kn.transactionMessageCreator, kn.transactionMessageHandler)
-	kn.peerMsgHandler.ApplyMessage(message_def.StatusMessageType, kn.statusMessageCreator, kn.statusMessageHandler)
+	kn.peerMsgHandler.ApplyMessage(message_def.BlockMessageType, kn.messageCreator, kn.messageHandler)
+	kn.peerMsgHandler.ApplyMessage(message_def.TransactionMessageType, kn.messageCreator, kn.messageHandler)
+	kn.peerMsgHandler.ApplyMessage(message_def.StatusMessageType, kn.messageCreator, kn.messageHandler)
 	kn.PeerManager.RegisterEventHandler(kn)
 	return kn, nil
 }
@@ -143,7 +143,7 @@ func (kn *Kernel) InitFormulator(Generator *generator.Generator, ObserverConnect
 	kn.generator = Generator
 	if ObserverConnector != nil {
 		kn.observerConnector = ObserverConnector
-		kn.observerConnector.AddMessageHandler(message_def.BlockMessageType, kn.blockMessageCreator, kn.observerBlockMessageHandler)
+		kn.observerConnector.AddMessageHandler(message_def.BlockMessageType, kn.messageCreator, kn.observerBlockMessageHandler)
 	}
 	return nil
 }
@@ -340,33 +340,50 @@ func (kn *Kernel) sendStatusMessage(p peer.Peer) {
 	p.Send(msg)
 }
 
-func (kn *Kernel) transactionMessageCreator(r io.Reader) message.Message {
-	p := &message_def.TransactionMessage{}
-	p.Tran = kn.chain.Loader().Transactor()
-	p.ReadFrom(r)
-	return p
-}
-
-func (kn *Kernel) transactionMessageHandler(m message.Message) error {
-	msg := m.(*message_def.TransactionMessage)
-	if err := kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
-		return err
+func (kn *Kernel) messageCreator(r io.Reader, mt message.Type) (message.Message, error) {
+	switch mt {
+	case message_def.TransactionMessageType:
+		p := &message_def.TransactionMessage{}
+		p.Tran = kn.chain.Loader().Transactor()
+		if _, err := p.ReadFrom(r); err != nil {
+			return nil, err
+		}
+		return p, nil
+	case message_def.BlockMessageType:
+		p := message_def.NewBlockMessage(kn.chain.Loader().Transactor())
+		if _, err := p.ReadFrom(r); err != nil {
+			return nil, err
+		}
+		return p, nil
+	case message_def.StatusMessageType:
+		p := &message_def.StatusMessage{}
+		if _, err := p.ReadFrom(r); err != nil {
+			return nil, err
+		}
+		return p, nil
+	default:
+		return nil, message.ErrUnknownMessage
 	}
-	return nil
 }
 
-func (kn *Kernel) blockMessageCreator(r io.Reader) message.Message {
-	p := message_def.NewBlockMessage(kn.chain.Loader().Transactor())
-	p.ReadFrom(r)
-	return p
-}
-
-func (kn *Kernel) blockMessageHandler(m message.Message) error {
-	msg := m.(*message_def.BlockMessage)
-	if err := kn.BlockPool.Append(msg.Block, msg.ObserverSigned, nil, nil); err != nil {
-		return err
+func (kn *Kernel) messageHandler(m message.Message) error {
+	switch msg := m.(type) {
+	case *message_def.TransactionMessage:
+		if err := kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
+			return err
+		}
+		return nil
+	case *message_def.BlockMessage:
+		if err := kn.BlockPool.Append(msg.Block, msg.ObserverSigned, nil, nil); err != nil {
+			return err
+		}
+		return nil
+	case *message_def.StatusMessage:
+		log.Println(msg)
+		return nil
+	default:
+		return message.ErrUnknownMessage
 	}
-	return nil
 }
 
 func (kn *Kernel) observerBlockMessageHandler(m message.Message) error {
@@ -381,18 +398,5 @@ func (kn *Kernel) observerBlockMessageHandler(m message.Message) error {
 	if err := kn.TryProcessBlock(); err != nil {
 		return err
 	}
-	return nil
-}
-
-func (kn *Kernel) statusMessageCreator(r io.Reader) message.Message {
-	p := &message_def.StatusMessage{}
-	p.ReadFrom(r)
-	return p
-}
-
-func (kn *Kernel) statusMessageHandler(m message.Message) error {
-	msg := m.(*message_def.StatusMessage)
-	//TODO
-	log.Println(msg)
 	return nil
 }

@@ -47,7 +47,7 @@ func NewConnector(Config *Config, RequestTimeout int, tran *data.Transactor) (*C
 		observerConnHash: map[int]net.Conn{},
 		waitBlockHash:    map[hash.Hash256]chan *block.ObserverSigned{},
 	}
-	mm.ApplyMessage(message_def.BlockObSignMessageType, ob.blockObSignMessageCreator, ob.blockObSignMessageHandler)
+	mm.ApplyMessage(message_def.BlockObSignMessageType, ob.messageCreator, ob.blockObSignMessageHandler)
 	return ob, nil
 }
 
@@ -107,7 +107,7 @@ func (ob *Connector) run() {
 }
 
 // AddMessageHandler TODO
-func (ob *Connector) AddMessageHandler(t message.Type, creator func(r io.Reader) message.Message, handler func(m message.Message) error) error {
+func (ob *Connector) AddMessageHandler(t message.Type, creator message.Creator, handler message.Handler) error {
 	return ob.mm.ApplyMessage(t, creator, handler)
 }
 
@@ -158,10 +158,17 @@ func (ob *Connector) RequestSign(b *block.Block, s *block.Signed) (*block.Observ
 	}
 }
 
-func (ob *Connector) blockObSignMessageCreator(r io.Reader) message.Message {
-	p := message_def.NewBlockObSignMessage()
-	p.ReadFrom(r)
-	return p
+func (ob *Connector) messageCreator(r io.Reader, mt message.Type) (message.Message, error) {
+	switch mt {
+	case message_def.BlockObSignMessageType:
+		p := message_def.NewBlockObSignMessage()
+		if _, err := p.ReadFrom(r); err != nil {
+			return nil, err
+		}
+		return p, nil
+	default:
+		return nil, message.ErrUnknownMessage
+	}
 }
 
 func (ob *Connector) blockObSignMessageHandler(m message.Message) error {
