@@ -448,14 +448,14 @@ func TestUTXOPushPopRemove(t *testing.T) {
 		want uint64
 	}{
 		{name: "test1", args: args{pushCount: 10, popCount: 0, removeCount: 10, order: 1}, want: 0},
-		{name: "test2", args: args{pushCount: 10, popCount: 5, removeCount: 10, order: -1}, want: 0},
-		{name: "test3", args: args{pushCount: 10, popCount: 0, removeCount: 5, order: 1}, want: 5},
-		{name: "test4", args: args{pushCount: 10, popCount: 5, removeCount: 5, order: 1}, want: 0},
+		{name: "test2", args: args{pushCount: 10, popCount: 0, removeCount: 5, order: 1}, want: 5},
+		{name: "test3", args: args{pushCount: 10, popCount: 5, removeCount: 5, order: -1}, want: 0},
+		{name: "test4", args: args{pushCount: 10, popCount: 5, removeCount: 5, order: 1}, want: 5},
 		{name: "test5", args: args{pushCount: 10, popCount: 5, removeCount: 0, order: 1}, want: 5},
-		{name: "test6", args: args{pushCount: 100, popCount: 0, removeCount: 100, order: 1}, want: 100},
-		{name: "test7", args: args{pushCount: 100, popCount: 0, removeCount: 1, order: -1}, want: 0},
-		{name: "test8", args: args{pushCount: 100, popCount: 10, removeCount: 50, order: 1}, want: 40},
-		{name: "test9", args: args{pushCount: 100, popCount: 10, removeCount: 1, order: -1}, want: 0},
+		{name: "test6", args: args{pushCount: 100, popCount: 0, removeCount: 100, order: 1}, want: 0},
+		{name: "test7", args: args{pushCount: 100, popCount: 0, removeCount: 1, order: -1}, want: 99},
+		{name: "test8", args: args{pushCount: 100, popCount: 10, removeCount: 50, order: 1}, want: 50},
+		{name: "test9", args: args{pushCount: 100, popCount: 10, removeCount: 1, order: -1}, want: 89},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
