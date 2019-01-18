@@ -11,9 +11,9 @@ import (
 type EventHandler interface {
 	OnCreateContext(ctx *data.Context) error
 	BeforeAppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error
-	AfterAppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context)
+	AfterAppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error
 	BeforePushTransaction(tx transaction.Transaction, sigs []common.Signature) error
-	AfterPushTransaction(tx transaction.Transaction, sigs []common.Signature)
+	AfterPushTransaction(tx transaction.Transaction, sigs []common.Signature) error
 }
 
 // EventHandlerBase provides empty handler
