@@ -6,8 +6,10 @@ import (
 	"log"
 	"runtime"
 	"sync"
+	"time"
 
 	"git.fleta.io/fleta/core/message_def"
+	"git.fleta.io/fleta/core/observer"
 	"git.fleta.io/fleta/core/reward"
 
 	"git.fleta.io/fleta/common"
@@ -40,6 +42,9 @@ type Kernel struct {
 	closeLock        sync.RWMutex
 	eventHandlers    []EventHandler
 	isClose          bool
+	// formualtor
+	observerConnector *observer.Connector
+	genBlockLock      sync.Mutex
 }
 
 // NewKernel returns a Kernel
@@ -208,14 +213,14 @@ func (kn *Kernel) OnCheckFork(ch *chain.Header, sigs []common.Signature) error {
 }
 
 // OnProcess resolves the chain data and updates the context
-func (kn *Kernel) OnProcess(cd *chain.Data) error {
+func (kn *Kernel) OnProcess(cd *chain.Data, UserData interface{}) error {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
 		return ErrKernelClosed
 	}
 
-	log.Println("Kernel", "OnProcess", cd)
+	log.Println("Kernel", "OnProcess", cd, UserData)
 	b := &block.Block{}
 	if _, err := b.Header.ReadFrom(bytes.NewReader(cd.Body)); err != nil {
 		return err
@@ -239,9 +244,13 @@ func (kn *Kernel) OnProcess(cd *chain.Data) error {
 	if _, err := b.Body.ReadFromWith(bytes.NewReader(cd.Extra), kn.store.Transactor()); err != nil {
 		return err
 	}
-	ctx, err := kn.ContextByBlock(b)
-	if err != nil {
-		return err
+	ctx, is := UserData.(*data.Context)
+	if !is {
+		v, err := kn.ContextByBlock(b)
+		if err != nil {
+			return err
+		}
+		ctx = v
 	}
 	top := ctx.Top()
 	CustomHash := map[string][]byte{}
@@ -293,6 +302,168 @@ func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
 	return ctx, nil
 }
 
+// OnGenerate generate the next block when this formulator is the top rank
+func (kn *Kernel) OnGenerate() (*chain.Data, interface{}, error) {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return nil, nil, ErrKernelClosed
+	}
+
+	if kn.Config.FormulatorKey == nil {
+		return nil, nil, ErrNotFormulator
+	}
+
+	kn.genBlockLock.Lock()
+	defer kn.genBlockLock.Unlock()
+
+	if is, err := kn.consensus.IsMinable(kn.Config.FormulatorAddress, 0); err != nil {
+		return nil, nil, err
+	} else if !is {
+		return nil, nil, nil
+	}
+
+	ctx := data.NewContext(kn.store)
+	for _, eh := range kn.eventHandlers {
+		if err := eh.OnCreateContext(ctx); err != nil {
+			return nil, nil, err
+		}
+	}
+	cd, ns, err := kn.GenerateBlock(ctx, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	nos, err := kn.observerConnector.RequestSign(cd, ns)
+	if err != nil {
+		return nil, nil, err
+	}
+	cd.Signatures = append(cd.Signatures, nos.ObserverSignatures...)
+	return cd, ctx, nil
+}
+
+// GenerateBlock generate a next block and its signature using transactions in the pool
+func (kn *Kernel) GenerateBlock(ctx *data.Context, TimeoutCount uint32) (*chain.Data, *block.Signed, error) {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return nil, nil, ErrKernelClosed
+	}
+
+	if kn.Config.FormulatorKey == nil {
+		return nil, nil, ErrNotFormulator
+	}
+
+	b := &block.Block{
+		Header: block.Header{
+			ChainCoord:         *ctx.ChainCoord(),
+			FormulationAddress: kn.Config.FormulatorAddress,
+			TimeoutCount:       TimeoutCount,
+		},
+		Body: block.Body{
+			Transactions:          []transaction.Transaction{},
+			TransactionSignatures: [][]common.Signature{},
+		},
+	}
+
+	timer := time.NewTimer(kn.Config.GenTimeThreshold)
+	TxHashes := make([]hash.Hash256, 0, 65535)
+
+	kn.txPool.Lock() // Prevent delaying from TxPool.Push
+TxLoop:
+	for {
+		select {
+		case <-timer.C:
+			break TxLoop
+		default:
+			sn := ctx.Snapshot()
+			item := kn.txPool.UnsafePop(ctx)
+			ctx.Revert(sn)
+			if item == nil {
+				break TxLoop
+			}
+			idx := uint16(len(b.Body.Transactions))
+			if _, err := ctx.Transactor().Execute(ctx, item.Transaction, &common.Coordinate{Height: ctx.TargetHeight(), Index: idx}); err != nil {
+				log.Println(err)
+				//TODO : EventTransactionPendingFail
+				break
+			}
+
+			b.Body.Transactions = append(b.Body.Transactions, item.Transaction)
+			b.Body.TransactionSignatures = append(b.Body.TransactionSignatures, item.Signatures)
+
+			TxHashes = append(TxHashes, item.TxHash)
+
+			if len(TxHashes) >= 20000 {
+				break TxLoop
+			}
+		}
+	}
+	kn.txPool.Unlock() // Prevent delaying from TxPool.Push
+
+	if err := kn.rewarder.ProcessReward(b.Header.FormulationAddress, ctx); err != nil {
+		return nil, nil, err
+	}
+
+	b.Header.ContextHash = ctx.Hash()
+
+	if h, err := level.BuildLevelRoot(TxHashes); err != nil {
+		return nil, nil, err
+	} else {
+		b.Header.LevelRootHash = h
+	}
+
+	var bodyBuffer bytes.Buffer
+	if _, err := b.Header.WriteTo(&bodyBuffer); err != nil {
+		panic(err)
+	}
+	var extraBuffer bytes.Buffer
+	if _, err := b.Body.WriteTo(&extraBuffer); err != nil {
+		panic(err)
+	}
+	body := bodyBuffer.Bytes()
+	cd := &chain.Data{
+		Header: chain.Header{
+			Version:   kn.Provider().Version(),
+			Height:    ctx.TargetHeight(),
+			PrevHash:  ctx.PrevHash(),
+			BodyHash:  hash.DoubleHash(body),
+			Timestamp: uint64(time.Now().UnixNano()),
+		},
+		Body:       body,
+		Extra:      extraBuffer.Bytes(),
+		Signatures: []common.Signature{},
+	}
+
+	HeaderHash := cd.Header.Hash()
+	if sig, err := kn.Config.FormulatorKey.Sign(HeaderHash); err != nil {
+		return nil, nil, err
+	} else {
+		s := &block.Signed{
+			HeaderHash:         HeaderHash,
+			GeneratorSignature: sig,
+		}
+		cd.Signatures = append(cd.Signatures, sig)
+		return cd, s, nil
+	}
+}
+
+// OnRecv is called when a message is received from the peer
+func (kn *Kernel) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
+	m, err := kn.manager.ParseMessage(r, t)
+	if err != nil {
+		return err
+	}
+	switch msg := m.(type) {
+	case *message_def.TransactionMessage:
+		if err := kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return message.ErrUnhandledMessage
+	}
+}
+
 // AddTransaction validate the transaction and push it to the transaction pool
 func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signature) error {
 	kn.closeLock.RLock()
@@ -324,23 +495,6 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 		return err
 	}
 	return nil
-}
-
-// OnRecv is called when a message is received from the peer
-func (kn *Kernel) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
-	m, err := kn.manager.ParseMessage(r, t)
-	if err != nil {
-		return err
-	}
-	switch msg := m.(type) {
-	case *message_def.TransactionMessage:
-		if err := kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
-			return err
-		}
-		return nil
-	default:
-		return message.ErrUnhandledMessage
-	}
 }
 
 func (kn *Kernel) validateBlockBody(loader data.Loader, b *block.Block) error {

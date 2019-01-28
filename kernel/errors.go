@@ -18,4 +18,5 @@ var (
 	ErrInvalidAppendBlockHeight  = errors.New("invalid append block height")
 	ErrInvalidAppendBlockHash    = errors.New("invalid append block hash")
 	ErrInvalidAppendContextHash  = errors.New("invalid append context hash")
+	ErrNotFormulator             = errors.New("not formulator")
 )
