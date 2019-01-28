@@ -1,4 +1,4 @@
-package store
+package kernel
 
 import (
 	"bytes"
@@ -11,10 +11,10 @@ import (
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/account"
-	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/db"
 	"git.fleta.io/fleta/core/transaction"
+	"git.fleta.io/fleta/framework/chain"
 	"github.com/dgraph-io/badger"
 )
 
@@ -22,22 +22,24 @@ import (
 // All updates are executed in one transaction with FileSync option
 type Store struct {
 	db          *badger.DB
-	ticker      *time.Ticker
-	cache       storeCache
+	version     uint16
 	accounter   *data.Accounter
 	transactor  *data.Transactor
 	SeqHashLock sync.Mutex
 	SeqHash     map[common.Address]uint64
+	cache       storeCache
+	ticker      *time.Ticker
 }
 
 type storeCache struct {
-	cached          bool
-	height          uint32
-	heightBlockHash hash.Hash256
+	cached     bool
+	height     uint32
+	heightHash hash.Hash256
+	heightData *chain.Data
 }
 
 // NewStore returns a Store
-func NewStore(path string, act *data.Accounter, tran *data.Transactor) (*Store, error) {
+func NewStore(path string, version uint16, act *data.Accounter, tran *data.Transactor) (*Store, error) {
 	if !act.ChainCoord().Equal(tran.ChainCoord()) {
 		return nil, ErrInvalidChainCoord
 	}
@@ -79,6 +81,7 @@ func NewStore(path string, act *data.Accounter, tran *data.Transactor) (*Store, 
 	return &Store{
 		db:         db,
 		ticker:     ticker,
+		version:    version,
 		accounter:  act,
 		transactor: tran,
 		SeqHash:    map[common.Address]uint64{},
@@ -91,6 +94,11 @@ func (st *Store) Close() {
 	st.ticker.Stop()
 	st.db = nil
 	st.ticker = nil
+}
+
+// Version returns the version of the target chain
+func (st *Store) Version() uint16 {
+	return st.version
 }
 
 // ChainCoord returns the coordinate of the target chain
@@ -108,19 +116,149 @@ func (st *Store) Transactor() *data.Transactor {
 	return st.transactor
 }
 
-// TargetHeight returns the height of the processing block
+// TargetHeight returns the target height of the target chain
 func (st *Store) TargetHeight() uint32 {
 	return st.Height() + 1
 }
 
-// LastBlockHash returns the last block hash of the target chain
-func (st *Store) LastBlockHash() hash.Hash256 {
-	h, err := st.BlockHash(st.Height())
+// PrevHash returns the last hash of the chain
+func (st *Store) PrevHash() hash.Hash256 {
+	h, err := st.Hash(st.Height())
 	if err != nil {
 		// should have not reach
 		panic(err)
 	}
 	return h
+}
+
+// Hash returns the hash of the data by height
+func (st *Store) Hash(height uint32) (hash.Hash256, error) {
+	if st.cache.cached {
+		if st.cache.height == height {
+			return st.cache.heightHash, nil
+		}
+	}
+
+	var h hash.Hash256
+	if err := st.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(toHeightHashKey(height))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return db.ErrNotExistKey
+			} else {
+				return err
+			}
+		}
+		value, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		if _, err := h.ReadFrom(bytes.NewReader(value)); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return hash.Hash256{}, err
+	}
+	return h, nil
+}
+
+// Header returns the header of the data by height
+func (st *Store) Header(height uint32) (*chain.Header, error) {
+	if height < 1 {
+		return nil, db.ErrNotExistKey
+	}
+	if st.cache.cached {
+		if st.cache.height == height {
+			return &st.cache.heightData.Header, nil
+		}
+	}
+
+	var ch *chain.Header
+	if err := st.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(toHeightHeaderKey(height))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return db.ErrNotExistKey
+			} else {
+				return err
+			}
+		}
+		value, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		ch = &chain.Header{}
+		if _, err := ch.ReadFrom(bytes.NewReader(value)); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return ch, nil
+}
+
+// Data returns the data by height
+func (st *Store) Data(height uint32) (*chain.Data, error) {
+	if height < 1 {
+		return nil, db.ErrNotExistKey
+	}
+	if st.cache.cached {
+		if st.cache.height == height {
+			return st.cache.heightData, nil
+		}
+	}
+
+	var cd *chain.Data
+	if err := st.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(toHeightDataKey(height))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return db.ErrNotExistKey
+			} else {
+				return err
+			}
+		}
+		value, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		cd = &chain.Data{}
+		if _, err := cd.ReadFrom(bytes.NewReader(value)); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return cd, nil
+}
+
+// Height returns the current height of the target chain
+func (st *Store) Height() uint32 {
+	if st.cache.cached {
+		return st.cache.height
+	}
+
+	var height uint32
+	st.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("height"))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return db.ErrNotExistKey
+			} else {
+				return err
+			}
+		}
+		value, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		height = util.BytesToUint32(value)
+		return nil
+	})
+	return height
 }
 
 // Accounts returns all accounts in the store
@@ -365,118 +503,6 @@ func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
 	return utxo, nil
 }
 
-// BlockHash returns the hash of the block by height
-func (st *Store) BlockHash(height uint32) (hash.Hash256, error) {
-	if st.cache.cached {
-		if st.cache.height == height {
-			return st.cache.heightBlockHash, nil
-		}
-	}
-
-	var h hash.Hash256
-	if err := st.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(toHeightBlockHashKey(height))
-		if err != nil {
-			if err == badger.ErrKeyNotFound {
-				return db.ErrNotExistKey
-			} else {
-				return err
-			}
-		}
-		value, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
-		if _, err := h.ReadFrom(bytes.NewReader(value)); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return hash.Hash256{}, err
-	}
-	return h, nil
-}
-
-// Block returns the block by height
-func (st *Store) Block(height uint32) (*block.Block, error) {
-	var b *block.Block
-	if err := st.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(toHeightBlockKey(height))
-		if err != nil {
-			if err == badger.ErrKeyNotFound {
-				return db.ErrNotExistKey
-			} else {
-				return err
-			}
-		}
-		value, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
-		b = new(block.Block)
-		if _, err := b.ReadFromWith(bytes.NewReader(value), st.transactor); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
-// ObserverSigned returns the observer signatures of the block by height
-func (st *Store) ObserverSigned(height uint32) (*block.ObserverSigned, error) {
-	var s *block.ObserverSigned
-	if err := st.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(toHeightBlockKey(height))
-		if err != nil {
-			if err == badger.ErrKeyNotFound {
-				return db.ErrNotExistKey
-			} else {
-				return err
-			}
-		}
-		value, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
-		s = new(block.ObserverSigned)
-		if _, err := s.ReadFrom(bytes.NewReader(value)); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return s, nil
-}
-
-// Height returns the current height of the target chain
-func (st *Store) Height() uint32 {
-	if st.cache.cached {
-		return st.cache.height
-	}
-
-	var height uint32
-	st.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("height"))
-		if err != nil {
-			if err == badger.ErrKeyNotFound {
-				return db.ErrNotExistKey
-			} else {
-				return err
-			}
-		}
-		value, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
-		height = util.BytesToUint32(value)
-		return nil
-	})
-	return height
-}
-
 // CustomData returns the custom data by the key from the store
 func (st *Store) CustomData(key string) []byte {
 	var bs []byte
@@ -519,22 +545,18 @@ func (st *Store) DeleteCustomData(key string) error {
 	})
 }
 
-// StoreGenesis stores the genesis data with custom data
-func (st *Store) StoreGenesis(ctd *data.ContextData, GenesisHash hash.Hash256, customHash map[string][]byte) error {
-	if _, err := st.BlockHash(0); err != nil {
-		if err != db.ErrNotExistKey {
-			return err
-		}
-	} else {
-		return ErrAlreadyExistGenesis
+// StoreGenesis stores the genesis data
+func (st *Store) StoreGenesis(genHash hash.Hash256, ctd *data.ContextData, customHash map[string][]byte) error {
+	if st.Height() > 0 {
+		return chain.ErrAlreadyGenesised
 	}
 	if err := st.db.Update(func(txn *badger.Txn) error {
 		{
-			if err := txn.Set(toHeightBlockHashKey(0), GenesisHash[:]); err != nil {
+			if err := txn.Set(toHeightHashKey(0), genHash[:]); err != nil {
 				return err
 			}
 			bsHeight := util.Uint32ToBytes(0)
-			if err := txn.Set(toHashBlockHeightKey(GenesisHash), bsHeight); err != nil {
+			if err := txn.Set(toHashHeightKey(genHash), bsHeight); err != nil {
 				return err
 			}
 			if err := txn.Set([]byte("height"), bsHeight); err != nil {
@@ -554,47 +576,43 @@ func (st *Store) StoreGenesis(ctd *data.ContextData, GenesisHash hash.Hash256, c
 		return err
 	}
 	st.cache.height = 0
-	st.cache.heightBlockHash = GenesisHash
+	st.cache.heightHash = genHash
+	st.cache.heightData = nil
 	st.cache.cached = true
-	st.SeqHashLock.Lock()
-	for k, v := range ctd.SeqHash {
-		st.SeqHash[k] = v
-	}
-	st.SeqHashLock.Unlock()
 	return nil
 }
 
-// StoreBlock stores the block data with custom data
-func (st *Store) StoreBlock(ctd *data.ContextData, b *block.Block, s *block.ObserverSigned, customHash map[string][]byte) error {
-	blockHash := b.Header.Hash()
+// StoreData stores the data
+func (st *Store) StoreData(cd *chain.Data, ctd *data.ContextData, customHash map[string][]byte) error {
+	DataHash := cd.Header.Hash()
 	if err := st.db.Update(func(txn *badger.Txn) error {
 		{
 			var buffer bytes.Buffer
-			if _, err := b.WriteTo(&buffer); err != nil {
+			if _, err := cd.WriteTo(&buffer); err != nil {
 				return err
 			}
-			if err := txn.Set(toHeightBlockKey(b.Header.Height), buffer.Bytes()); err != nil {
-				return err
-			}
-		}
-		{
-			if err := txn.Set(toHeightBlockHashKey(b.Header.Height), blockHash[:]); err != nil {
-				return err
-			}
-			bsHeight := util.Uint32ToBytes(b.Header.Height)
-			if err := txn.Set(toHashBlockHeightKey(blockHash), bsHeight); err != nil {
-				return err
-			}
-			if err := txn.Set([]byte("height"), bsHeight); err != nil {
+			if err := txn.Set(toHeightDataKey(cd.Header.Height), buffer.Bytes()); err != nil {
 				return err
 			}
 		}
 		{
 			var buffer bytes.Buffer
-			if _, err := s.WriteTo(&buffer); err != nil {
+			if _, err := cd.Header.WriteTo(&buffer); err != nil {
 				return err
 			}
-			if err := txn.Set(toHeightObserverSignedKey(b.Header.Height), buffer.Bytes()); err != nil {
+			if err := txn.Set(toHeightHeaderKey(cd.Header.Height), buffer.Bytes()); err != nil {
+				return err
+			}
+		}
+		{
+			if err := txn.Set(toHeightHashKey(cd.Header.Height), DataHash[:]); err != nil {
+				return err
+			}
+			bsHeight := util.Uint32ToBytes(cd.Header.Height)
+			if err := txn.Set(toHashHeightKey(DataHash), bsHeight); err != nil {
+				return err
+			}
+			if err := txn.Set([]byte("height"), bsHeight); err != nil {
 				return err
 			}
 		}
@@ -610,14 +628,15 @@ func (st *Store) StoreBlock(ctd *data.ContextData, b *block.Block, s *block.Obse
 	}); err != nil {
 		return err
 	}
-	st.cache.height = b.Header.Height
-	st.cache.heightBlockHash = blockHash
-	st.cache.cached = true
 	st.SeqHashLock.Lock()
 	for k, v := range ctd.SeqHash {
 		st.SeqHash[k] = v
 	}
 	st.SeqHashLock.Unlock()
+	st.cache.height = cd.Header.Height
+	st.cache.heightHash = DataHash
+	st.cache.heightData = cd
+	st.cache.cached = true
 	return nil
 }
 

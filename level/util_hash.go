@@ -32,7 +32,7 @@ func Hash16(hashes []hash.Hash256) (hash.Hash256, error) {
 			}
 		}
 	}
-	return hash.Hash(buffer.Bytes()), nil
+	return hash.DoubleHash(buffer.Bytes()), nil
 }
 
 func buildLevel(hashes []hash.Hash256) ([]hash.Hash256, error) {

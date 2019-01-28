@@ -11,7 +11,7 @@ import (
 
 // Signed is the generator signature of the block
 type Signed struct {
-	BlockHash          hash.Hash256
+	HeaderHash         hash.Hash256
 	GeneratorSignature common.Signature
 }
 
@@ -27,7 +27,7 @@ func (s *Signed) Hash() hash.Hash256 {
 // WriteTo is a serialization function
 func (s *Signed) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := s.BlockHash.WriteTo(w); err != nil {
+	if n, err := s.HeaderHash.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -44,7 +44,7 @@ func (s *Signed) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom is a deserialization function
 func (s *Signed) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if n, err := s.BlockHash.ReadFrom(r); err != nil {
+	if n, err := s.HeaderHash.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

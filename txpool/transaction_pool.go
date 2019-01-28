@@ -122,7 +122,8 @@ func (tp *TransactionPool) Remove(t transaction.Transaction) {
 				if q.Size() == 0 {
 					break
 				}
-				item := q.Peek().(*PoolItem)
+				v, _ := q.Peek()
+				item := v.(*PoolItem)
 				if tx.Seq() < item.Transaction.(AccountTransaction).Seq() {
 					break
 				}
@@ -198,7 +199,8 @@ func (tp *TransactionPool) UnsafePop(SeqCache SeqCache) *PoolItem {
 				}
 			}
 			q := tp.bucketHash[addr]
-			item := q.Peek().(*PoolItem)
+			v, _ := q.Peek()
+			item := v.(*PoolItem)
 			lastSeq := SeqCache.Seq(addr)
 			if item.Transaction.(AccountTransaction).Seq() != lastSeq+1 {
 				ignoreHash[addr] = true

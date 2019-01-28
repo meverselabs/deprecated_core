@@ -1,4 +1,4 @@
-package store
+package kernel
 
 import (
 	"encoding/binary"
@@ -8,42 +8,42 @@ import (
 )
 
 var (
-	tagHeightBlock          = []byte{1, 0}
-	tagHeightBlockHash      = []byte{1, 1}
-	tagHashBlockHeight      = []byte{1, 2}
-	tagHeightObserverSigned = []byte{2, 0}
-	tagAccount              = []byte{3, 0}
-	tagAccountSeq           = []byte{3, 1}
-	tagAccountBalance       = []byte{3, 2}
-	tagAccountData          = []byte{3, 3}
-	tagUTXO                 = []byte{4, 0}
-	tagCustomData           = []byte{5, 0}
+	tagHeightHash     = []byte{1, 0}
+	tagHeightHeader   = []byte{1, 2}
+	tagHeightData     = []byte{1, 3}
+	tagHashHeight     = []byte{1, 4}
+	tagAccount        = []byte{2, 0}
+	tagAccountSeq     = []byte{2, 1}
+	tagAccountBalance = []byte{2, 2}
+	tagAccountData    = []byte{2, 3}
+	tagUTXO           = []byte{3, 0}
+	tagCustomData     = []byte{4, 0}
 )
 
-func toHeightBlockKey(height uint32) []byte {
+func toHeightDataKey(height uint32) []byte {
 	bs := make([]byte, 6)
-	copy(bs, tagHeightBlock)
+	copy(bs, tagHeightData)
 	binary.LittleEndian.PutUint32(bs[2:], height)
 	return bs
 }
 
-func toHeightObserverSignedKey(height uint32) []byte {
+func toHeightHeaderKey(height uint32) []byte {
 	bs := make([]byte, 6)
-	copy(bs, tagHeightObserverSigned)
+	copy(bs, tagHeightHeader)
 	binary.LittleEndian.PutUint32(bs[2:], height)
 	return bs
 }
 
-func toHeightBlockHashKey(height uint32) []byte {
+func toHeightHashKey(height uint32) []byte {
 	bs := make([]byte, 6)
-	copy(bs, tagHeightBlockHash)
+	copy(bs, tagHeightHash)
 	binary.LittleEndian.PutUint32(bs[2:], height)
 	return bs
 }
 
-func toHashBlockHeightKey(h hash.Hash256) []byte {
+func toHashHeightKey(h hash.Hash256) []byte {
 	bs := make([]byte, 34)
-	copy(bs, tagHashBlockHeight)
+	copy(bs, tagHashHeight)
 	copy(bs[2:], h[:])
 	return bs
 }
@@ -88,7 +88,7 @@ func fromUTXOKey(bs []byte) uint64 {
 }
 
 func toCustomData(key string) []byte {
-	bs := make([]byte, 1+len(key))
+	bs := make([]byte, 2+len(key))
 	copy(bs, tagCustomData)
 	copy(bs[2:], []byte(key))
 	return bs

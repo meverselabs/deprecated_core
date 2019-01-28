@@ -36,7 +36,12 @@ func (b *BlockGenMessage) Type() message.Type {
 // WriteTo is a serialization function
 func (b *BlockGenMessage) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := b.Block.WriteTo(w); err != nil {
+	if n, err := b.Block.Header.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := b.Block.Body.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -52,7 +57,12 @@ func (b *BlockGenMessage) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom is a deserialization function
 func (b *BlockGenMessage) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if n, err := b.Block.ReadFromWith(r, b.Tran); err != nil {
+	if n, err := b.Block.Header.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if n, err := b.Block.Body.ReadFromWith(r, b.Tran); err != nil {
 		return read, err
 	} else {
 		read += n

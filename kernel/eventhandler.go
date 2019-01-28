@@ -10,8 +10,8 @@ import (
 // EventHandler provides callback abilities to the kernel
 type EventHandler interface {
 	OnCreateContext(ctx *data.Context) error
-	BeforeAppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error
-	AfterAppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error
+	BeforeProcessBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error
+	AfterProcessBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error
 	BeforePushTransaction(tx transaction.Transaction, sigs []common.Signature) error
 	AfterPushTransaction(tx transaction.Transaction, sigs []common.Signature) error
 }
@@ -25,13 +25,13 @@ func (eh *EventHandlerBase) OnCreateContext(ctx *data.Context) error {
 	return nil
 }
 
-// BeforeAppendBlock called before append block to the chain (error prevent append block)
-func (eh *EventHandlerBase) BeforeAppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
+// BeforeProcessBlock called before processingblock to the chain (error prevent processing block)
+func (eh *EventHandlerBase) BeforeProcessBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
 	return nil
 }
 
-// AfterAppendBlock called after append block to the chain
-func (eh *EventHandlerBase) AfterAppendBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
+// AfterProcessBlock called after processing block to the chain
+func (eh *EventHandlerBase) AfterProcessBlock(b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
 	return nil
 }
 

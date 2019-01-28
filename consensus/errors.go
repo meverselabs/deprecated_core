@@ -14,4 +14,5 @@ var (
 	ErrInvalidSequence               = errors.New("invalid sequence")
 	ErrInsuffcientBalance            = errors.New("insufficient balance")
 	ErrInvalidToAddress              = errors.New("invalid to address")
+	ErrInvalidBlockHash              = errors.New("invalid block hash")
 )

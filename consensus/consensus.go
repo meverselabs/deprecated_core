@@ -14,32 +14,31 @@ import (
 // Consensus supports the proof of formulation algorithm
 type Consensus struct {
 	RankTable              *RankTable
-	ObserverSignatureHash  map[common.PublicHash]bool
+	ObserverKeyHash        map[common.PublicHash]bool
 	FormulationAccountType account.Type
 }
 
 // NewConsensus returns a Consensus
-func NewConsensus(ObserverSignatureHash map[common.PublicHash]bool, FormulationAccountType account.Type) *Consensus {
+func NewConsensus(ObserverKeyHash map[common.PublicHash]bool, FormulationAccountType account.Type) *Consensus {
 	cs := &Consensus{
 		RankTable:              NewRankTable(),
-		ObserverSignatureHash:  ObserverSignatureHash,
+		ObserverKeyHash:        ObserverKeyHash,
 		FormulationAccountType: FormulationAccountType,
 	}
 	return cs
 }
 
-// ValidateBlock validate the block with signatures and previus block's information
-func (cs *Consensus) ValidateBlock(b *block.Block, s *block.ObserverSigned) error {
-	members := cs.RankTable.Candidates(int(b.Header.TimeoutCount) + 1)
+// ValidateBlockHeader validate the block header with signatures and previus block's information
+func (cs *Consensus) ValidateBlockHeader(bh *block.Header, s *block.ObserverSigned) error {
+	members := cs.RankTable.Candidates(int(bh.TimeoutCount) + 1)
 	if members == nil {
 		return ErrInsufficientCandidateCount
 	}
-	Top := members[b.Header.TimeoutCount]
-	if !Top.Address.Equal(b.Header.FormulationAddress) {
+	Top := members[bh.TimeoutCount]
+	if !Top.Address.Equal(bh.FormulationAddress) {
 		return ErrInvalidTopMember
 	}
-	blockHash := b.Header.Hash()
-	pubkey, err := common.RecoverPubkey(blockHash, s.GeneratorSignature)
+	pubkey, err := common.RecoverPubkey(s.Signed.HeaderHash, s.GeneratorSignature)
 	if err != nil {
 		return err
 	}
@@ -47,25 +46,25 @@ func (cs *Consensus) ValidateBlock(b *block.Block, s *block.ObserverSigned) erro
 	if !Top.PublicHash.Equal(pubhash) {
 		return ErrInvalidTopSignature
 	}
-	if err := cs.ValidateObserverSignatures(blockHash, s.ObserverSignatures); err != nil {
+	if err := cs.ValidateObserverSignatures(s.Signed.Hash(), s.ObserverSignatures); err != nil {
 		return err
 	}
 	return nil
 }
 
-// ValidateObserverSignatures validate observer signatures with the block hash
-func (cs *Consensus) ValidateObserverSignatures(blockHash hash.Hash256, sigs []common.Signature) error {
-	if len(sigs) != len(cs.ObserverSignatureHash)/2+1 {
+// ValidateObserverSignatures validates observer signatures with the signed hash
+func (cs *Consensus) ValidateObserverSignatures(signedHash hash.Hash256, sigs []common.Signature) error {
+	if len(sigs) != len(cs.ObserverKeyHash)/2+1 {
 		return ErrInsufficientObserverSignature
 	}
 	sigHash := map[common.PublicHash]bool{}
 	for _, sig := range sigs {
-		pubkey, err := common.RecoverPubkey(blockHash, sig)
+		pubkey, err := common.RecoverPubkey(signedHash, sig)
 		if err != nil {
 			return err
 		}
 		pubhash := common.NewPublicHash(pubkey)
-		if !cs.ObserverSignatureHash[pubhash] {
+		if !cs.ObserverKeyHash[pubhash] {
 			return ErrInvalidObserverSignature
 		}
 		sigHash[pubhash] = true
@@ -83,7 +82,7 @@ func (cs *Consensus) ApplyGenesis(ctd *data.ContextData) ([]byte, error) {
 		if a.Type() == cs.FormulationAccountType {
 			acc := a.(*FormulationAccount)
 			addr := acc.Address()
-			if err := cs.RankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.Hash(addr[:]))); err != nil {
+			if err := cs.RankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
 				return nil, err
 			}
 		}
@@ -100,9 +99,9 @@ func (cs *Consensus) ApplyGenesis(ctd *data.ContextData) ([]byte, error) {
 	return SaveData, nil
 }
 
-// ApplyBlock update the consensus using the block and its context data
-func (cs *Consensus) ApplyBlock(ctd *data.ContextData, b *block.Block) ([]byte, error) {
-	if err := cs.RankTable.ForwardCandidates(int(b.Header.TimeoutCount), b.Header.Hash()); err != nil {
+// ProcessContext processes the consensus using the block and its context data
+func (cs *Consensus) ProcessContext(ctd *data.ContextData, HeaderHash hash.Hash256, bh *block.Header) ([]byte, error) {
+	if err := cs.RankTable.ForwardCandidates(int(bh.TimeoutCount), HeaderHash); err != nil {
 		return nil, err
 	}
 	phase := cs.RankTable.LargestPhase() + 1
@@ -110,7 +109,7 @@ func (cs *Consensus) ApplyBlock(ctd *data.ContextData, b *block.Block) ([]byte, 
 		if a.Type() == cs.FormulationAccountType {
 			acc := a.(*FormulationAccount)
 			addr := acc.Address()
-			if err := cs.RankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.Hash(addr[:]))); err != nil {
+			if err := cs.RankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
 				return nil, err
 			}
 		}
@@ -148,10 +147,10 @@ func (cs *Consensus) buildSaveData() ([]byte, error) {
 	}
 	{
 		var buffer bytes.Buffer
-		if _, err := util.WriteUint8(&buffer, uint8(len(cs.ObserverSignatureHash))); err != nil {
+		if _, err := util.WriteUint8(&buffer, uint8(len(cs.ObserverKeyHash))); err != nil {
 			return nil, err
 		}
-		for k := range cs.ObserverSignatureHash {
+		for k := range cs.ObserverKeyHash {
 			if _, err := k.WriteTo(&buffer); err != nil {
 				return nil, err
 			}
@@ -167,7 +166,7 @@ func (cs *Consensus) LoadFromSaveData(SaveData []byte) error {
 	if _, err := cs.RankTable.ReadFrom(r); err != nil {
 		return err
 	}
-	ObserverSignatureHash := map[common.PublicHash]bool{}
+	ObserverKeyHash := map[common.PublicHash]bool{}
 	if Len, _, err := util.ReadUint8(r); err != nil {
 		return err
 	} else {
@@ -176,9 +175,9 @@ func (cs *Consensus) LoadFromSaveData(SaveData []byte) error {
 			if _, err := pubhash.ReadFrom(r); err != nil {
 				return err
 			}
-			ObserverSignatureHash[pubhash] = true
+			ObserverKeyHash[pubhash] = true
 		}
 	}
-	cs.ObserverSignatureHash = ObserverSignatureHash
+	cs.ObserverKeyHash = ObserverKeyHash
 	return nil
 }

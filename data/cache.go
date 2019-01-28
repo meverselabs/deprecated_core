@@ -43,14 +43,14 @@ func (cc *cache) Transactor() *Transactor {
 	return cc.ctx.Transactor()
 }
 
-// TargetHeight returns 0
+// TargetHeight returns cached target height when context generation
 func (cc *cache) TargetHeight() uint32 {
 	return cc.ctx.TargetHeight()
 }
 
-// LastBlockHash returns hash.Hash256{}
-func (cc *cache) LastBlockHash() hash.Hash256 {
-	return cc.ctx.LastBlockHash()
+// PrevHash returns the recorded prev hash when context generation
+func (cc *cache) PrevHash() hash.Hash256 {
+	return cc.ctx.PrevHash()
 }
 
 // Seq returns the sequence of the account

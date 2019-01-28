@@ -16,10 +16,10 @@ import (
 type Context struct {
 	loader          Loader
 	genTargetHeight uint32
-	getPrevHash     hash.Hash256
+	genPrevHash     hash.Hash256
 	cache           *cache
 	stack           []*ContextData
-	isOldHash       bool
+	isLatestHash    bool
 	dataHash        hash.Hash256
 }
 
@@ -28,7 +28,7 @@ func NewContext(loader Loader) *Context {
 	ctx := &Context{
 		loader:          loader,
 		genTargetHeight: loader.TargetHeight(),
-		getPrevHash:     loader.LastBlockHash(),
+		genPrevHash:     loader.PrevHash(),
 		stack:           []*ContextData{NewContextData(loader, nil)},
 	}
 	ctx.cache = newCache(ctx)
@@ -37,9 +37,9 @@ func NewContext(loader Loader) *Context {
 
 // Hash returns the hash value of it
 func (ctx *Context) Hash() hash.Hash256 {
-	if ctx.isOldHash {
+	if !ctx.isLatestHash {
 		ctx.dataHash = ctx.Top().Hash()
-		ctx.isOldHash = false
+		ctx.isLatestHash = true
 	}
 	return ctx.dataHash
 }
@@ -64,9 +64,9 @@ func (ctx *Context) TargetHeight() uint32 {
 	return ctx.genTargetHeight
 }
 
-// LastBlockHash returns the last block hash of the target chain
-func (ctx *Context) LastBlockHash() hash.Hash256 {
-	return ctx.getPrevHash
+// PrevHash returns the recorded prev hash when context generation
+func (ctx *Context) PrevHash() hash.Hash256 {
+	return ctx.genPrevHash
 }
 
 // Top returns the top snapshot
@@ -81,13 +81,13 @@ func (ctx *Context) Seq(addr common.Address) uint64 {
 
 // AddSeq update the sequence of the target account
 func (ctx *Context) AddSeq(addr common.Address) {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	ctx.Top().AddSeq(addr)
 }
 
 // Account returns the account instance of the address
 func (ctx *Context) Account(addr common.Address) (account.Account, error) {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	return ctx.Top().Account(addr)
 }
 
@@ -98,19 +98,19 @@ func (ctx *Context) IsExistAccount(addr common.Address) (bool, error) {
 
 // CreateAccount inserts the account to the top snapshot
 func (ctx *Context) CreateAccount(acc account.Account) error {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	return ctx.Top().CreateAccount(acc)
 }
 
 // DeleteAccount deletes the account from the top snapshot
 func (ctx *Context) DeleteAccount(acc account.Account) error {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	return ctx.Top().DeleteAccount(acc)
 }
 
 // AccountBalance returns the account balance
 func (ctx *Context) AccountBalance(addr common.Address) (*account.Balance, error) {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	return ctx.Top().AccountBalance(addr)
 }
 
@@ -121,7 +121,7 @@ func (ctx *Context) AccountData(addr common.Address, name []byte) []byte {
 
 // SetAccountData inserts the account data to the top snapshot
 func (ctx *Context) SetAccountData(addr common.Address, name []byte, value []byte) {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	ctx.Top().SetAccountData(addr, name, value)
 }
 
@@ -132,13 +132,13 @@ func (ctx *Context) UTXO(id uint64) (*transaction.UTXO, error) {
 
 // CreateUTXO inserts the UTXO to the top snapshot
 func (ctx *Context) CreateUTXO(id uint64, vout *transaction.TxOut) error {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	return ctx.Top().CreateUTXO(id, vout)
 }
 
 // DeleteUTXO deletes the UTXO from the top snapshot
 func (ctx *Context) DeleteUTXO(id uint64) error {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	return ctx.Top().DeleteUTXO(id)
 }
 
@@ -148,7 +148,7 @@ func (ctx *Context) Dump() string {
 
 // Snapshot push a snapshot and returns the snapshot number of it
 func (ctx *Context) Snapshot() int {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	ctd := NewContextData(ctx.cache, ctx.Top())
 	ctx.stack[len(ctx.stack)-1].isTop = false
 	ctx.stack = append(ctx.stack, ctd)
@@ -157,7 +157,7 @@ func (ctx *Context) Snapshot() int {
 
 // Revert removes snapshots after the snapshot number
 func (ctx *Context) Revert(sn int) {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	if len(ctx.stack) >= sn {
 		ctx.stack = ctx.stack[:sn-1]
 	}
@@ -166,7 +166,7 @@ func (ctx *Context) Revert(sn int) {
 
 // Commit apply snapshots to the top after the snapshot number
 func (ctx *Context) Commit(sn int) {
-	ctx.isOldHash = true
+	ctx.isLatestHash = false
 	for len(ctx.stack) >= sn {
 		ctd := ctx.Top()
 		ctx.stack = ctx.stack[:len(ctx.stack)-1]
@@ -261,7 +261,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 	}
 
 	buffer.WriteString("SeqHash")
-	{
+	if len(ctd.SeqHash) > 0 {
 		keys := []common.Address{}
 		for k := range ctd.SeqHash {
 			keys = append(keys, k)
@@ -278,7 +278,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 	}
 	buffer.WriteString("AccountHash")
-	{
+	if len(ctd.AccountHash) > 0 {
 		keys := []common.Address{}
 		for k := range ctd.AccountHash {
 			keys = append(keys, k)
@@ -295,7 +295,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 	}
 	buffer.WriteString("CreatedAccountHash")
-	{
+	if len(ctd.CreatedAccountHash) > 0 {
 		keys := []common.Address{}
 		for k := range ctd.CreatedAccountHash {
 			keys = append(keys, k)
@@ -312,7 +312,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 	}
 	buffer.WriteString("DeletedAccountHash")
-	{
+	if len(ctd.DeletedAccountHash) > 0 {
 		keys := []common.Address{}
 		for k := range ctd.DeletedAccountHash {
 			keys = append(keys, k)
@@ -325,7 +325,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 	}
 	buffer.WriteString("AccountBalanceHash")
-	{
+	if len(ctd.AccountBalanceHash) > 0 {
 		keys := []common.Address{}
 		for k := range ctd.AccountBalanceHash {
 			keys = append(keys, k)
@@ -342,7 +342,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 	}
 	buffer.WriteString("AccountDataHash")
-	{
+	if len(ctd.AccountDataHash) > 0 {
 		keys := []string{}
 		for k := range ctd.AccountDataHash {
 			keys = append(keys, k)
@@ -355,7 +355,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 	}
 	buffer.WriteString("DeletedAccountDataHash")
-	{
+	if len(ctd.DeletedAccountDataHash) > 0 {
 		keys := []string{}
 		for k := range ctd.DeletedAccountDataHash {
 			keys = append(keys, k)
@@ -366,7 +366,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 	}
 	buffer.WriteString("UTXOHash")
-	{
+	if len(ctd.UTXOHash) > 0 {
 		keys := []uint64{}
 		for k := range ctd.UTXOHash {
 			keys = append(keys, k)
@@ -383,7 +383,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 	}
 	buffer.WriteString("CreatedUTXOHash")
-	{
+	if len(ctd.CreatedUTXOHash) > 0 {
 		keys := []uint64{}
 		for k := range ctd.CreatedUTXOHash {
 			keys = append(keys, k)
@@ -400,7 +400,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 	}
 	buffer.WriteString("DeletedUTXOHash")
-	{
+	if len(ctd.DeletedUTXOHash) > 0 {
 		keys := []uint64{}
 		for k := range ctd.DeletedUTXOHash {
 			keys = append(keys, k)
@@ -412,7 +412,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			}
 		}
 	}
-	return hash.Hash(buffer.Bytes())
+	return hash.DoubleHash(buffer.Bytes())
 }
 
 // Seq returns the sequence of the account

@@ -1,7 +1,6 @@
 package block
 
 import (
-	"bytes"
 	"io"
 
 	"git.fleta.io/fleta/common"
@@ -12,16 +11,13 @@ import (
 // Header is validation informations
 type Header struct {
 	ChainCoord         common.Coordinate
-	Height             uint32
-	Version            uint16
-	HashPrevBlock      hash.Hash256
-	HashLevelRoot      hash.Hash256
-	HashContext        hash.Hash256
-	Timestamp          uint64
+	LevelRootHash      hash.Hash256
+	ContextHash        hash.Hash256
 	FormulationAddress common.Address
 	TimeoutCount       uint32
 }
 
+/*
 // Hash returns the hash value of it
 func (bh *Header) Hash() hash.Hash256 {
 	var buffer bytes.Buffer
@@ -30,6 +26,7 @@ func (bh *Header) Hash() hash.Hash256 {
 	}
 	return hash.DoubleHash(buffer.Bytes())
 }
+*/
 
 // WriteTo is a serialization function
 func (bh *Header) WriteTo(w io.Writer) (int64, error) {
@@ -39,32 +36,12 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := util.WriteUint32(w, bh.Height); err != nil {
+	if n, err := bh.LevelRootHash.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
-	if n, err := util.WriteUint16(w, bh.Version); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
-	if n, err := bh.HashPrevBlock.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
-	if n, err := bh.HashLevelRoot.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
-	if n, err := bh.HashContext.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
-	if n, err := util.WriteUint64(w, bh.Timestamp); err != nil {
+	if n, err := bh.ContextHash.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -90,37 +67,14 @@ func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if v, n, err := util.ReadUint32(r); err != nil {
-		return read, err
-	} else {
-		bh.Height = v
-		read += n
-	}
-	if v, n, err := util.ReadUint16(r); err != nil {
-		return read, err
-	} else {
-		bh.Version = v
-		read += n
-	}
-	if n, err := bh.HashPrevBlock.ReadFrom(r); err != nil {
+	if n, err := bh.LevelRootHash.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
 	}
-	if n, err := bh.HashLevelRoot.ReadFrom(r); err != nil {
+	if n, err := bh.ContextHash.ReadFrom(r); err != nil {
 		return read, err
 	} else {
-		read += n
-	}
-	if n, err := bh.HashContext.ReadFrom(r); err != nil {
-		return read, err
-	} else {
-		read += n
-	}
-	if v, n, err := util.ReadUint64(r); err != nil {
-		return read, err
-	} else {
-		bh.Timestamp = v
 		read += n
 	}
 	if n, err := bh.FormulationAddress.ReadFrom(r); err != nil {
