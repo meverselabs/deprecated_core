@@ -265,45 +265,8 @@ func (kn *Kernel) OnProcess(cd *chain.Data, UserData interface{}) error {
 	return nil
 }
 
-// ContextByBlock creates context using the target block
-func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
-	kn.closeLock.RLock()
-	defer kn.closeLock.RUnlock()
-	if kn.isClose {
-		return nil, ErrKernelClosed
-	}
-
-	ctx := data.NewContext(kn.store)
-	for _, eh := range kn.eventHandlers {
-		if err := eh.OnCreateContext(ctx); err != nil {
-			return nil, err
-		}
-	}
-	if !b.Header.ChainCoord.Equal(ctx.ChainCoord()) {
-		return nil, ErrInvalidChainCoord
-	}
-	if err := kn.validateBlockBody(ctx, b); err != nil {
-		return nil, err
-	}
-	for i, tx := range b.Body.Transactions {
-		if _, err := ctx.Transactor().Execute(ctx, tx, &common.Coordinate{Height: ctx.TargetHeight(), Index: uint16(i)}); err != nil {
-			return nil, err
-		}
-	}
-	if err := kn.rewarder.ProcessReward(b.Header.FormulationAddress, ctx); err != nil {
-		return nil, err
-	}
-	if ctx.StackSize() > 1 {
-		return nil, ErrDirtyContext
-	}
-	if !b.Header.ContextHash.Equal(ctx.Hash()) {
-		return nil, ErrInvalidAppendContextHash
-	}
-	return ctx, nil
-}
-
-// OnGenerate generate the next block when this formulator is the top rank
-func (kn *Kernel) OnGenerate() (*chain.Data, interface{}, error) {
+// Generate generate the next block when this formulator is the top rank
+func (kn *Kernel) Generate() (*chain.Data, interface{}, error) {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
@@ -339,6 +302,93 @@ func (kn *Kernel) OnGenerate() (*chain.Data, interface{}, error) {
 	}
 	cd.Signatures = append(cd.Signatures, nos.ObserverSignatures...)
 	return cd, ctx, nil
+}
+
+// OnRecv is called when a message is received from the peer
+func (kn *Kernel) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
+	m, err := kn.manager.ParseMessage(r, t)
+	if err != nil {
+		return err
+	}
+	switch msg := m.(type) {
+	case *message_def.TransactionMessage:
+		if err := kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return message.ErrUnhandledMessage
+	}
+}
+
+// AddTransaction validate the transaction and push it to the transaction pool
+func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signature) error {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return ErrKernelClosed
+	}
+
+	loader := kn.store
+	if !tx.ChainCoord().Equal(loader.ChainCoord()) {
+		return ErrInvalidChainCoord
+	}
+	TxHash := tx.Hash()
+	if kn.txPool.IsExist(TxHash) {
+		return txpool.ErrExistTransaction
+	}
+	signers := make([]common.PublicHash, 0, len(sigs))
+	for _, sig := range sigs {
+		pubkey, err := common.RecoverPubkey(TxHash, sig)
+		if err != nil {
+			return err
+		}
+		signers = append(signers, common.NewPublicHash(pubkey))
+	}
+	if err := loader.Transactor().Validate(loader, tx, signers); err != nil {
+		return err
+	}
+	if err := kn.txPool.Push(tx, sigs); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ContextByBlock creates context using the target block
+func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return nil, ErrKernelClosed
+	}
+
+	ctx := data.NewContext(kn.store)
+	for _, eh := range kn.eventHandlers {
+		if err := eh.OnCreateContext(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if !b.Header.ChainCoord.Equal(ctx.ChainCoord()) {
+		return nil, ErrInvalidChainCoord
+	}
+	if err := kn.validateBlockBody(ctx, b); err != nil {
+		return nil, err
+	}
+	for i, tx := range b.Body.Transactions {
+		if _, err := ctx.Transactor().Execute(ctx, tx, &common.Coordinate{Height: ctx.TargetHeight(), Index: uint16(i)}); err != nil {
+			return nil, err
+		}
+	}
+	if err := kn.rewarder.ProcessReward(b.Header.FormulationAddress, ctx); err != nil {
+		return nil, err
+	}
+	if ctx.StackSize() > 1 {
+		return nil, ErrDirtyContext
+	}
+	if !b.Header.ContextHash.Equal(ctx.Hash()) {
+		return nil, ErrInvalidAppendContextHash
+	}
+	return ctx, nil
 }
 
 // GenerateBlock generate a next block and its signature using transactions in the pool
@@ -445,56 +495,6 @@ TxLoop:
 		cd.Signatures = append(cd.Signatures, sig)
 		return cd, s, nil
 	}
-}
-
-// OnRecv is called when a message is received from the peer
-func (kn *Kernel) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
-	m, err := kn.manager.ParseMessage(r, t)
-	if err != nil {
-		return err
-	}
-	switch msg := m.(type) {
-	case *message_def.TransactionMessage:
-		if err := kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
-			return err
-		}
-		return nil
-	default:
-		return message.ErrUnhandledMessage
-	}
-}
-
-// AddTransaction validate the transaction and push it to the transaction pool
-func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signature) error {
-	kn.closeLock.RLock()
-	defer kn.closeLock.RUnlock()
-	if kn.isClose {
-		return ErrKernelClosed
-	}
-
-	loader := kn.store
-	if !tx.ChainCoord().Equal(loader.ChainCoord()) {
-		return ErrInvalidChainCoord
-	}
-	TxHash := tx.Hash()
-	if kn.txPool.IsExist(TxHash) {
-		return txpool.ErrExistTransaction
-	}
-	signers := make([]common.PublicHash, 0, len(sigs))
-	for _, sig := range sigs {
-		pubkey, err := common.RecoverPubkey(TxHash, sig)
-		if err != nil {
-			return err
-		}
-		signers = append(signers, common.NewPublicHash(pubkey))
-	}
-	if err := loader.Transactor().Validate(loader, tx, signers); err != nil {
-		return err
-	}
-	if err := kn.txPool.Push(tx, sigs); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (kn *Kernel) validateBlockBody(loader data.Loader, b *block.Block) error {
