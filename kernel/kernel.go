@@ -91,6 +91,42 @@ func (kn *Kernel) Provider() chain.Provider {
 	return kn.store
 }
 
+// Version returns the version of the target chain
+func (kn *Kernel) Version() uint16 {
+	return kn.store.Version()
+}
+
+// ChainCoord returns the coordinate of the target chain
+func (kn *Kernel) ChainCoord() *common.Coordinate {
+	return kn.store.ChainCoord()
+}
+
+// Accounter returns the accounter of the target chain
+func (kn *Kernel) Accounter() *data.Accounter {
+	return kn.store.Accounter()
+}
+
+// Transactor returns the transactor of the target chain
+func (kn *Kernel) Transactor() *data.Transactor {
+	return kn.store.Transactor()
+}
+
+// Block returns the block of the height
+func (kn *Kernel) Block(height uint32) (*block.Block, error) {
+	cd, err := kn.store.Data(height)
+	if err != nil {
+		return nil, err
+	}
+	b := &block.Block{}
+	if _, err := b.Header.ReadFrom(bytes.NewReader(cd.Body)); err != nil {
+		return nil, err
+	}
+	if _, err := b.Body.ReadFromWith(bytes.NewReader(cd.Extra), kn.store.Transactor()); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
 // OnInit is called when the chain is going to init
 func (kn *Kernel) OnInit() error {
 	kn.closeLock.RLock()
