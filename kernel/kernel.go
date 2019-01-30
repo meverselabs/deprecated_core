@@ -341,7 +341,7 @@ func (kn *Kernel) Generate() (*chain.Data, interface{}, error) {
 }
 
 // OnRecv is called when a message is received from the peer
-func (kn *Kernel) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
+func (kn *Kernel) OnRecv(p mesh.Peer, t message.Type, r io.Reader) error {
 	m, err := kn.manager.ParseMessage(r, t)
 	if err != nil {
 		return err
