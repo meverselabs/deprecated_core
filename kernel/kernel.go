@@ -78,7 +78,7 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 }
 
 // OnClose terminates and cleans the kernel
-func (kn *Kernel) OnClose() {
+func (kn *Kernel) Close() {
 	kn.closeLock.Lock()
 	defer kn.closeLock.Unlock()
 
@@ -127,15 +127,15 @@ func (kn *Kernel) Block(height uint32) (*block.Block, error) {
 	return b, nil
 }
 
-// OnInit is called when the chain is going to init
-func (kn *Kernel) OnInit() error {
+// Init is called when the chain is going to init
+func (kn *Kernel) Init() error {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
 		return ErrKernelClosed
 	}
 
-	log.Println("Kernel", "OnInit")
+	log.Println("Kernel", "Init")
 
 	if bs := kn.store.CustomData("chaincoord"); bs != nil {
 		var coord common.Coordinate
@@ -192,8 +192,8 @@ func (kn *Kernel) OnInit() error {
 	return nil
 }
 
-// OnScreening determines the acceptance of the chain data
-func (kn *Kernel) OnScreening(cd *chain.Data) error {
+// Screening determines the acceptance of the chain data
+func (kn *Kernel) Screening(cd *chain.Data) error {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
@@ -224,8 +224,8 @@ func (kn *Kernel) OnScreening(cd *chain.Data) error {
 	return nil
 }
 
-// OnCheckFork returns chain.ErrForkDetected if the given data is valid and collapse with stored one
-func (kn *Kernel) OnCheckFork(ch *chain.Header, sigs []common.Signature) error {
+// CheckFork returns chain.ErrForkDetected if the given data is valid and collapse with stored one
+func (kn *Kernel) CheckFork(ch *chain.Header, sigs []common.Signature) error {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
@@ -248,8 +248,8 @@ func (kn *Kernel) OnCheckFork(ch *chain.Header, sigs []common.Signature) error {
 	return chain.ErrForkDetected
 }
 
-// OnProcess resolves the chain data and updates the context
-func (kn *Kernel) OnProcess(cd *chain.Data, UserData interface{}) error {
+// Process resolves the chain data and updates the context
+func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
@@ -288,6 +288,11 @@ func (kn *Kernel) OnProcess(cd *chain.Data, UserData interface{}) error {
 		}
 		ctx = v
 	}
+	for _, eh := range kn.eventHandlers {
+		if err := eh.OnProcessBlock(kn, b, s, ctx); err != nil {
+			return err
+		}
+	}
 	top := ctx.Top()
 	CustomHash := map[string][]byte{}
 	if SaveData, err := kn.consensus.ProcessContext(top, s.HeaderHash, &b.Header); err != nil {
@@ -299,6 +304,11 @@ func (kn *Kernel) OnProcess(cd *chain.Data, UserData interface{}) error {
 		return err
 	}
 	return nil
+}
+
+// IsGenerator returns the kernel is generator or not
+func (kn *Kernel) IsGenerator() bool {
+	return kn.Config.FormulatorKey != nil
 }
 
 // Generate generate the next block when this formulator is the top rank
@@ -324,7 +334,7 @@ func (kn *Kernel) Generate() (*chain.Data, interface{}, error) {
 
 	ctx := data.NewContext(kn.store)
 	for _, eh := range kn.eventHandlers {
-		if err := eh.OnCreateContext(ctx); err != nil {
+		if err := eh.OnCreateContext(kn, ctx); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -384,6 +394,11 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	if err := loader.Transactor().Validate(loader, tx, signers); err != nil {
 		return err
 	}
+	for _, eh := range kn.eventHandlers {
+		if err := eh.OnPushTransaction(kn, tx, sigs); err != nil {
+			return err
+		}
+	}
 	if err := kn.txPool.Push(tx, sigs); err != nil {
 		return err
 	}
@@ -400,7 +415,7 @@ func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
 
 	ctx := data.NewContext(kn.store)
 	for _, eh := range kn.eventHandlers {
-		if err := eh.OnCreateContext(ctx); err != nil {
+		if err := eh.OnCreateContext(kn, ctx); err != nil {
 			return nil, err
 		}
 	}
