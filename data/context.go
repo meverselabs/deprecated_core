@@ -171,39 +171,39 @@ func (ctx *Context) Commit(sn int) {
 		ctd := ctx.Top()
 		ctx.stack = ctx.stack[:len(ctx.stack)-1]
 		top := ctx.Top()
-		for k, v := range ctd.SeqHash {
+		for k, v := range ctd.SeqMap {
 			top.SeqMap[k] = v
 		}
-		for k, v := range ctd.AccountHash {
+		for k, v := range ctd.AccountMap {
 			top.AccountMap[k] = v
 		}
-		for k, v := range ctd.CreatedAccountHash {
+		for k, v := range ctd.CreatedAccountMap {
 			top.CreatedAccountMap[k] = v
 		}
-		for k, v := range ctd.DeletedAccountHash {
-			delete(top.AccountHash, k)
-			delete(top.CreatedAccountHash, k)
+		for k, v := range ctd.DeletedAccountMap {
+			delete(top.AccountMap, k)
+			delete(top.CreatedAccountMap, k)
 			top.DeletedAccountMap[k] = v
 		}
-		for k, v := range ctd.AccountBalanceHash {
+		for k, v := range ctd.AccountBalanceMap {
 			top.AccountBalanceMap[k] = v
 		}
-		for k, v := range ctd.AccountDataHash {
+		for k, v := range ctd.AccountDataMap {
 			top.AccountDataMap[k] = v
 		}
-		for k, v := range ctd.DeletedAccountDataHash {
-			delete(top.AccountDataHash, k)
+		for k, v := range ctd.DeletedAccountDataMap {
+			delete(top.AccountDataMap, k)
 			top.DeletedAccountDataMap[k] = v
 		}
-		for k, v := range ctd.UTXOHash {
+		for k, v := range ctd.UTXOMap {
 			top.UTXOMap[k] = v
 		}
-		for k, v := range ctd.CreatedUTXOHash {
+		for k, v := range ctd.CreatedUTXOMap {
 			top.CreatedUTXOMap[k] = v
 		}
-		for k, v := range ctd.DeletedUTXOHash {
-			delete(top.UTXOHash, k)
-			delete(top.CreatedUTXOHash, k)
+		for k, v := range ctd.DeletedUTXOMap {
+			delete(top.UTXOMap, k)
+			delete(top.CreatedUTXOMap, k)
 			top.DeletedUTXOMap[k] = v
 		}
 	}
@@ -216,37 +216,37 @@ func (ctx *Context) StackSize() int {
 
 // ContextData is a state data of the context
 type ContextData struct {
-	loader                 Loader
-	Parent                 *ContextData
-	SeqHash                map[common.Address]uint64
-	AccountHash            map[common.Address]account.Account
-	CreatedAccountHash     map[common.Address]account.Account
-	DeletedAccountHash     map[common.Address]account.Account
-	AccountBalanceHash     map[common.Address]*account.Balance
-	AccountDataHash        map[string][]byte
-	DeletedAccountDataHash map[string]bool
-	UTXOHash               map[uint64]*transaction.UTXO
-	CreatedUTXOHash        map[uint64]*transaction.TxOut
-	DeletedUTXOHash        map[uint64]bool
-	isTop                  bool
+	loader                Loader
+	Parent                *ContextData
+	SeqMap                map[common.Address]uint64
+	AccountMap            map[common.Address]account.Account
+	CreatedAccountMap     map[common.Address]account.Account
+	DeletedAccountMap     map[common.Address]account.Account
+	AccountBalanceMap     map[common.Address]*account.Balance
+	AccountDataMap        map[string][]byte
+	DeletedAccountDataMap map[string]bool
+	UTXOMap               map[uint64]*transaction.UTXO
+	CreatedUTXOMap        map[uint64]*transaction.TxOut
+	DeletedUTXOMap        map[uint64]bool
+	isTop                 bool
 }
 
 // NewContextData returns a ContextData
 func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 	ctd := &ContextData{
-		loader:                 loader,
-		Parent:                 Parent,
-		SeqHash:                map[common.Address]uint64{},
-		AccountHash:            map[common.Address]account.Account{},
-		CreatedAccountHash:     map[common.Address]account.Account{},
-		DeletedAccountHash:     map[common.Address]account.Account{},
-		AccountBalanceHash:     map[common.Address]*account.Balance{},
-		AccountDataHash:        map[string][]byte{},
-		DeletedAccountDataHash: map[string]bool{},
-		UTXOHash:               map[uint64]*transaction.UTXO{},
-		CreatedUTXOHash:        map[uint64]*transaction.TxOut{},
-		DeletedUTXOHash:        map[uint64]bool{},
-		isTop:                  true,
+		loader:                loader,
+		Parent:                Parent,
+		SeqMap:                map[common.Address]uint64{},
+		AccountMap:            map[common.Address]account.Account{},
+		CreatedAccountMap:     map[common.Address]account.Account{},
+		DeletedAccountMap:     map[common.Address]account.Account{},
+		AccountBalanceMap:     map[common.Address]*account.Balance{},
+		AccountDataMap:        map[string][]byte{},
+		DeletedAccountDataMap: map[string]bool{},
+		UTXOMap:               map[uint64]*transaction.UTXO{},
+		CreatedUTXOMap:        map[uint64]*transaction.TxOut{},
+		DeletedUTXOMap:        map[uint64]bool{},
+		isTop:                 true,
 	}
 	return ctd
 }
@@ -260,10 +260,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		panic(err)
 	}
 
-	buffer.WriteString("SeqHash")
-	if len(ctd.SeqHash) > 0 {
+	buffer.WriteString("SeqMap")
+	if len(ctd.SeqMap) > 0 {
 		keys := []common.Address{}
-		for k := range ctd.SeqHash {
+		for k := range ctd.SeqMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -277,10 +277,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			}
 		}
 	}
-	buffer.WriteString("AccountHash")
-	if len(ctd.AccountHash) > 0 {
+	buffer.WriteString("AccountMap")
+	if len(ctd.AccountMap) > 0 {
 		keys := []common.Address{}
-		for k := range ctd.AccountHash {
+		for k := range ctd.AccountMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -294,10 +294,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			}
 		}
 	}
-	buffer.WriteString("CreatedAccountHash")
-	if len(ctd.CreatedAccountHash) > 0 {
+	buffer.WriteString("CreatedAccountMap")
+	if len(ctd.CreatedAccountMap) > 0 {
 		keys := []common.Address{}
-		for k := range ctd.CreatedAccountHash {
+		for k := range ctd.CreatedAccountMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -311,10 +311,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			}
 		}
 	}
-	buffer.WriteString("DeletedAccountHash")
-	if len(ctd.DeletedAccountHash) > 0 {
+	buffer.WriteString("DeletedAccountMap")
+	if len(ctd.DeletedAccountMap) > 0 {
 		keys := []common.Address{}
-		for k := range ctd.DeletedAccountHash {
+		for k := range ctd.DeletedAccountMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -324,10 +324,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			}
 		}
 	}
-	buffer.WriteString("AccountBalanceHash")
-	if len(ctd.AccountBalanceHash) > 0 {
+	buffer.WriteString("AccountBalanceMap")
+	if len(ctd.AccountBalanceMap) > 0 {
 		keys := []common.Address{}
-		for k := range ctd.AccountBalanceHash {
+		for k := range ctd.AccountBalanceMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -341,10 +341,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			}
 		}
 	}
-	buffer.WriteString("AccountDataHash")
-	if len(ctd.AccountDataHash) > 0 {
+	buffer.WriteString("AccountDataMap")
+	if len(ctd.AccountDataMap) > 0 {
 		keys := []string{}
-		for k := range ctd.AccountDataHash {
+		for k := range ctd.AccountDataMap {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
@@ -354,10 +354,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			buffer.Write(v)
 		}
 	}
-	buffer.WriteString("DeletedAccountDataHash")
-	if len(ctd.DeletedAccountDataHash) > 0 {
+	buffer.WriteString("DeletedAccountDataMap")
+	if len(ctd.DeletedAccountDataMap) > 0 {
 		keys := []string{}
-		for k := range ctd.DeletedAccountDataHash {
+		for k := range ctd.DeletedAccountDataMap {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
@@ -365,10 +365,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			buffer.WriteString(k)
 		}
 	}
-	buffer.WriteString("UTXOHash")
-	if len(ctd.UTXOHash) > 0 {
+	buffer.WriteString("UTXOMap")
+	if len(ctd.UTXOMap) > 0 {
 		keys := []uint64{}
-		for k := range ctd.UTXOHash {
+		for k := range ctd.UTXOMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(uint64Slice(keys))
@@ -382,10 +382,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			}
 		}
 	}
-	buffer.WriteString("CreatedUTXOHash")
-	if len(ctd.CreatedUTXOHash) > 0 {
+	buffer.WriteString("CreatedUTXOMap")
+	if len(ctd.CreatedUTXOMap) > 0 {
 		keys := []uint64{}
-		for k := range ctd.CreatedUTXOHash {
+		for k := range ctd.CreatedUTXOMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(uint64Slice(keys))
@@ -399,10 +399,10 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 			}
 		}
 	}
-	buffer.WriteString("DeletedUTXOHash")
-	if len(ctd.DeletedUTXOHash) > 0 {
+	buffer.WriteString("DeletedUTXOMap")
+	if len(ctd.DeletedUTXOMap) > 0 {
 		keys := []uint64{}
-		for k := range ctd.DeletedUTXOHash {
+		for k := range ctd.DeletedUTXOMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(uint64Slice(keys))
@@ -516,7 +516,7 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 		return err
 	}
 	ctd.DeletedAccountMap[acc.Address()] = acc
-	delete(ctd.AccountHash, acc.Address())
+	delete(ctd.AccountMap, acc.Address())
 	return nil
 }
 
@@ -597,10 +597,10 @@ func (ctd *ContextData) AccountData(addr common.Address, name []byte) []byte {
 func (ctd *ContextData) SetAccountData(addr common.Address, name []byte, value []byte) {
 	key := string(addr[:]) + string(name)
 	if len(value) == 0 {
-		delete(ctd.AccountDataHash, key)
+		delete(ctd.AccountDataMap, key)
 		ctd.DeletedAccountDataMap[key] = true
 	} else {
-		delete(ctd.DeletedAccountDataHash, key)
+		delete(ctd.DeletedAccountDataMap, key)
 		ctd.AccountDataMap[key] = value
 	}
 }
@@ -664,10 +664,10 @@ func (ctd *ContextData) DeleteUTXO(id uint64) error {
 // Hash returns the hash value of it
 func (ctd *ContextData) Dump() string {
 	var buffer bytes.Buffer
-	buffer.WriteString("SeqHash\n")
+	buffer.WriteString("SeqMap\n")
 	{
 		keys := []common.Address{}
-		for k := range ctd.SeqHash {
+		for k := range ctd.SeqMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -680,10 +680,10 @@ func (ctd *ContextData) Dump() string {
 		}
 	}
 	buffer.WriteString("\n")
-	buffer.WriteString("AccountHash\n")
+	buffer.WriteString("AccountMap\n")
 	{
 		keys := []common.Address{}
-		for k := range ctd.AccountHash {
+		for k := range ctd.AccountMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -700,10 +700,10 @@ func (ctd *ContextData) Dump() string {
 		}
 	}
 	buffer.WriteString("\n")
-	buffer.WriteString("CreatedAccountHash\n")
+	buffer.WriteString("CreatedAccountMap\n")
 	{
 		keys := []common.Address{}
-		for k := range ctd.CreatedAccountHash {
+		for k := range ctd.CreatedAccountMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -720,10 +720,10 @@ func (ctd *ContextData) Dump() string {
 		}
 	}
 	buffer.WriteString("\n")
-	buffer.WriteString("DeletedAccountHash\n")
+	buffer.WriteString("DeletedAccountMap\n")
 	{
 		keys := []common.Address{}
-		for k := range ctd.DeletedAccountHash {
+		for k := range ctd.DeletedAccountMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -733,10 +733,10 @@ func (ctd *ContextData) Dump() string {
 		}
 	}
 	buffer.WriteString("\n")
-	buffer.WriteString("AccountBalanceHash\n")
+	buffer.WriteString("AccountBalanceMap\n")
 	{
 		keys := []common.Address{}
-		for k := range ctd.AccountBalanceHash {
+		for k := range ctd.AccountBalanceMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(addressSlice(keys))
@@ -753,10 +753,10 @@ func (ctd *ContextData) Dump() string {
 		}
 	}
 	buffer.WriteString("\n")
-	buffer.WriteString("AccountDataHash\n")
+	buffer.WriteString("AccountDataMap\n")
 	{
 		keys := []string{}
-		for k := range ctd.AccountDataHash {
+		for k := range ctd.AccountDataMap {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
@@ -769,10 +769,10 @@ func (ctd *ContextData) Dump() string {
 		}
 	}
 	buffer.WriteString("\n")
-	buffer.WriteString("DeletedAccountDataHash\n")
+	buffer.WriteString("DeletedAccountDataMap\n")
 	{
 		keys := []string{}
-		for k := range ctd.DeletedAccountDataHash {
+		for k := range ctd.DeletedAccountDataMap {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
@@ -782,10 +782,10 @@ func (ctd *ContextData) Dump() string {
 		}
 	}
 	buffer.WriteString("\n")
-	buffer.WriteString("UTXOHash\n")
+	buffer.WriteString("UTXOMap\n")
 	{
 		keys := []uint64{}
-		for k := range ctd.UTXOHash {
+		for k := range ctd.UTXOMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(uint64Slice(keys))
@@ -802,10 +802,10 @@ func (ctd *ContextData) Dump() string {
 		}
 	}
 	buffer.WriteString("\n")
-	buffer.WriteString("CreatedUTXOHash\n")
+	buffer.WriteString("CreatedUTXOMap\n")
 	{
 		keys := []uint64{}
-		for k := range ctd.CreatedUTXOHash {
+		for k := range ctd.CreatedUTXOMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(uint64Slice(keys))
@@ -822,10 +822,10 @@ func (ctd *ContextData) Dump() string {
 		}
 	}
 	buffer.WriteString("\n")
-	buffer.WriteString("DeletedUTXOHash\n")
+	buffer.WriteString("DeletedUTXOMap\n")
 	{
 		keys := []uint64{}
-		for k := range ctd.DeletedUTXOHash {
+		for k := range ctd.DeletedUTXOMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(uint64Slice(keys))
