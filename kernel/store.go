@@ -21,14 +21,14 @@ import (
 // Store saves the target chain state
 // All updates are executed in one transaction with FileSync option
 type Store struct {
-	db          *badger.DB
-	version     uint16
-	accounter   *data.Accounter
-	transactor  *data.Transactor
-	SeqHashLock sync.Mutex
-	SeqHash     map[common.Address]uint64
-	cache       storeCache
-	ticker      *time.Ticker
+	db         *badger.DB
+	version    uint16
+	accounter  *data.Accounter
+	transactor *data.Transactor
+	SeqMapLock sync.Mutex
+	SeqMap     map[common.Address]uint64
+	cache      storeCache
+	ticker     *time.Ticker
 }
 
 type storeCache struct {
@@ -84,7 +84,7 @@ func NewStore(path string, version uint16, act *data.Accounter, tran *data.Trans
 		version:    version,
 		accounter:  act,
 		transactor: tran,
-		SeqHash:    map[common.Address]uint64{},
+		SeqMap:     map[common.Address]uint64{},
 	}, nil
 }
 
@@ -291,10 +291,10 @@ func (st *Store) Accounts() ([]account.Account, error) {
 
 // Seq returns the sequence of the transaction
 func (st *Store) Seq(addr common.Address) uint64 {
-	st.SeqHashLock.Lock()
-	defer st.SeqHashLock.Unlock()
+	st.SeqMapLock.Lock()
+	defer st.SeqMapLock.Unlock()
 
-	if seq, has := st.SeqHash[addr]; has {
+	if seq, has := st.SeqMap[addr]; has {
 		return seq
 	} else {
 		var seq uint64
@@ -312,7 +312,7 @@ func (st *Store) Seq(addr common.Address) uint64 {
 		}); err != nil {
 			return 0
 		}
-		st.SeqHash[addr] = seq
+		st.SeqMap[addr] = seq
 		return seq
 	}
 }
@@ -628,11 +628,11 @@ func (st *Store) StoreData(cd *chain.Data, ctd *data.ContextData, customHash map
 	}); err != nil {
 		return err
 	}
-	st.SeqHashLock.Lock()
-	for k, v := range ctd.SeqHash {
-		st.SeqHash[k] = v
+	st.SeqMapLock.Lock()
+	for k, v := range ctd.SeqMap {
+		st.SeqMap[k] = v
 	}
-	st.SeqHashLock.Unlock()
+	st.SeqMapLock.Unlock()
 	st.cache.height = cd.Header.Height
 	st.cache.heightHash = DataHash
 	st.cache.heightData = cd
@@ -641,7 +641,7 @@ func (st *Store) StoreData(cd *chain.Data, ctd *data.ContextData, customHash map
 }
 
 func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
-	for k, v := range ctd.SeqHash {
+	for k, v := range ctd.SeqMap {
 		if err := txn.Set(toAccountSeqKey(k), util.Uint64ToBytes(v)); err != nil {
 			return err
 		}
@@ -656,7 +656,7 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 			return err
 		}
 	}
-	for k, v := range ctd.CreatedAccountHash {
+	for k, v := range ctd.CreatedAccountMap {
 		var buffer bytes.Buffer
 		buffer.WriteByte(byte(v.Type()))
 		if _, err := v.WriteTo(&buffer); err != nil {
@@ -665,11 +665,11 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 		if err := txn.Set(toAccountKey(k), buffer.Bytes()); err != nil {
 			return err
 		}
-		if _, has := ctd.AccountBalanceHash[k]; !has {
-			ctd.AccountBalanceHash[k] = account.NewBalance()
+		if _, has := ctd.AccountBalanceMap[k]; !has {
+			ctd.AccountBalanceMap[k] = account.NewBalance()
 		}
 	}
-	for k := range ctd.DeletedAccountHash {
+	for k := range ctd.DeletedAccountMap {
 		if err := txn.Delete(toAccountKey(k)); err != nil {
 			return err
 		}
@@ -686,7 +686,7 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 			}
 		}
 	}
-	for k, v := range ctd.AccountBalanceHash {
+	for k, v := range ctd.AccountBalanceMap {
 		var buffer bytes.Buffer
 		if _, err := v.WriteTo(&buffer); err != nil {
 			return err
@@ -695,17 +695,17 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 			return err
 		}
 	}
-	for k, v := range ctd.AccountDataHash {
+	for k, v := range ctd.AccountDataMap {
 		if err := txn.Set(toAccountDataKey(k), []byte(v)); err != nil {
 			return err
 		}
 	}
-	for k := range ctd.DeletedAccountDataHash {
+	for k := range ctd.DeletedAccountDataMap {
 		if err := txn.Delete(toAccountDataKey(k)); err != nil {
 			return err
 		}
 	}
-	for k, v := range ctd.UTXOHash {
+	for k, v := range ctd.UTXOMap {
 		var buffer bytes.Buffer
 		if v.TxIn.ID() != k {
 			return ErrInvalidTxInKey
@@ -717,7 +717,7 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 			return err
 		}
 	}
-	for k, v := range ctd.CreatedUTXOHash {
+	for k, v := range ctd.CreatedUTXOMap {
 		var buffer bytes.Buffer
 		if _, err := v.WriteTo(&buffer); err != nil {
 			return err
@@ -726,7 +726,7 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 			return err
 		}
 	}
-	for k := range ctd.DeletedUTXOHash {
+	for k := range ctd.DeletedUTXOMap {
 		if err := txn.Delete(toUTXOKey(k)); err != nil {
 			return err
 		}

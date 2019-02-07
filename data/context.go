@@ -172,39 +172,39 @@ func (ctx *Context) Commit(sn int) {
 		ctx.stack = ctx.stack[:len(ctx.stack)-1]
 		top := ctx.Top()
 		for k, v := range ctd.SeqHash {
-			top.SeqHash[k] = v
+			top.SeqMap[k] = v
 		}
 		for k, v := range ctd.AccountHash {
-			top.AccountHash[k] = v
+			top.AccountMap[k] = v
 		}
 		for k, v := range ctd.CreatedAccountHash {
-			top.CreatedAccountHash[k] = v
+			top.CreatedAccountMap[k] = v
 		}
 		for k, v := range ctd.DeletedAccountHash {
 			delete(top.AccountHash, k)
 			delete(top.CreatedAccountHash, k)
-			top.DeletedAccountHash[k] = v
+			top.DeletedAccountMap[k] = v
 		}
 		for k, v := range ctd.AccountBalanceHash {
-			top.AccountBalanceHash[k] = v
+			top.AccountBalanceMap[k] = v
 		}
 		for k, v := range ctd.AccountDataHash {
-			top.AccountDataHash[k] = v
+			top.AccountDataMap[k] = v
 		}
 		for k, v := range ctd.DeletedAccountDataHash {
 			delete(top.AccountDataHash, k)
-			top.DeletedAccountDataHash[k] = v
+			top.DeletedAccountDataMap[k] = v
 		}
 		for k, v := range ctd.UTXOHash {
-			top.UTXOHash[k] = v
+			top.UTXOMap[k] = v
 		}
 		for k, v := range ctd.CreatedUTXOHash {
-			top.CreatedUTXOHash[k] = v
+			top.CreatedUTXOMap[k] = v
 		}
 		for k, v := range ctd.DeletedUTXOHash {
 			delete(top.UTXOHash, k)
 			delete(top.CreatedUTXOHash, k)
-			top.DeletedUTXOHash[k] = v
+			top.DeletedUTXOMap[k] = v
 		}
 	}
 }
@@ -268,7 +268,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
-			v := ctd.SeqHash[k]
+			v := ctd.SeqMap[k]
 			if _, err := k.WriteTo(&buffer); err != nil {
 				panic(err)
 			}
@@ -285,7 +285,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
-			v := ctd.AccountHash[k]
+			v := ctd.AccountMap[k]
 			if _, err := k.WriteTo(&buffer); err != nil {
 				panic(err)
 			}
@@ -302,7 +302,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
-			v := ctd.CreatedAccountHash[k]
+			v := ctd.CreatedAccountMap[k]
 			if _, err := k.WriteTo(&buffer); err != nil {
 				panic(err)
 			}
@@ -332,7 +332,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
-			v := ctd.AccountBalanceHash[k]
+			v := ctd.AccountBalanceMap[k]
 			if _, err := k.WriteTo(&buffer); err != nil {
 				panic(err)
 			}
@@ -349,7 +349,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			v := ctd.AccountDataHash[k]
+			v := ctd.AccountDataMap[k]
 			buffer.WriteString(k)
 			buffer.Write(v)
 		}
@@ -373,7 +373,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 		sort.Sort(uint64Slice(keys))
 		for _, k := range keys {
-			v := ctd.UTXOHash[k]
+			v := ctd.UTXOMap[k]
 			if _, err := util.WriteUint64(&buffer, k); err != nil {
 				panic(err)
 			}
@@ -390,7 +390,7 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		}
 		sort.Sort(uint64Slice(keys))
 		for _, k := range keys {
-			v := ctd.CreatedUTXOHash[k]
+			v := ctd.CreatedUTXOMap[k]
 			if _, err := util.WriteUint64(&buffer, k); err != nil {
 				panic(err)
 			}
@@ -417,21 +417,21 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 
 // Seq returns the sequence of the account
 func (ctd *ContextData) Seq(addr common.Address) uint64 {
-	if _, has := ctd.DeletedAccountHash[addr]; has {
+	if _, has := ctd.DeletedAccountMap[addr]; has {
 		return 0
 	}
-	if seq, has := ctd.SeqHash[addr]; has {
+	if seq, has := ctd.SeqMap[addr]; has {
 		return seq
 	} else if ctd.Parent != nil {
 		seq := ctd.Parent.Seq(addr)
 		if seq > 0 && ctd.isTop {
-			ctd.SeqHash[addr] = seq
+			ctd.SeqMap[addr] = seq
 		}
 		return seq
 	} else {
 		seq := ctd.loader.Seq(addr)
 		if seq > 0 && ctd.isTop {
-			ctd.SeqHash[addr] = seq
+			ctd.SeqMap[addr] = seq
 		}
 		return seq
 	}
@@ -439,20 +439,20 @@ func (ctd *ContextData) Seq(addr common.Address) uint64 {
 
 // AddSeq update the sequence of the target account
 func (ctd *ContextData) AddSeq(addr common.Address) {
-	if _, has := ctd.DeletedAccountHash[addr]; has {
+	if _, has := ctd.DeletedAccountMap[addr]; has {
 		return
 	}
-	ctd.SeqHash[addr] = ctd.Seq(addr) + 1
+	ctd.SeqMap[addr] = ctd.Seq(addr) + 1
 }
 
 // Account returns the account instance of the address
 func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
-	if _, has := ctd.DeletedAccountHash[addr]; has {
+	if _, has := ctd.DeletedAccountMap[addr]; has {
 		return nil, ErrNotExistAccount
 	}
-	if acc, has := ctd.AccountHash[addr]; has {
+	if acc, has := ctd.AccountMap[addr]; has {
 		return acc, nil
-	} else if acc, has := ctd.CreatedAccountHash[addr]; has {
+	} else if acc, has := ctd.CreatedAccountMap[addr]; has {
 		return acc, nil
 	} else if ctd.Parent != nil {
 		if acc, err := ctd.Parent.Account(addr); err != nil {
@@ -460,7 +460,7 @@ func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 		} else {
 			if ctd.isTop {
 				nacc := acc.Clone()
-				ctd.AccountHash[addr] = nacc
+				ctd.AccountMap[addr] = nacc
 				return nacc, nil
 			} else {
 				return acc, nil
@@ -472,7 +472,7 @@ func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 		} else {
 			if ctd.isTop {
 				nacc := acc.Clone()
-				ctd.AccountHash[addr] = nacc
+				ctd.AccountMap[addr] = nacc
 				return nacc, nil
 			} else {
 				return acc, nil
@@ -483,12 +483,12 @@ func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 
 // IsExistAccount checks that the account of the address is exist or not
 func (ctd *ContextData) IsExistAccount(addr common.Address) (bool, error) {
-	if _, has := ctd.DeletedAccountHash[addr]; has {
+	if _, has := ctd.DeletedAccountMap[addr]; has {
 		return false, nil
 	}
-	if _, has := ctd.AccountHash[addr]; has {
+	if _, has := ctd.AccountMap[addr]; has {
 		return true, nil
-	} else if _, has := ctd.CreatedAccountHash[addr]; has {
+	} else if _, has := ctd.CreatedAccountMap[addr]; has {
 		return true, nil
 	} else if ctd.Parent != nil {
 		return ctd.Parent.IsExistAccount(addr)
@@ -506,7 +506,7 @@ func (ctd *ContextData) CreateAccount(acc account.Account) error {
 	} else {
 		return ErrExistAccount
 	}
-	ctd.CreatedAccountHash[acc.Address()] = acc
+	ctd.CreatedAccountMap[acc.Address()] = acc
 	return nil
 }
 
@@ -515,17 +515,17 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 	if _, err := ctd.Account(acc.Address()); err != nil {
 		return err
 	}
-	ctd.DeletedAccountHash[acc.Address()] = acc
+	ctd.DeletedAccountMap[acc.Address()] = acc
 	delete(ctd.AccountHash, acc.Address())
 	return nil
 }
 
 // AccountBalance returns the account balance
 func (ctd *ContextData) AccountBalance(addr common.Address) (*account.Balance, error) {
-	if _, has := ctd.DeletedAccountHash[addr]; has {
+	if _, has := ctd.DeletedAccountMap[addr]; has {
 		return nil, ErrNotExistAccount
 	}
-	if bc, has := ctd.AccountBalanceHash[addr]; has {
+	if bc, has := ctd.AccountBalanceMap[addr]; has {
 		return bc, nil
 	} else if ctd.Parent != nil {
 		if bc, err := ctd.Parent.AccountBalance(addr); err != nil {
@@ -533,7 +533,7 @@ func (ctd *ContextData) AccountBalance(addr common.Address) (*account.Balance, e
 		} else {
 			if ctd.isTop {
 				nbc := bc.Clone()
-				ctd.AccountBalanceHash[addr] = nbc
+				ctd.AccountBalanceMap[addr] = nbc
 				return nbc, nil
 			} else {
 				return bc, nil
@@ -545,7 +545,7 @@ func (ctd *ContextData) AccountBalance(addr common.Address) (*account.Balance, e
 		} else {
 			if ctd.isTop {
 				nbc := bc.Clone()
-				ctd.AccountBalanceHash[addr] = nbc
+				ctd.AccountBalanceMap[addr] = nbc
 				return nbc, nil
 			} else {
 				return bc, nil
@@ -557,10 +557,10 @@ func (ctd *ContextData) AccountBalance(addr common.Address) (*account.Balance, e
 // AccountData returns the account data
 func (ctd *ContextData) AccountData(addr common.Address, name []byte) []byte {
 	key := string(addr[:]) + string(name)
-	if ctd.DeletedAccountDataHash[key] {
+	if ctd.DeletedAccountDataMap[key] {
 		return nil
 	}
-	if value, has := ctd.AccountDataHash[key]; has {
+	if value, has := ctd.AccountDataMap[key]; has {
 		return value
 	} else if ctd.Parent != nil {
 		value := ctd.Parent.AccountData(addr, name)
@@ -568,7 +568,7 @@ func (ctd *ContextData) AccountData(addr common.Address, name []byte) []byte {
 			if ctd.isTop {
 				nvalue := make([]byte, len(value))
 				copy(nvalue, value)
-				ctd.AccountDataHash[key] = nvalue
+				ctd.AccountDataMap[key] = nvalue
 				return nvalue
 			} else {
 				return value
@@ -582,7 +582,7 @@ func (ctd *ContextData) AccountData(addr common.Address, name []byte) []byte {
 			if ctd.isTop {
 				nvalue := make([]byte, len(value))
 				copy(nvalue, value)
-				ctd.AccountDataHash[key] = nvalue
+				ctd.AccountDataMap[key] = nvalue
 				return nvalue
 			} else {
 				return value
@@ -598,19 +598,19 @@ func (ctd *ContextData) SetAccountData(addr common.Address, name []byte, value [
 	key := string(addr[:]) + string(name)
 	if len(value) == 0 {
 		delete(ctd.AccountDataHash, key)
-		ctd.DeletedAccountDataHash[key] = true
+		ctd.DeletedAccountDataMap[key] = true
 	} else {
 		delete(ctd.DeletedAccountDataHash, key)
-		ctd.AccountDataHash[key] = value
+		ctd.AccountDataMap[key] = value
 	}
 }
 
 // UTXO returns the UTXO
 func (ctd *ContextData) UTXO(id uint64) (*transaction.UTXO, error) {
-	if ctd.DeletedUTXOHash[id] {
+	if ctd.DeletedUTXOMap[id] {
 		return nil, ErrDoubleSpent
 	}
-	if utxo, has := ctd.UTXOHash[id]; has {
+	if utxo, has := ctd.UTXOMap[id]; has {
 		return utxo, nil
 	} else if ctd.Parent != nil {
 		if utxo, err := ctd.Parent.UTXO(id); err != nil {
@@ -618,7 +618,7 @@ func (ctd *ContextData) UTXO(id uint64) (*transaction.UTXO, error) {
 		} else {
 			if ctd.isTop {
 				nutxo := utxo.Clone()
-				ctd.UTXOHash[id] = nutxo
+				ctd.UTXOMap[id] = nutxo
 				return nutxo, nil
 			} else {
 				return utxo, nil
@@ -630,7 +630,7 @@ func (ctd *ContextData) UTXO(id uint64) (*transaction.UTXO, error) {
 		} else {
 			if ctd.isTop {
 				nutxo := utxo.Clone()
-				ctd.UTXOHash[id] = nutxo
+				ctd.UTXOMap[id] = nutxo
 				return nutxo, nil
 			} else {
 				return utxo, nil
@@ -648,7 +648,7 @@ func (ctd *ContextData) CreateUTXO(id uint64, vout *transaction.TxOut) error {
 	} else {
 		return ErrExistUTXO
 	}
-	ctd.CreatedUTXOHash[id] = vout
+	ctd.CreatedUTXOMap[id] = vout
 	return nil
 }
 
@@ -657,7 +657,7 @@ func (ctd *ContextData) DeleteUTXO(id uint64) error {
 	if _, err := ctd.UTXO(id); err != nil {
 		return err
 	}
-	ctd.DeletedUTXOHash[id] = true
+	ctd.DeletedUTXOMap[id] = true
 	return nil
 }
 
@@ -672,7 +672,7 @@ func (ctd *ContextData) Dump() string {
 		}
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
-			v := ctd.SeqHash[k]
+			v := ctd.SeqMap[k]
 			buffer.WriteString(k.String())
 			buffer.WriteString(": ")
 			buffer.WriteString(strconv.FormatInt(int64(v), 10))
@@ -688,7 +688,7 @@ func (ctd *ContextData) Dump() string {
 		}
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
-			v := ctd.AccountHash[k]
+			v := ctd.AccountMap[k]
 			buffer.WriteString(k.String())
 			buffer.WriteString(": ")
 			var hb bytes.Buffer
@@ -708,7 +708,7 @@ func (ctd *ContextData) Dump() string {
 		}
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
-			v := ctd.CreatedAccountHash[k]
+			v := ctd.CreatedAccountMap[k]
 			buffer.WriteString(k.String())
 			buffer.WriteString(": ")
 			var hb bytes.Buffer
@@ -741,7 +741,7 @@ func (ctd *ContextData) Dump() string {
 		}
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
-			v := ctd.AccountBalanceHash[k]
+			v := ctd.AccountBalanceMap[k]
 			buffer.WriteString(k.String())
 			buffer.WriteString(": ")
 			var hb bytes.Buffer
@@ -761,7 +761,7 @@ func (ctd *ContextData) Dump() string {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			v := ctd.AccountDataHash[k]
+			v := ctd.AccountDataMap[k]
 			buffer.WriteString(string(k))
 			buffer.WriteString(": ")
 			buffer.WriteString(string(v))
@@ -790,7 +790,7 @@ func (ctd *ContextData) Dump() string {
 		}
 		sort.Sort(uint64Slice(keys))
 		for _, k := range keys {
-			v := ctd.UTXOHash[k]
+			v := ctd.UTXOMap[k]
 			buffer.WriteString(strconv.FormatInt(int64(k), 10))
 			buffer.WriteString(": ")
 			var hb bytes.Buffer
@@ -810,7 +810,7 @@ func (ctd *ContextData) Dump() string {
 		}
 		sort.Sort(uint64Slice(keys))
 		for _, k := range keys {
-			v := ctd.CreatedUTXOHash[k]
+			v := ctd.CreatedUTXOMap[k]
 			buffer.WriteString(strconv.FormatInt(int64(k), 10))
 			buffer.WriteString(": ")
 			var hb bytes.Buffer

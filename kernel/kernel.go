@@ -49,12 +49,12 @@ type Kernel struct {
 
 // NewKernel returns a Kernel
 func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisContextData *data.ContextData) (*Kernel, error) {
-	ObserverKeyHash := map[common.PublicHash]bool{}
+	ObserverKeyMap := map[common.PublicHash]bool{}
 	for _, str := range Config.ObserverKeys {
 		if pubhash, err := common.ParsePublicHash(str); err != nil {
 			return nil, err
 		} else {
-			ObserverKeyHash[pubhash] = true
+			ObserverKeyMap[pubhash] = true
 		}
 	}
 
@@ -68,7 +68,7 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		store:              st,
 		genesisContextData: genesisContextData,
 		rewarder:           rewarder,
-		consensus:          consensus.NewConsensus(ObserverKeyHash, FormulationAccountType),
+		consensus:          consensus.NewConsensus(ObserverKeyMap, FormulationAccountType),
 		txPool:             txpool.NewTransactionPool(),
 		manager:            message.NewManager(),
 		eventHandlers:      []EventHandler{},
@@ -84,6 +84,11 @@ func (kn *Kernel) Close() {
 
 	kn.isClose = true
 	kn.store.Close()
+}
+
+// AddEventHandler adds a event handler to the vote log
+func (kn *Kernel) AddEventHandler(eh EventHandler) {
+	kn.eventHandlers = append(kn.eventHandlers, eh)
 }
 
 // Provider returns the provider of the chain
@@ -274,7 +279,10 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		},
 		ObserverSignatures: cd.Signatures[1:],
 	}
-	if err := kn.consensus.ValidateBlockHeader(&b.Header, s); err != nil {
+	if err := kn.consensus.ValidateBlockHeader(&b.Header, &s.Signed); err != nil {
+		return err
+	}
+	if err := kn.consensus.ValidateObserverSignatures(s.Signed.Hash(), s.ObserverSignatures); err != nil {
 		return err
 	}
 	if _, err := b.Body.ReadFromWith(bytes.NewReader(cd.Extra), kn.store.Transactor()); err != nil {
@@ -294,16 +302,52 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		}
 	}
 	top := ctx.Top()
-	CustomHash := map[string][]byte{}
+	CustomMap := map[string][]byte{}
 	if SaveData, err := kn.consensus.ProcessContext(top, s.HeaderHash, &b.Header); err != nil {
 		return err
 	} else {
-		CustomHash["consensus"] = SaveData
+		CustomMap["consensus"] = SaveData
 	}
-	if err := kn.store.StoreData(cd, top, CustomHash); err != nil {
+	if err := kn.store.StoreData(cd, top, CustomMap); err != nil {
 		return err
 	}
 	return nil
+}
+
+// Validate validates the chain data and returns the context of it
+func (kn *Kernel) Validate(cd *chain.Data) (interface{}, error) {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return nil, ErrKernelClosed
+	}
+
+	log.Println("Kernel", "Validate", cd)
+	b := &block.Block{}
+	if _, err := b.Header.ReadFrom(bytes.NewReader(cd.Body)); err != nil {
+		return nil, err
+	}
+	if !b.Header.ChainCoord.Equal(kn.Config.ChainCoord) {
+		return nil, ErrInvalidChainCoord
+	}
+	if len(cd.Signatures) < 1 {
+		return nil, ErrInvalidSignatureCount
+	}
+	s := &block.Signed{
+		HeaderHash:         cd.Header.Hash(),
+		GeneratorSignature: cd.Signatures[0],
+	}
+	if err := kn.consensus.ValidateBlockHeader(&b.Header, s); err != nil {
+		return nil, err
+	}
+	if _, err := b.Body.ReadFromWith(bytes.NewReader(cd.Extra), kn.store.Transactor()); err != nil {
+		return nil, err
+	}
+	ctx, err := kn.ContextByBlock(b)
+	if err != nil {
+		return nil, err
+	}
+	return ctx, nil
 }
 
 // IsGenerator returns the kernel is generator or not

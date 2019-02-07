@@ -21,14 +21,14 @@ var (
 type RankTable struct {
 	height     uint64
 	candidates []*Rank
-	rankHash   map[common.Address]*Rank
+	rankMap    map[common.Address]*Rank
 }
 
 // NewRankTable returns a RankTable
 func NewRankTable() *RankTable {
 	rt := &RankTable{
 		candidates: []*Rank{},
-		rankHash:   map[common.Address]*Rank{},
+		rankMap:    map[common.Address]*Rank{},
 	}
 	return rt
 }
@@ -72,7 +72,7 @@ func (rt *RankTable) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 		rt.candidates = make([]*Rank, 0, Len)
-		rt.rankHash = map[common.Address]*Rank{}
+		rt.rankMap = map[common.Address]*Rank{}
 		for i := 0; i < int(Len); i++ {
 			s := new(Rank)
 			if n, err := s.ReadFrom(r); err != nil {
@@ -80,7 +80,7 @@ func (rt *RankTable) ReadFrom(r io.Reader) (int64, error) {
 			} else {
 				read += n
 				rt.candidates = append(rt.candidates, s)
-				rt.rankHash[s.Address] = s
+				rt.rankMap[s.Address] = s
 			}
 		}
 	}
@@ -98,7 +98,7 @@ func (rt *RankTable) Add(s *Rank) error {
 		return ErrExistAddress
 	}
 	rt.candidates = InsertRankToList(rt.candidates, s)
-	rt.rankHash[s.Address] = s
+	rt.rankMap[s.Address] = s
 	return nil
 }
 
@@ -112,8 +112,8 @@ func (rt *RankTable) LargestPhase() uint32 {
 
 // Remove delete the rank by the formulation account address
 func (rt *RankTable) Remove(addr common.Address) {
-	if _, has := rt.rankHash[addr]; has {
-		delete(rt.rankHash, addr)
+	if _, has := rt.rankMap[addr]; has {
+		delete(rt.rankMap, addr)
 		candidates := make([]*Rank, 0, len(rt.candidates))
 		for _, s := range rt.candidates {
 			if !s.Address.Equal(addr) {
@@ -125,7 +125,7 @@ func (rt *RankTable) Remove(addr common.Address) {
 
 // Rank returns the cloned rank by the formulation account address
 func (rt *RankTable) Rank(addr common.Address) *Rank {
-	return rt.rankHash[addr]
+	return rt.rankMap[addr]
 }
 
 // CandidateCount returns the number of ranks

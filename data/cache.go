@@ -8,23 +8,23 @@ import (
 )
 
 type cache struct {
-	ctx                *Context
-	SeqHash            map[common.Address]uint64
-	AccountHash        map[common.Address]account.Account
-	AccountBalanceHash map[common.Address]*account.Balance
-	AccountDataHash    map[string][]byte
-	UTXOHash           map[uint64]*transaction.UTXO
+	ctx               *Context
+	SeqMap            map[common.Address]uint64
+	AccountMap        map[common.Address]account.Account
+	AccountBalanceMap map[common.Address]*account.Balance
+	AccountDataMap    map[string][]byte
+	UTXOMap           map[uint64]*transaction.UTXO
 }
 
 // NewCache is used for generating genesis state
 func newCache(ctx *Context) *cache {
 	return &cache{
-		ctx:                ctx,
-		SeqHash:            map[common.Address]uint64{},
-		AccountHash:        map[common.Address]account.Account{},
-		AccountBalanceHash: map[common.Address]*account.Balance{},
-		AccountDataHash:    map[string][]byte{},
-		UTXOHash:           map[uint64]*transaction.UTXO{},
+		ctx:               ctx,
+		SeqMap:            map[common.Address]uint64{},
+		AccountMap:        map[common.Address]account.Account{},
+		AccountBalanceMap: map[common.Address]*account.Balance{},
+		AccountDataMap:    map[string][]byte{},
+		UTXOMap:           map[uint64]*transaction.UTXO{},
 	}
 }
 
@@ -55,24 +55,24 @@ func (cc *cache) PrevHash() hash.Hash256 {
 
 // Seq returns the sequence of the account
 func (cc *cache) Seq(addr common.Address) uint64 {
-	if seq, has := cc.SeqHash[addr]; has {
+	if seq, has := cc.SeqMap[addr]; has {
 		return seq
 	} else {
 		seq := cc.ctx.loader.Seq(addr)
-		cc.SeqHash[addr] = seq
+		cc.SeqMap[addr] = seq
 		return seq
 	}
 }
 
 // Account returns the account instance of the address
 func (cc *cache) Account(addr common.Address) (account.Account, error) {
-	if acc, has := cc.AccountHash[addr]; has {
+	if acc, has := cc.AccountMap[addr]; has {
 		return acc, nil
 	} else {
 		if acc, err := cc.ctx.loader.Account(addr); err != nil {
 			return nil, err
 		} else {
-			cc.AccountHash[addr] = acc
+			cc.AccountMap[addr] = acc
 			return acc, nil
 		}
 	}
@@ -80,7 +80,7 @@ func (cc *cache) Account(addr common.Address) (account.Account, error) {
 
 // IsExistAccount checks that the account of the address is exist or not
 func (cc *cache) IsExistAccount(addr common.Address) (bool, error) {
-	if _, has := cc.AccountHash[addr]; has {
+	if _, has := cc.AccountMap[addr]; has {
 		return true, nil
 	} else {
 		return cc.ctx.loader.IsExistAccount(addr)
@@ -89,13 +89,13 @@ func (cc *cache) IsExistAccount(addr common.Address) (bool, error) {
 
 // AccountBalance returns the account balance
 func (cc *cache) AccountBalance(addr common.Address) (*account.Balance, error) {
-	if bc, has := cc.AccountBalanceHash[addr]; has {
+	if bc, has := cc.AccountBalanceMap[addr]; has {
 		return bc, nil
 	} else {
 		if bc, err := cc.ctx.loader.AccountBalance(addr); err != nil {
 			return nil, err
 		} else {
-			cc.AccountBalanceHash[addr] = bc
+			cc.AccountBalanceMap[addr] = bc
 			return bc, nil
 		}
 	}
@@ -104,24 +104,24 @@ func (cc *cache) AccountBalance(addr common.Address) (*account.Balance, error) {
 // AccountData returns the account data
 func (cc *cache) AccountData(addr common.Address, name []byte) []byte {
 	key := string(addr[:]) + string(name)
-	if value, has := cc.AccountDataHash[key]; has {
+	if value, has := cc.AccountDataMap[key]; has {
 		return value
 	} else {
 		value := cc.ctx.loader.AccountData(addr, name)
-		cc.AccountDataHash[key] = value
+		cc.AccountDataMap[key] = value
 		return value
 	}
 }
 
 // UTXO returns the UTXO
 func (cc *cache) UTXO(id uint64) (*transaction.UTXO, error) {
-	if utxo, has := cc.UTXOHash[id]; has {
+	if utxo, has := cc.UTXOMap[id]; has {
 		return utxo, nil
 	} else {
 		if utxo, err := cc.ctx.loader.UTXO(id); err != nil {
 			return nil, err
 		} else {
-			cc.UTXOHash[id] = utxo
+			cc.UTXOMap[id] = utxo
 			return utxo, nil
 		}
 	}

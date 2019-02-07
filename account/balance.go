@@ -11,14 +11,14 @@ import (
 
 // Balance is a interface that defines common balance functions
 type Balance struct {
-	address    common.Address
-	amountHash map[uint64]*amount.Amount
+	address   common.Address
+	amountMap map[uint64]*amount.Amount
 }
 
 // NewBalance returns a Balance
 func NewBalance() *Balance {
 	bc := &Balance{
-		amountHash: map[uint64]*amount.Amount{},
+		amountMap: map[uint64]*amount.Amount{},
 	}
 	return bc
 }
@@ -30,7 +30,7 @@ func (bc *Balance) Address() common.Address {
 
 // Balance returns the amount of the target chain's token(or coin)
 func (bc *Balance) Balance(coord *common.Coordinate) *amount.Amount {
-	if a, has := bc.amountHash[coord.ID()]; has {
+	if a, has := bc.amountMap[coord.ID()]; has {
 		return a
 	} else {
 		return amount.NewCoinAmount(0, 0)
@@ -40,7 +40,7 @@ func (bc *Balance) Balance(coord *common.Coordinate) *amount.Amount {
 // ClearBalance removes balance and returns the amount of the target chain's token(or coin)
 func (bc *Balance) ClearBalance(coord *common.Coordinate) *amount.Amount {
 	a := bc.Balance(coord)
-	delete(bc.amountHash, coord.ID())
+	delete(bc.amountMap, coord.ID())
 	return a
 }
 
@@ -50,19 +50,19 @@ func (bc *Balance) SubBalance(coord *common.Coordinate, a *amount.Amount) error 
 	if balance.Less(a) {
 		return ErrInsufficientBalance
 	}
-	bc.amountHash[coord.ID()] = balance.Sub(a)
+	bc.amountMap[coord.ID()] = balance.Sub(a)
 	return nil
 }
 
 // AddBalance add a amount to the amount of the target chain's token(or coin)
 func (bc *Balance) AddBalance(coord *common.Coordinate, a *amount.Amount) {
-	bc.amountHash[coord.ID()] = bc.Balance(coord).Add(a)
+	bc.amountMap[coord.ID()] = bc.Balance(coord).Add(a)
 }
 
 // TokenCoords returns chain's coordinates of usable tokens
 func (bc *Balance) TokenCoords() []*common.Coordinate {
-	list := make([]*common.Coordinate, 0, len(bc.amountHash))
-	for k := range bc.amountHash {
+	list := make([]*common.Coordinate, 0, len(bc.amountMap))
+	for k := range bc.amountMap {
 		list = append(list, common.NewCoordinateByID(k))
 	}
 	return list
@@ -70,13 +70,13 @@ func (bc *Balance) TokenCoords() []*common.Coordinate {
 
 // Clone returns the clonend value of it
 func (bc *Balance) Clone() *Balance {
-	amountHash := map[uint64]*amount.Amount{}
-	for k, v := range bc.amountHash {
-		amountHash[k] = v.Clone()
+	amountMap := map[uint64]*amount.Amount{}
+	for k, v := range bc.amountMap {
+		amountMap[k] = v.Clone()
 	}
 	c := &Balance{
-		address:    bc.address.Clone(),
-		amountHash: amountHash,
+		address:   bc.address.Clone(),
+		amountMap: amountMap,
 	}
 	return c
 }
@@ -89,17 +89,17 @@ func (bc *Balance) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := util.WriteUint32(w, uint32(len(bc.amountHash))); err != nil {
+	if n, err := util.WriteUint32(w, uint32(len(bc.amountMap))); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
-		keys := make([]uint64, 0, len(bc.amountHash))
-		for k := range bc.amountHash {
+		keys := make([]uint64, 0, len(bc.amountMap))
+		for k := range bc.amountMap {
 			keys = append(keys, k)
 		}
 		sort.Sort(uint64Slice(keys))
 		for _, k := range keys {
-			a := bc.amountHash[k]
+			a := bc.amountMap[k]
 			if n, err := util.WriteUint64(w, k); err != nil {
 				return wrote, err
 			} else {
@@ -127,7 +127,7 @@ func (bc *Balance) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		bc.amountHash = map[uint64]*amount.Amount{}
+		bc.amountMap = map[uint64]*amount.Amount{}
 		for i := 0; i < int(Len); i++ {
 			if k, n, err := util.ReadUint64(r); err != nil {
 				return read, err
@@ -138,7 +138,7 @@ func (bc *Balance) ReadFrom(r io.Reader) (int64, error) {
 					return read, err
 				} else {
 					read += n
-					bc.amountHash[k] = a
+					bc.amountMap[k] = a
 				}
 			}
 		}

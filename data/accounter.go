@@ -7,19 +7,19 @@ import (
 
 // Accounter provide account's handlers of the target chain
 type Accounter struct {
-	coord           *common.Coordinate
-	handlerTypeHash map[account.Type]*accountHandler
-	typeNameHash    map[string]account.Type
-	typeHash        map[account.Type]*accountTypeItem
+	coord          *common.Coordinate
+	handlerTypeMap map[account.Type]*accountHandler
+	typeNameMap    map[string]account.Type
+	typeMap        map[account.Type]*accountTypeItem
 }
 
 // NewAccounter returns a Accounter
 func NewAccounter(coord *common.Coordinate) *Accounter {
 	act := &Accounter{
-		coord:           coord,
-		handlerTypeHash: map[account.Type]*accountHandler{},
-		typeNameHash:    map[string]account.Type{},
-		typeHash:        map[account.Type]*accountTypeItem{},
+		coord:          coord,
+		handlerTypeMap: map[account.Type]*accountHandler{},
+		typeNameMap:    map[string]account.Type{},
+		typeMap:        map[account.Type]*accountTypeItem{},
 	}
 	return act
 }
@@ -31,7 +31,7 @@ func (act *Accounter) ChainCoord() *common.Coordinate {
 
 // Validate supports the validation of the account with signers
 func (act *Accounter) Validate(loader Loader, acc account.Account, signers []common.PublicHash) error {
-	if item, has := act.handlerTypeHash[acc.Type()]; !has {
+	if item, has := act.handlerTypeMap[acc.Type()]; !has {
 		return ErrNotExistHandler
 	} else {
 		if err := item.Validator(loader, acc, signers); err != nil {
@@ -47,19 +47,19 @@ func (act *Accounter) RegisterType(Name string, t account.Type) error {
 	if err != nil {
 		return err
 	}
-	act.typeHash[t] = &accountTypeItem{
+	act.typeMap[t] = &accountTypeItem{
 		Type:    t,
 		Name:    Name,
 		Factory: item.Factory,
 	}
-	act.handlerTypeHash[t] = item
-	act.typeNameHash[Name] = t
+	act.handlerTypeMap[t] = item
+	act.typeNameMap[Name] = t
 	return nil
 }
 
 // NewByType generate an account instance by the type
 func (act *Accounter) NewByType(t account.Type) (account.Account, error) {
-	if item, has := act.typeHash[t]; has {
+	if item, has := act.typeMap[t]; has {
 		acc := item.Factory(t)
 		acc.SetType(t)
 		return acc, nil
@@ -70,7 +70,7 @@ func (act *Accounter) NewByType(t account.Type) (account.Account, error) {
 
 // NewByTypeName generate an account instance by the name
 func (act *Accounter) NewByTypeName(name string) (account.Account, error) {
-	if t, has := act.typeNameHash[name]; has {
+	if t, has := act.typeNameMap[name]; has {
 		return act.NewByType(t)
 	} else {
 		return nil, ErrUnknownAccountType
@@ -79,7 +79,7 @@ func (act *Accounter) NewByTypeName(name string) (account.Account, error) {
 
 // TypeByName returns the type by the name
 func (act *Accounter) TypeByName(name string) (account.Type, error) {
-	if t, has := act.typeNameHash[name]; has {
+	if t, has := act.typeNameMap[name]; has {
 		return t, nil
 	} else {
 		return 0, ErrUnknownAccountType
@@ -88,21 +88,21 @@ func (act *Accounter) TypeByName(name string) (account.Type, error) {
 
 // NameByType returns the name by the type
 func (act *Accounter) NameByType(t account.Type) (string, error) {
-	if item, has := act.typeHash[t]; has {
+	if item, has := act.typeMap[t]; has {
 		return item.Name, nil
 	} else {
 		return "", ErrUnknownTransactionType
 	}
 }
 
-var accounterHandlerHash = map[string]*accountHandler{}
+var accounterHandlerMap = map[string]*accountHandler{}
 
 // RegisterAccount register account handlers to the global account registry
 func RegisterAccount(Name string, Factory AccountFactory, Validator AccountValidator) error {
-	if _, has := accounterHandlerHash[Name]; has {
+	if _, has := accounterHandlerMap[Name]; has {
 		return ErrExistHandler
 	}
-	accounterHandlerHash[Name] = &accountHandler{
+	accounterHandlerMap[Name] = &accountHandler{
 		Factory:   Factory,
 		Validator: Validator,
 	}
@@ -110,10 +110,10 @@ func RegisterAccount(Name string, Factory AccountFactory, Validator AccountValid
 }
 
 func loadAccountHandler(Name string) (*accountHandler, error) {
-	if _, has := accounterHandlerHash[Name]; !has {
+	if _, has := accounterHandlerMap[Name]; !has {
 		return nil, ErrNotExistHandler
 	}
-	return accounterHandlerHash[Name], nil
+	return accounterHandlerMap[Name], nil
 }
 
 type accountHandler struct {
