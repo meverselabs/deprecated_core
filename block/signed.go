@@ -1,7 +1,6 @@
 package block
 
 import (
-	"bytes"
 	"io"
 
 	"git.fleta.io/fleta/common"
@@ -13,15 +12,6 @@ import (
 type Signed struct {
 	HeaderHash         hash.Hash256
 	GeneratorSignature common.Signature
-}
-
-// Hash returns the hash value of it
-func (s *Signed) Hash() hash.Hash256 {
-	var buffer bytes.Buffer
-	if _, err := s.WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	return hash.DoubleHash(buffer.Bytes())
 }
 
 // WriteTo is a serialization function
@@ -66,11 +56,7 @@ type ObserverSigned struct {
 
 // Hash returns the hash value of it
 func (s *ObserverSigned) Hash() hash.Hash256 {
-	var buffer bytes.Buffer
-	if _, err := s.WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	return hash.DoubleHash(buffer.Bytes())
+	return hash.DoubleHashByWriterTo(s)
 }
 
 // WriteTo is a serialization function

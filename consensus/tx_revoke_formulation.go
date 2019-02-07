@@ -1,7 +1,6 @@
 package consensus
 
 import (
-	"bytes"
 	"io"
 
 	"git.fleta.io/fleta/common"
@@ -103,11 +102,7 @@ func (tx *RevokeFormulation) Seq() uint64 {
 
 // Hash returns the hash value of it
 func (tx *RevokeFormulation) Hash() hash.Hash256 {
-	var buffer bytes.Buffer
-	if _, err := tx.WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	return hash.DoubleHash(buffer.Bytes())
+	return hash.DoubleHashByWriterTo(tx)
 }
 
 // WriteTo is a serialization function
