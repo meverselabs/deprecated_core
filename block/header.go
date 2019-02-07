@@ -17,17 +17,6 @@ type Header struct {
 	TimeoutCount       uint32
 }
 
-/*
-// Hash returns the hash value of it
-func (bh *Header) Hash() hash.Hash256 {
-	var buffer bytes.Buffer
-	if _, err := bh.WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	return hash.DoubleHash(buffer.Bytes())
-}
-*/
-
 // WriteTo is a serialization function
 func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
