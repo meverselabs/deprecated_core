@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"git.fleta.io/fleta/core/message_def"
-	"git.fleta.io/fleta/core/observer"
 	"git.fleta.io/fleta/core/reward"
 
 	"git.fleta.io/fleta/common"
@@ -42,9 +41,6 @@ type Kernel struct {
 	closeLock        sync.RWMutex
 	eventHandlers    []EventHandler
 	isClose          bool
-	// formualtor
-	observerConnector *observer.Connector
-	genBlockLock      sync.Mutex
 }
 
 // NewKernel returns a Kernel
