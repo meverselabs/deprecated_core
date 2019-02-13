@@ -14,6 +14,11 @@ type Signed struct {
 	GeneratorSignature common.Signature
 }
 
+// Hash returns the hash value of it
+func (s *Signed) Hash() hash.Hash256 {
+	return hash.DoubleHashByWriterTo(s)
+}
+
 // WriteTo is a serialization function
 func (s *Signed) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
@@ -52,11 +57,6 @@ func (s *Signed) ReadFrom(r io.Reader) (int64, error) {
 type ObserverSigned struct {
 	Signed
 	ObserverSignatures []common.Signature //MAXLEN : 255
-}
-
-// Hash returns the hash value of it
-func (s *ObserverSigned) Hash() hash.Hash256 {
-	return hash.DoubleHashByWriterTo(s)
 }
 
 // WriteTo is a serialization function
