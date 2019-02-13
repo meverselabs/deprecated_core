@@ -11,6 +11,7 @@ import (
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/account"
+	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/db"
 	"git.fleta.io/fleta/core/transaction"
@@ -96,6 +97,18 @@ func (st *Store) Close() {
 	st.ticker = nil
 }
 
+// CreateHeader returns a header that implements the chain header interface
+func (st *Store) CreateHeader() chain.Header {
+	return &block.Header{}
+}
+
+// CreateBody returns a header that implements the chain header interface
+func (st *Store) CreateBody() chain.Body {
+	return &block.Body{
+		Tran: st.transactor,
+	}
+}
+
 // Version returns the version of the target chain
 func (st *Store) Version() uint16 {
 	return st.version
@@ -164,17 +177,17 @@ func (st *Store) Hash(height uint32) (hash.Hash256, error) {
 }
 
 // Header returns the header of the data by height
-func (st *Store) Header(height uint32) (*chain.Header, error) {
+func (st *Store) Header(height uint32) (chain.Header, error) {
 	if height < 1 {
 		return nil, db.ErrNotExistKey
 	}
 	if st.cache.cached {
 		if st.cache.height == height {
-			return &st.cache.heightData.Header, nil
+			return st.cache.heightData.Header, nil
 		}
 	}
 
-	var ch *chain.Header
+	var ch chain.Header
 	if err := st.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(toHeightHeaderKey(height))
 		if err != nil {
@@ -188,7 +201,7 @@ func (st *Store) Header(height uint32) (*chain.Header, error) {
 		if err != nil {
 			return err
 		}
-		ch = &chain.Header{}
+		ch = st.CreateHeader()
 		if _, err := ch.ReadFrom(bytes.NewReader(value)); err != nil {
 			return err
 		}
@@ -224,7 +237,10 @@ func (st *Store) Data(height uint32) (*chain.Data, error) {
 		if err != nil {
 			return err
 		}
-		cd = &chain.Data{}
+		cd = &chain.Data{
+			Header: st.CreateHeader(),
+			Body:   st.CreateBody(),
+		}
 		if _, err := cd.ReadFrom(bytes.NewReader(value)); err != nil {
 			return err
 		}
@@ -591,7 +607,7 @@ func (st *Store) StoreData(cd *chain.Data, ctd *data.ContextData, customHash map
 			if _, err := cd.WriteTo(&buffer); err != nil {
 				return err
 			}
-			if err := txn.Set(toHeightDataKey(cd.Header.Height), buffer.Bytes()); err != nil {
+			if err := txn.Set(toHeightDataKey(cd.Header.Height()), buffer.Bytes()); err != nil {
 				return err
 			}
 		}
@@ -600,15 +616,15 @@ func (st *Store) StoreData(cd *chain.Data, ctd *data.ContextData, customHash map
 			if _, err := cd.Header.WriteTo(&buffer); err != nil {
 				return err
 			}
-			if err := txn.Set(toHeightHeaderKey(cd.Header.Height), buffer.Bytes()); err != nil {
+			if err := txn.Set(toHeightHeaderKey(cd.Header.Height()), buffer.Bytes()); err != nil {
 				return err
 			}
 		}
 		{
-			if err := txn.Set(toHeightHashKey(cd.Header.Height), DataHash[:]); err != nil {
+			if err := txn.Set(toHeightHashKey(cd.Header.Height()), DataHash[:]); err != nil {
 				return err
 			}
-			bsHeight := util.Uint32ToBytes(cd.Header.Height)
+			bsHeight := util.Uint32ToBytes(cd.Header.Height())
 			if err := txn.Set(toHashHeightKey(DataHash), bsHeight); err != nil {
 				return err
 			}
@@ -633,7 +649,7 @@ func (st *Store) StoreData(cd *chain.Data, ctd *data.ContextData, customHash map
 		st.SeqMap[k] = v
 	}
 	st.SeqMapLock.Unlock()
-	st.cache.height = cd.Header.Height
+	st.cache.height = cd.Header.Height()
 	st.cache.heightHash = DataHash
 	st.cache.heightData = cd
 	st.cache.cached = true
@@ -646,7 +662,7 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 			return err
 		}
 	}
-	for k, v := range ctd.AccountHash {
+	for k, v := range ctd.AccountMap {
 		var buffer bytes.Buffer
 		buffer.WriteByte(byte(v.Type()))
 		if _, err := v.WriteTo(&buffer); err != nil {
