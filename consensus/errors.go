@@ -5,8 +5,6 @@ import "errors"
 // consensus errors
 var (
 	ErrInsufficientCandidateCount    = errors.New("insufficient candidate count")
-	ErrInvalidTopMember              = errors.New("invalid top member")
-	ErrInvalidTopSignature           = errors.New("invalid top signature")
 	ErrInsufficientObserverSignature = errors.New("insufficient observer signature")
 	ErrDuplicatedObserverSignature   = errors.New("duplicated observer signature")
 	ErrInvalidObserverSignature      = errors.New("invalid observer signature")
