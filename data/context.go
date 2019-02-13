@@ -762,9 +762,9 @@ func (ctd *ContextData) Dump() string {
 		sort.Strings(keys)
 		for _, k := range keys {
 			v := ctd.AccountDataMap[k]
-			buffer.WriteString(string(k))
+			buffer.WriteString(hash.Hash([]byte(k)).String())
 			buffer.WriteString(": ")
-			buffer.WriteString(string(v))
+			buffer.WriteString(hash.Hash([]byte(v)).String())
 			buffer.WriteString("\n")
 		}
 	}
