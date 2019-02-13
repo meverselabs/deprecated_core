@@ -3,7 +3,6 @@ package kernel
 import (
 	"bytes"
 	"io"
-	"log"
 	"runtime"
 	"sync"
 	"time"
@@ -30,6 +29,7 @@ import (
 // It based on Proof-of-Formulation and Account/UTXO hybrid model
 // All kinds of accounts and transactions processed the out side of kernel
 type Kernel struct {
+	sync.Mutex
 	Config             *Config
 	store              *Store
 	consensus          *consensus.Consensus
@@ -82,36 +82,47 @@ func (kn *Kernel) Close() {
 	kn.closeLock.Lock()
 	defer kn.closeLock.Unlock()
 
+	kn.Lock()
+	defer kn.Unlock()
+
 	kn.isClose = true
 	kn.store.Close()
 }
 
 // AddEventHandler adds a event handler to the vote log
 func (kn *Kernel) AddEventHandler(eh EventHandler) {
+	kn.Lock()
+	defer kn.Unlock()
+
 	kn.eventHandlers = append(kn.eventHandlers, eh)
 }
 
-// Provider returns the provider of the chain
+// Loader returns the loader of the kernel
+func (kn *Kernel) Loader() data.Loader {
+	return kn.store
+}
+
+// Provider returns the provider of the kernel
 func (kn *Kernel) Provider() chain.Provider {
 	return kn.store
 }
 
-// Version returns the version of the target chain
+// Version returns the version of the target kernel
 func (kn *Kernel) Version() uint16 {
 	return kn.store.Version()
 }
 
-// ChainCoord returns the coordinate of the target chain
+// ChainCoord returns the coordinate of the target kernel
 func (kn *Kernel) ChainCoord() *common.Coordinate {
 	return kn.store.ChainCoord()
 }
 
-// Accounter returns the accounter of the target chain
+// Accounter returns the accounter of the target kernel
 func (kn *Kernel) Accounter() *data.Accounter {
 	return kn.store.Accounter()
 }
 
-// Transactor returns the transactor of the target chain
+// Transactor returns the transactor of the target kernel
 func (kn *Kernel) Transactor() *data.Transactor {
 	return kn.store.Transactor()
 }
@@ -122,12 +133,9 @@ func (kn *Kernel) Block(height uint32) (*block.Block, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &block.Block{}
-	if _, err := b.Header.ReadFrom(bytes.NewReader(cd.Body)); err != nil {
-		return nil, err
-	}
-	if _, err := b.Body.ReadFromWith(bytes.NewReader(cd.Extra), kn.store.Transactor()); err != nil {
-		return nil, err
+	b := &block.Block{
+		Header: cd.Header.(*block.Header),
+		Body:   cd.Body.(*block.Body),
 	}
 	return b, nil
 }
@@ -140,7 +148,8 @@ func (kn *Kernel) Init() error {
 		return ErrKernelClosed
 	}
 
-	log.Println("Kernel", "Init")
+	kn.Lock()
+	defer kn.Unlock()
 
 	if bs := kn.store.CustomData("chaincoord"); bs != nil {
 		var coord common.Coordinate
@@ -194,7 +203,25 @@ func (kn *Kernel) Init() error {
 		}
 	}
 	kn.genesisContextData = nil // to reduce memory usagse
+
+	//log.Println("Kernel", "Init with height of", kn.Provider().Height(), kn.Provider().PrevHash())
+
 	return nil
+}
+
+// TopRank returns the top rank by the given timeout count
+func (kn *Kernel) TopRank(TimeoutCount int) (*consensus.Rank, error) {
+	return kn.consensus.TopRank(TimeoutCount)
+}
+
+// TopRankInMap returns the top rank by the given timeout count in the given map
+func (kn *Kernel) TopRankInMap(TimeoutCount int, FormulatorMap map[common.Address]bool) (*consensus.Rank, int, error) {
+	return kn.consensus.TopRankInMap(TimeoutCount, FormulatorMap)
+}
+
+// IsFormulator returns the given information is correct or not
+func (kn *Kernel) IsFormulator(Formulator common.Address, Publichash common.PublicHash) bool {
+	return kn.consensus.IsFormulator(Formulator, Publichash)
 }
 
 // Screening determines the acceptance of the chain data
@@ -205,11 +232,8 @@ func (kn *Kernel) Screening(cd *chain.Data) error {
 		return ErrKernelClosed
 	}
 
-	log.Println("Kernel", "OnScreening", cd)
-	var bh block.Header
-	if _, err := bh.ReadFrom(bytes.NewReader(cd.Body)); err != nil {
-		return err
-	}
+	////log.Println("Kernel", "OnScreening", cd)
+	bh := cd.Header.(*block.Header)
 	if !bh.ChainCoord.Equal(kn.Config.ChainCoord) {
 		return ErrInvalidChainCoord
 	}
@@ -230,12 +254,15 @@ func (kn *Kernel) Screening(cd *chain.Data) error {
 }
 
 // CheckFork returns chain.ErrForkDetected if the given data is valid and collapse with stored one
-func (kn *Kernel) CheckFork(ch *chain.Header, sigs []common.Signature) error {
+func (kn *Kernel) CheckFork(ch chain.Header, sigs []common.Signature) error {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
 		return ErrKernelClosed
 	}
+
+	kn.Lock()
+	defer kn.Unlock()
 
 	if len(sigs) != len(kn.Config.ObserverKeys)/2+2 {
 		return nil
@@ -253,6 +280,66 @@ func (kn *Kernel) CheckFork(ch *chain.Header, sigs []common.Signature) error {
 	return chain.ErrForkDetected
 }
 
+// Validate validates the chain header and returns the context of it
+func (kn *Kernel) Validate(b *block.Block, GeneratorSignature common.Signature) (*data.Context, error) {
+	kn.closeLock.RLock()
+	defer kn.closeLock.RUnlock()
+	if kn.isClose {
+		return nil, ErrKernelClosed
+	}
+
+	kn.Lock()
+	defer kn.Unlock()
+
+	////log.Println("Kernel", "Validate", ch, b)
+	height := kn.store.Height()
+	if b.Header.Height() != height+1 {
+		return nil, chain.ErrInvalidHeight
+	}
+
+	if height == 0 {
+		if b.Header.Version() <= 0 {
+			return nil, chain.ErrInvalidVersion
+		}
+		if !b.Header.PrevHash().Equal(kn.store.PrevHash()) {
+			return nil, chain.ErrInvalidPrevHash
+		}
+	} else {
+		PrevHeader, err := kn.store.Header(height)
+		if err != nil {
+			return nil, err
+		}
+		if b.Header.Version() < PrevHeader.Version() {
+			return nil, chain.ErrInvalidVersion
+		}
+		if !b.Header.PrevHash().Equal(PrevHeader.Hash()) {
+			return nil, chain.ErrInvalidPrevHash
+		}
+	}
+
+	if !b.Header.ChainCoord.Equal(kn.Config.ChainCoord) {
+		return nil, ErrInvalidChainCoord
+	}
+
+	Top, err := kn.consensus.TopRank(int(b.Header.TimeoutCount))
+	if err != nil {
+		return nil, err
+	}
+	pubkey, err := common.RecoverPubkey(b.Header.Hash(), GeneratorSignature)
+	if err != nil {
+		return nil, err
+	}
+	pubhash := common.NewPublicHash(pubkey)
+	if !Top.PublicHash.Equal(pubhash) {
+		return nil, ErrInvalidTopSignature
+	}
+	ctx, err := kn.ContextByBlock(b)
+	if err != nil {
+		return nil, err
+	}
+	return ctx, nil
+}
+
 // Process resolves the chain data and updates the context
 func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	kn.closeLock.RLock()
@@ -261,10 +348,13 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		return ErrKernelClosed
 	}
 
-	log.Println("Kernel", "OnProcess", cd, UserData)
-	b := &block.Block{}
-	if _, err := b.Header.ReadFrom(bytes.NewReader(cd.Body)); err != nil {
-		return err
+	kn.Lock()
+	defer kn.Unlock()
+
+	////log.Println("Kernel", "Process", cd, UserData)
+	b := &block.Block{
+		Header: cd.Header.(*block.Header),
+		Body:   cd.Body.(*block.Body),
 	}
 	if !b.Header.ChainCoord.Equal(kn.Config.ChainCoord) {
 		return ErrInvalidChainCoord
@@ -279,13 +369,20 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		},
 		ObserverSignatures: cd.Signatures[1:],
 	}
-	if err := kn.consensus.ValidateBlockHeader(&b.Header, &s.Signed); err != nil {
+
+	Top, err := kn.consensus.TopRank(int(b.Header.TimeoutCount))
+	if err != nil {
 		return err
+	}
+	pubkey, err := common.RecoverPubkey(b.Header.Hash(), s.GeneratorSignature)
+	if err != nil {
+		return err
+	}
+	pubhash := common.NewPublicHash(pubkey)
+	if !Top.PublicHash.Equal(pubhash) {
+		return ErrInvalidTopSignature
 	}
 	if err := kn.consensus.ValidateObserverSignatures(s.Signed.Hash(), s.ObserverSignatures); err != nil {
-		return err
-	}
-	if _, err := b.Body.ReadFromWith(bytes.NewReader(cd.Extra), kn.store.Transactor()); err != nil {
 		return err
 	}
 	ctx, is := UserData.(*data.Context)
@@ -303,7 +400,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	}
 	top := ctx.Top()
 	CustomMap := map[string][]byte{}
-	if SaveData, err := kn.consensus.ProcessContext(top, s.HeaderHash, &b.Header); err != nil {
+	if SaveData, err := kn.consensus.ProcessContext(top, s.HeaderHash, b.Header); err != nil {
 		return err
 	} else {
 		CustomMap["consensus"] = SaveData
@@ -312,86 +409,6 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		return err
 	}
 	return nil
-}
-
-// Validate validates the chain data and returns the context of it
-func (kn *Kernel) Validate(cd *chain.Data) (interface{}, error) {
-	kn.closeLock.RLock()
-	defer kn.closeLock.RUnlock()
-	if kn.isClose {
-		return nil, ErrKernelClosed
-	}
-
-	log.Println("Kernel", "Validate", cd)
-	b := &block.Block{}
-	if _, err := b.Header.ReadFrom(bytes.NewReader(cd.Body)); err != nil {
-		return nil, err
-	}
-	if !b.Header.ChainCoord.Equal(kn.Config.ChainCoord) {
-		return nil, ErrInvalidChainCoord
-	}
-	if len(cd.Signatures) < 1 {
-		return nil, ErrInvalidSignatureCount
-	}
-	s := &block.Signed{
-		HeaderHash:         cd.Header.Hash(),
-		GeneratorSignature: cd.Signatures[0],
-	}
-	if err := kn.consensus.ValidateBlockHeader(&b.Header, s); err != nil {
-		return nil, err
-	}
-	if _, err := b.Body.ReadFromWith(bytes.NewReader(cd.Extra), kn.store.Transactor()); err != nil {
-		return nil, err
-	}
-	ctx, err := kn.ContextByBlock(b)
-	if err != nil {
-		return nil, err
-	}
-	return ctx, nil
-}
-
-// IsGenerator returns the kernel is generator or not
-func (kn *Kernel) IsGenerator() bool {
-	return kn.Config.FormulatorKey != nil
-}
-
-// Generate generate the next block when this formulator is the top rank
-func (kn *Kernel) Generate() (*chain.Data, interface{}, error) {
-	kn.closeLock.RLock()
-	defer kn.closeLock.RUnlock()
-	if kn.isClose {
-		return nil, nil, ErrKernelClosed
-	}
-
-	if kn.Config.FormulatorKey == nil {
-		return nil, nil, ErrNotFormulator
-	}
-
-	kn.genBlockLock.Lock()
-	defer kn.genBlockLock.Unlock()
-
-	if is, err := kn.consensus.IsMinable(kn.Config.FormulatorAddress, 0); err != nil {
-		return nil, nil, err
-	} else if !is {
-		return nil, nil, nil
-	}
-
-	ctx := data.NewContext(kn.store)
-	for _, eh := range kn.eventHandlers {
-		if err := eh.OnCreateContext(kn, ctx); err != nil {
-			return nil, nil, err
-		}
-	}
-	cd, ns, err := kn.GenerateBlock(ctx, 0)
-	if err != nil {
-		return nil, nil, err
-	}
-	nos, err := kn.observerConnector.RequestSign(cd, ns)
-	if err != nil {
-		return nil, nil, err
-	}
-	cd.Signatures = append(cd.Signatures, nos.ObserverSignatures...)
-	return cd, ctx, nil
 }
 
 // OnRecv is called when a message is received from the peer
@@ -418,6 +435,9 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	if kn.isClose {
 		return ErrKernelClosed
 	}
+
+	kn.Lock()
+	defer kn.Unlock()
 
 	loader := kn.store
 	if !tx.ChainCoord().Equal(loader.ChainCoord()) {
@@ -457,6 +477,10 @@ func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
 		return nil, ErrKernelClosed
 	}
 
+	if err := kn.validateBlockBody(b); err != nil {
+		return nil, err
+	}
+
 	ctx := data.NewContext(kn.store)
 	for _, eh := range kn.eventHandlers {
 		if err := eh.OnCreateContext(kn, ctx); err != nil {
@@ -466,20 +490,18 @@ func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
 	if !b.Header.ChainCoord.Equal(ctx.ChainCoord()) {
 		return nil, ErrInvalidChainCoord
 	}
-	if err := kn.validateBlockBody(ctx, b); err != nil {
-		return nil, err
-	}
 	for i, tx := range b.Body.Transactions {
-		if _, err := ctx.Transactor().Execute(ctx, tx, &common.Coordinate{Height: ctx.TargetHeight(), Index: uint16(i)}); err != nil {
+		if _, err := ctx.Transactor().Execute(ctx, tx, &common.Coordinate{Height: b.Header.Height(), Index: uint16(i)}); err != nil {
 			return nil, err
 		}
 	}
-	if err := kn.rewarder.ProcessReward(b.Header.FormulationAddress, ctx); err != nil {
+	if err := kn.rewarder.ProcessReward(b.Header.Formulator, ctx); err != nil {
 		return nil, err
 	}
 	if ctx.StackSize() > 1 {
 		return nil, ErrDirtyContext
 	}
+
 	if !b.Header.ContextHash.Equal(ctx.Hash()) {
 		return nil, ErrInvalidAppendContextHash
 	}
@@ -487,24 +509,33 @@ func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
 }
 
 // GenerateBlock generate a next block and its signature using transactions in the pool
-func (kn *Kernel) GenerateBlock(ctx *data.Context, TimeoutCount uint32) (*chain.Data, *block.Signed, error) {
+func (kn *Kernel) GenerateBlock(TimeoutCount uint32, Formulator common.Address) (*data.Context, *block.Block, error) {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
 		return nil, nil, ErrKernelClosed
 	}
 
-	if kn.Config.FormulatorKey == nil {
-		return nil, nil, ErrNotFormulator
+	ctx := data.NewContext(kn.Loader())
+	for _, eh := range kn.eventHandlers {
+		if err := eh.OnCreateContext(kn, ctx); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	b := &block.Block{
-		Header: block.Header{
-			ChainCoord:         *ctx.ChainCoord(),
-			FormulationAddress: kn.Config.FormulatorAddress,
-			TimeoutCount:       TimeoutCount,
+		Header: &block.Header{
+			Base: chain.Base{
+				Version_:   kn.Provider().Version(),
+				Height_:    ctx.TargetHeight(),
+				PrevHash_:  ctx.PrevHash(),
+				Timestamp_: uint64(time.Now().UnixNano()),
+			},
+			ChainCoord:   *ctx.ChainCoord(),
+			Formulator:   Formulator,
+			TimeoutCount: TimeoutCount,
 		},
-		Body: block.Body{
+		Body: &block.Body{
 			Transactions:          []transaction.Transaction{},
 			TransactionSignatures: [][]common.Signature{},
 		},
@@ -528,9 +559,9 @@ TxLoop:
 			}
 			idx := uint16(len(b.Body.Transactions))
 			if _, err := ctx.Transactor().Execute(ctx, item.Transaction, &common.Coordinate{Height: ctx.TargetHeight(), Index: idx}); err != nil {
-				log.Println(err)
+				//log.Println(err)
 				//TODO : EventTransactionPendingFail
-				break
+				continue
 			}
 
 			b.Body.Transactions = append(b.Body.Transactions, item.Transaction)
@@ -545,10 +576,12 @@ TxLoop:
 	}
 	kn.txPool.Unlock() // Prevent delaying from TxPool.Push
 
-	if err := kn.rewarder.ProcessReward(b.Header.FormulationAddress, ctx); err != nil {
+	if err := kn.rewarder.ProcessReward(b.Header.Formulator, ctx); err != nil {
 		return nil, nil, err
 	}
-
+	if ctx.StackSize() > 1 {
+		return nil, nil, ErrDirtyContext
+	}
 	b.Header.ContextHash = ctx.Hash()
 
 	if h, err := level.BuildLevelRoot(TxHashes); err != nil {
@@ -556,43 +589,12 @@ TxLoop:
 	} else {
 		b.Header.LevelRootHash = h
 	}
-
-	var bodyBuffer bytes.Buffer
-	if _, err := b.Header.WriteTo(&bodyBuffer); err != nil {
-		panic(err)
-	}
-	var extraBuffer bytes.Buffer
-	if _, err := b.Body.WriteTo(&extraBuffer); err != nil {
-		panic(err)
-	}
-	body := bodyBuffer.Bytes()
-	cd := &chain.Data{
-		Header: chain.Header{
-			Version:   kn.Provider().Version(),
-			Height:    ctx.TargetHeight(),
-			PrevHash:  ctx.PrevHash(),
-			BodyHash:  hash.DoubleHash(body),
-			Timestamp: uint64(time.Now().UnixNano()),
-		},
-		Body:       body,
-		Extra:      extraBuffer.Bytes(),
-		Signatures: []common.Signature{},
-	}
-
-	HeaderHash := cd.Header.Hash()
-	if sig, err := kn.Config.FormulatorKey.Sign(HeaderHash); err != nil {
-		return nil, nil, err
-	} else {
-		s := &block.Signed{
-			HeaderHash:         HeaderHash,
-			GeneratorSignature: sig,
-		}
-		cd.Signatures = append(cd.Signatures, sig)
-		return cd, s, nil
-	}
+	return ctx, b, nil
 }
 
-func (kn *Kernel) validateBlockBody(loader data.Loader, b *block.Block) error {
+func (kn *Kernel) validateBlockBody(b *block.Block) error {
+	loader := kn.Loader()
+
 	var wg sync.WaitGroup
 	cpuCnt := runtime.NumCPU()
 	if len(b.Body.Transactions) < 1000 {

@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"bytes"
+	"sync"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
@@ -13,7 +14,8 @@ import (
 
 // Consensus supports the proof of formulation algorithm
 type Consensus struct {
-	RankTable              *RankTable
+	sync.Mutex
+	rankTable              *RankTable
 	ObserverKeyMap         map[common.PublicHash]bool
 	FormulationAccountType account.Type
 }
@@ -21,32 +23,60 @@ type Consensus struct {
 // NewConsensus returns a Consensus
 func NewConsensus(ObserverKeyMap map[common.PublicHash]bool, FormulationAccountType account.Type) *Consensus {
 	cs := &Consensus{
-		RankTable:              NewRankTable(),
+		rankTable:              NewRankTable(),
 		ObserverKeyMap:         ObserverKeyMap,
 		FormulationAccountType: FormulationAccountType,
 	}
 	return cs
 }
 
-// ValidateBlockHeader validate the block header with signatures and previus block's information
-func (cs *Consensus) ValidateBlockHeader(bh *block.Header, s *block.Signed) error {
-	members := cs.RankTable.Candidates(int(bh.TimeoutCount) + 1)
+// TopRank returns the top rank by Timeoutcount
+func (cs *Consensus) TopRank(TimeoutCount int) (*Rank, error) {
+	cs.Lock()
+	defer cs.Unlock()
+
+	members := cs.rankTable.Candidates(TimeoutCount + 1)
 	if members == nil {
-		return ErrInsufficientCandidateCount
+		return nil, ErrInsufficientCandidateCount
 	}
-	Top := members[bh.TimeoutCount]
-	if !Top.Address.Equal(bh.FormulationAddress) {
-		return ErrInvalidTopMember
+	Top := members[TimeoutCount]
+	return Top, nil
+}
+
+// TopRankInMap returns the top rank by Timeoutcount
+func (cs *Consensus) TopRankInMap(TimeoutCount int, FormulatorMap map[common.Address]bool) (*Rank, int, error) {
+	cs.Lock()
+	defer cs.Unlock()
+
+	if len(FormulatorMap) == 0 {
+		return nil, 0, ErrInsufficientCandidateCount
 	}
-	pubkey, err := common.RecoverPubkey(s.HeaderHash, s.GeneratorSignature)
-	if err != nil {
-		return err
+	members := cs.rankTable.Candidates(cs.rankTable.CandidateCount())
+	if members == nil {
+		return nil, 0, ErrInsufficientCandidateCount
 	}
-	pubhash := common.NewPublicHash(pubkey)
-	if !Top.PublicHash.Equal(pubhash) {
-		return ErrInvalidTopSignature
+	for i := TimeoutCount; i < len(members); i++ {
+		r := members[i]
+		if FormulatorMap[r.Address] {
+			return r, i, nil
+		}
 	}
-	return nil
+	return nil, 0, ErrInsufficientCandidateCount
+}
+
+// IsFormulator returns the given information is correct or not
+func (cs *Consensus) IsFormulator(Formulator common.Address, Publichash common.PublicHash) bool {
+	cs.Lock()
+	defer cs.Unlock()
+
+	rank := cs.rankTable.Rank(Formulator)
+	if rank == nil {
+		return false
+	}
+	if !rank.PublicHash.Equal(Publichash) {
+		return false
+	}
+	return true
 }
 
 // ValidateObserverSignatures validates observer signatures with the signed hash
@@ -74,19 +104,22 @@ func (cs *Consensus) ValidateObserverSignatures(signedHash hash.Hash256, sigs []
 
 // ApplyGenesis initialize the consensus using the genesis context data
 func (cs *Consensus) ApplyGenesis(ctd *data.ContextData) ([]byte, error) {
-	phase := cs.RankTable.LargestPhase() + 1
-	for _, a := range ctd.CreatedAccountHash {
+	cs.Lock()
+	defer cs.Unlock()
+
+	phase := cs.rankTable.LargestPhase() + 1
+	for _, a := range ctd.CreatedAccountMap {
 		if a.Type() == cs.FormulationAccountType {
 			acc := a.(*FormulationAccount)
 			addr := acc.Address()
-			if err := cs.RankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
+			if err := cs.rankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
 				return nil, err
 			}
 		}
 	}
-	for _, acc := range ctd.DeletedAccountHash {
+	for _, acc := range ctd.DeletedAccountMap {
 		if acc.Type() == cs.FormulationAccountType {
-			cs.RankTable.Remove(acc.Address())
+			cs.rankTable.Remove(acc.Address())
 		}
 	}
 	SaveData, err := cs.buildSaveData()
@@ -98,22 +131,25 @@ func (cs *Consensus) ApplyGenesis(ctd *data.ContextData) ([]byte, error) {
 
 // ProcessContext processes the consensus using the block and its context data
 func (cs *Consensus) ProcessContext(ctd *data.ContextData, HeaderHash hash.Hash256, bh *block.Header) ([]byte, error) {
-	if err := cs.RankTable.ForwardCandidates(int(bh.TimeoutCount), HeaderHash); err != nil {
+	cs.Lock()
+	defer cs.Unlock()
+
+	if err := cs.rankTable.ForwardCandidates(int(bh.TimeoutCount), HeaderHash); err != nil {
 		return nil, err
 	}
-	phase := cs.RankTable.LargestPhase() + 1
-	for _, a := range ctd.CreatedAccountHash {
+	phase := cs.rankTable.LargestPhase() + 1
+	for _, a := range ctd.CreatedAccountMap {
 		if a.Type() == cs.FormulationAccountType {
 			acc := a.(*FormulationAccount)
 			addr := acc.Address()
-			if err := cs.RankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
+			if err := cs.rankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
 				return nil, err
 			}
 		}
 	}
-	for _, acc := range ctd.DeletedAccountHash {
+	for _, acc := range ctd.DeletedAccountMap {
 		if acc.Type() == cs.FormulationAccountType {
-			cs.RankTable.Remove(acc.Address())
+			cs.rankTable.Remove(acc.Address())
 		}
 	}
 
@@ -126,7 +162,10 @@ func (cs *Consensus) ProcessContext(ctd *data.ContextData, HeaderHash hash.Hash2
 
 // IsMinable checks a mining chance of the address with the timeout count
 func (cs *Consensus) IsMinable(addr common.Address, TimeoutCount uint32) (bool, error) {
-	members := cs.RankTable.Candidates(int(TimeoutCount) + 1)
+	cs.Lock()
+	defer cs.Unlock()
+
+	members := cs.rankTable.Candidates(int(TimeoutCount) + 1)
 	if len(members) == 0 {
 		return false, ErrInsufficientCandidateCount
 	}
@@ -137,7 +176,7 @@ func (cs *Consensus) buildSaveData() ([]byte, error) {
 	SaveData := []byte{}
 	{
 		var buffer bytes.Buffer
-		if _, err := cs.RankTable.WriteTo(&buffer); err != nil {
+		if _, err := cs.rankTable.WriteTo(&buffer); err != nil {
 			return nil, err
 		}
 		SaveData = append(SaveData, buffer.Bytes()...)
@@ -159,8 +198,11 @@ func (cs *Consensus) buildSaveData() ([]byte, error) {
 
 // LoadFromSaveData recover the status using the save data
 func (cs *Consensus) LoadFromSaveData(SaveData []byte) error {
+	cs.Lock()
+	defer cs.Unlock()
+
 	r := bytes.NewReader(SaveData)
-	if _, err := cs.RankTable.ReadFrom(r); err != nil {
+	if _, err := cs.rankTable.ReadFrom(r); err != nil {
 		return err
 	}
 	ObserverKeyMap := map[common.PublicHash]bool{}
