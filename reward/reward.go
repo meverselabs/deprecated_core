@@ -7,5 +7,5 @@ import (
 
 // Rewarder procceses rewards of the target height
 type Rewarder interface {
-	ProcessReward(FormulationAddress common.Address, ctx *data.Context) error
+	ProcessReward(Formulator common.Address, ctx *data.Context) error
 }
