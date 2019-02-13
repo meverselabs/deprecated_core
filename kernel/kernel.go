@@ -3,6 +3,7 @@ package kernel
 import (
 	"bytes"
 	"io"
+	"log"
 	"runtime"
 	"sync"
 	"time"
@@ -404,6 +405,9 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	if err := kn.store.StoreData(cd, top, CustomMap); err != nil {
 		return err
 	}
+	for _, eh := range kn.eventHandlers {
+		eh.AfterProcessBlock(kn, b, s)
+	}
 	return nil
 }
 
@@ -555,7 +559,7 @@ TxLoop:
 			}
 			idx := uint16(len(b.Body.Transactions))
 			if _, err := ctx.Transactor().Execute(ctx, item.Transaction, &common.Coordinate{Height: ctx.TargetHeight(), Index: idx}); err != nil {
-				//log.Println(err)
+				log.Println(err)
 				//TODO : EventTransactionPendingFail
 				continue
 			}
