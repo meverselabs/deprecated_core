@@ -6,20 +6,32 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
+	"git.fleta.io/fleta/framework/chain"
 )
 
 // Header is validation informations
 type Header struct {
-	ChainCoord         common.Coordinate
-	LevelRootHash      hash.Hash256
-	ContextHash        hash.Hash256
-	FormulationAddress common.Address
-	TimeoutCount       uint32
+	chain.Base
+	ChainCoord    common.Coordinate
+	LevelRootHash hash.Hash256
+	ContextHash   hash.Hash256
+	Formulator    common.Address
+	TimeoutCount  uint32
+}
+
+// Hash returns the hash value of it
+func (bh *Header) Hash() hash.Hash256 {
+	return hash.DoubleHashByWriterTo(bh)
 }
 
 // WriteTo is a serialization function
 func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
+	if n, err := bh.Base.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := bh.ChainCoord.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
@@ -35,7 +47,7 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := bh.FormulationAddress.WriteTo(w); err != nil {
+	if n, err := bh.Formulator.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -51,6 +63,11 @@ func (bh *Header) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom is a deserialization function
 func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
+	if n, err := bh.Base.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
 	if n, err := bh.ChainCoord.ReadFrom(r); err != nil {
 		return read, err
 	} else {
@@ -66,7 +83,7 @@ func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if n, err := bh.FormulationAddress.ReadFrom(r); err != nil {
+	if n, err := bh.Formulator.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

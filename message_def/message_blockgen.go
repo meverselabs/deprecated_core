@@ -3,6 +3,8 @@ package message_def
 import (
 	"io"
 
+	"git.fleta.io/fleta/common"
+	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/data"
 
@@ -11,18 +13,10 @@ import (
 
 // BlockGenMessage TODO
 type BlockGenMessage struct {
-	Block  *block.Block
-	Signed *block.Signed
-	Tran   *data.Transactor
-}
-
-// NewBlockGenMessage TODO
-func NewBlockGenMessage(Tran *data.Transactor) *BlockGenMessage {
-	return &BlockGenMessage{
-		Block:  &block.Block{},
-		Signed: &block.Signed{},
-		Tran:   Tran,
-	}
+	RoundHash          hash.Hash256
+	Block              *block.Block
+	GeneratorSignature common.Signature
+	Tran               *data.Transactor
 }
 
 // BlockGenMessageType TODO
@@ -36,17 +30,17 @@ func (b *BlockGenMessage) Type() message.Type {
 // WriteTo is a serialization function
 func (b *BlockGenMessage) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := b.Block.Header.WriteTo(w); err != nil {
+	if n, err := b.RoundHash.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
-	if n, err := b.Block.Body.WriteTo(w); err != nil {
+	if n, err := b.Block.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
-	if n, err := b.Signed.WriteTo(w); err != nil {
+	if n, err := b.GeneratorSignature.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -57,17 +51,17 @@ func (b *BlockGenMessage) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom is a deserialization function
 func (b *BlockGenMessage) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if n, err := b.Block.Header.ReadFrom(r); err != nil {
+	if n, err := b.RoundHash.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
 	}
-	if n, err := b.Block.Body.ReadFromWith(r, b.Tran); err != nil {
+	if n, err := b.Block.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
 	}
-	if n, err := b.Signed.ReadFrom(r); err != nil {
+	if n, err := b.GeneratorSignature.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

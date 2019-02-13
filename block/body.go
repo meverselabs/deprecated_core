@@ -13,6 +13,7 @@ import (
 type Body struct {
 	Transactions          []transaction.Transaction //MAXLEN : 65535
 	TransactionSignatures [][]common.Signature      //MAXLEN : 65536
+	Tran                  *data.Transactor
 }
 
 // WriteTo is a serialization function
@@ -53,8 +54,8 @@ func (b *Body) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFromWith is a deserialization function
-func (b *Body) ReadFromWith(r io.Reader, tran *data.Transactor) (int64, error) {
+// ReadFrom is a deserialization function
+func (b *Body) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if Len, n, err := util.ReadUint16(r); err != nil {
 		return read, err
@@ -66,7 +67,7 @@ func (b *Body) ReadFromWith(r io.Reader, tran *data.Transactor) (int64, error) {
 				return read, err
 			} else {
 				read += n
-				if tx, err := tran.NewByType(transaction.Type(t)); err != nil {
+				if tx, err := b.Tran.NewByType(transaction.Type(t)); err != nil {
 					return read, err
 				} else {
 					if n, err := tx.ReadFrom(r); err != nil {
