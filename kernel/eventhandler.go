@@ -16,5 +16,5 @@ type EventHandler interface {
 	// OnPushTransaction called when pushing a transaction to the transaction pool (error prevent push transaction)
 	OnPushTransaction(kn *Kernel, tx transaction.Transaction, sigs []common.Signature) error
 	// AfterProcessBlock called when processed block to the chain
-	AfterProcessBlock(kn *Kernel, b *block.Block, s *block.ObserverSigned)
+	AfterProcessBlock(kn *Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context)
 }

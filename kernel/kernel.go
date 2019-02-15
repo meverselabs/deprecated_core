@@ -406,7 +406,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		return err
 	}
 	for _, eh := range kn.eventHandlers {
-		eh.AfterProcessBlock(kn, b, s)
+		eh.AfterProcessBlock(kn, b, s, ctx)
 	}
 	return nil
 }
