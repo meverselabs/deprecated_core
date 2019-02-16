@@ -418,9 +418,6 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 		return ErrKernelClosed
 	}
 
-	kn.Lock()
-	defer kn.Unlock()
-
 	loader := kn.store
 	if !tx.ChainCoord().Equal(loader.ChainCoord()) {
 		return ErrInvalidChainCoord
