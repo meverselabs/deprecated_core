@@ -21,7 +21,6 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 	"git.fleta.io/fleta/core/txpool"
 	"git.fleta.io/fleta/framework/chain"
-	"git.fleta.io/fleta/framework/chain/mesh"
 	"git.fleta.io/fleta/framework/message"
 )
 
@@ -409,23 +408,6 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		eh.AfterProcessBlock(kn, b, s, ctx)
 	}
 	return nil
-}
-
-// OnRecv is called when a message is received from the peer
-func (kn *Kernel) OnRecv(p mesh.Peer, t message.Type, r io.Reader) error {
-	m, err := kn.manager.ParseMessage(r, t)
-	if err != nil {
-		return err
-	}
-	switch msg := m.(type) {
-	case *message_def.TransactionMessage:
-		if err := kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
-			return err
-		}
-		return nil
-	default:
-		return message.ErrUnhandledMessage
-	}
 }
 
 // AddTransaction validate the transaction and push it to the transaction pool
