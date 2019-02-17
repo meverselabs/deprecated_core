@@ -19,7 +19,7 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-// FormulatorService TODO
+// FormulatorService provides connectivity with formulators
 type FormulatorService struct {
 	sync.Mutex
 	Key       key.Key
@@ -29,7 +29,7 @@ type FormulatorService struct {
 	manager   *message.Manager
 }
 
-// NewFormulatorService TODO
+// NewFormulatorService returns a FormulatorService
 func NewFormulatorService(Key key.Key, kn *kernel.Kernel, Deligator RecvDeligator) *FormulatorService {
 	ms := &FormulatorService{
 		Key:       Key,
@@ -42,7 +42,7 @@ func NewFormulatorService(Key key.Key, kn *kernel.Kernel, Deligator RecvDeligato
 	return ms
 }
 
-// Run TODO
+// Run provides a server
 func (ms *FormulatorService) Run(BindAddress string) error {
 	for {
 		if err := ms.server(BindAddress); err != nil {
@@ -207,7 +207,7 @@ func (ms *FormulatorService) sendHandshake(conn net.Conn) (common.PublicHash, er
 	return pubhash, nil
 }
 
-// FormulatorMap TODO
+// FormulatorMap returns a formulator list as a map
 func (ms *FormulatorService) FormulatorMap() map[common.Address]bool {
 	FormulatorMap := map[common.Address]bool{}
 	for _, p := range ms.peerHash {
@@ -216,7 +216,7 @@ func (ms *FormulatorService) FormulatorMap() map[common.Address]bool {
 	return FormulatorMap
 }
 
-// SendTo TODO
+// SendTo sends a message to the formulator
 func (ms *FormulatorService) SendTo(Formulator common.Address, m message.Message) error {
 	ms.Lock()
 	defer ms.Unlock()
@@ -233,7 +233,7 @@ func (ms *FormulatorService) SendTo(Formulator common.Address, m message.Message
 	return nil
 }
 
-// BroadcastMessage TODO
+// BroadcastMessage sends a message to all peers
 func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
 	ms.Lock()
 	defer ms.Unlock()

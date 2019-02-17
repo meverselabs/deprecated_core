@@ -267,7 +267,7 @@ func (ms *ObserverMesh) sendHandshake(conn net.Conn) (common.PublicHash, error) 
 	return pubhash, nil
 }
 
-// BroadcastMessage TODO
+// BroadcastMessage sends a message to all peers
 func (ms *ObserverMesh) BroadcastMessage(m message.Message) error {
 	var buffer bytes.Buffer
 	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {

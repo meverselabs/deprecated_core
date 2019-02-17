@@ -22,7 +22,7 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-// Observer TODO
+// Observer supports the chain validation
 type Observer struct {
 	sync.Mutex
 	Config           *Config
@@ -42,7 +42,7 @@ type Observer struct {
 	isProcessing     bool
 }
 
-// NewObserver TODO
+// NewObserver returns a Observer
 func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 	ObserverKeyMap := map[common.PublicHash]bool{}
 	for _, str := range Config.ObserverKeys {
@@ -79,15 +79,7 @@ func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 	return ob, nil
 }
 
-// AccessKernel TODO
-func (ob *Observer) AccessKernel(f func(kn *kernel.Kernel)) {
-	ob.kn.Lock()
-	ob.kn.Unlock()
-
-	f(ob.kn)
-}
-
-// Run TODO
+// Run operates servers and a round voting
 func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 	ob.Lock()
 	if ob.isRunning {

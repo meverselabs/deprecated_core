@@ -5,7 +5,7 @@ import (
 	"git.fleta.io/fleta/core/key"
 )
 
-// Config TODO
+// Config is the configuration for the observer
 type Config struct {
 	ChainCoord    *common.Coordinate
 	ObserverKeys  []string

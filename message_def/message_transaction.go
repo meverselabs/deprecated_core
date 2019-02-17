@@ -10,22 +10,19 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-// TransactionMessage TODO
+// TransactionMessage is a message for a transaction
 type TransactionMessage struct {
 	Tx   transaction.Transaction
 	Sigs []common.Signature
 	Tran *data.Transactor
 }
 
-// TransactionMessageType TODO
-var TransactionMessageType = message.DefineType("fleta.Transaction")
-
-// Type TODO
+// Type returns the type of the message
 func (b *TransactionMessage) Type() message.Type {
 	return TransactionMessageType
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (b *TransactionMessage) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := util.WriteUint8(w, uint8(b.Tx.Type())); err != nil {
@@ -53,7 +50,7 @@ func (b *TransactionMessage) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (b *TransactionMessage) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if v, n, err := util.ReadUint8(r); err != nil {

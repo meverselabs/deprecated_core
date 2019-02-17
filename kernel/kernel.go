@@ -539,7 +539,6 @@ TxLoop:
 			idx := uint16(len(b.Body.Transactions))
 			if _, err := ctx.Transactor().Execute(ctx, item.Transaction, &common.Coordinate{Height: ctx.TargetHeight(), Index: idx}); err != nil {
 				log.Println(err)
-				//TODO : EventTransactionPendingFail
 				continue
 			}
 
