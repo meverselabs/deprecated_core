@@ -137,7 +137,7 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 			if err != message.ErrUnknownMessage {
 				return err
 			}
-			if err := ms.deligator.OnRecv(p, t, p.conn); err != nil {
+			if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
 				return err
 			}
 		}
