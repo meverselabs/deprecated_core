@@ -10,7 +10,7 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-// BlockReqMessage TODO
+// BlockReqMessage is a message for a block request
 type BlockReqMessage struct {
 	RoundHash            hash.Hash256
 	PrevHash             hash.Hash256
@@ -20,10 +20,7 @@ type BlockReqMessage struct {
 	FormulatorPublicHash common.PublicHash
 }
 
-// BlockReqMessageType TODO
-var BlockReqMessageType = message.DefineType("fleta.BlockReq")
-
-// Type returns the type of the transaction
+// Type returns the type of the message
 func (b *BlockReqMessage) Type() message.Type {
 	return BlockReqMessageType
 }

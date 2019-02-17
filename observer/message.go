@@ -16,13 +16,13 @@ var (
 	BatchRequestMessageType  = message.DefineType("observer.BatchRequest")
 )
 
-// RoundVoteMessage TODO
+// RoundVoteMessage is a message for a round vote
 type RoundVoteMessage struct {
 	RoundVote *RoundVote
 	Signature common.Signature
 }
 
-// Type TODO
+// Type is a type of the message
 func (msg *RoundVoteMessage) Type() message.Type {
 	return RoundVoteMessageType
 }
@@ -59,13 +59,13 @@ func (msg *RoundVoteMessage) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// RoundVoteAckMessage TODO
+// RoundVoteAckMessage is a message for a round vote ack
 type RoundVoteAckMessage struct {
 	RoundVoteAck *RoundVoteAck
 	Signature    common.Signature
 }
 
-// Type TODO
+// Type returns a type of the message
 func (msg *RoundVoteAckMessage) Type() message.Type {
 	return RoundVoteAckMessageType
 }
@@ -102,13 +102,13 @@ func (msg *RoundVoteAckMessage) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// BlockVoteMessage TODO
+// BlockVoteMessage is a message for a block vote
 type BlockVoteMessage struct {
 	BlockVote *BlockVote
 	Signature common.Signature
 }
 
-// Type TODO
+// Type returns a type of the message
 func (msg *BlockVoteMessage) Type() message.Type {
 	return BlockVoteMessageType
 }
@@ -145,13 +145,13 @@ func (msg *BlockVoteMessage) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// RoundFailVoteMessage TODO
+// RoundFailVoteMessage is a message for a round fail vote
 type RoundFailVoteMessage struct {
 	RoundFailVote *RoundFailVote
 	Signature     common.Signature
 }
 
-// Type TODO
+// Type returns a type of the message
 func (msg *RoundFailVoteMessage) Type() message.Type {
 	return RoundFailVoteMessageType
 }

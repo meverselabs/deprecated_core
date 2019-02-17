@@ -22,11 +22,10 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-// Observer TODO
+// Observer supports the chain validation
 type Observer struct {
 	sync.Mutex
 	Config           *Config
-	ObserverKeyMap   map[common.PublicHash]bool
 	round            *VoteRound
 	roundState       int
 	roundVoteMap     map[common.PublicHash]*RoundVote
@@ -42,25 +41,15 @@ type Observer struct {
 	isProcessing     bool
 }
 
-// NewObserver TODO
+// NewObserver returns a Observer
 func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
-	ObserverKeyMap := map[common.PublicHash]bool{}
-	for _, str := range Config.ObserverKeys {
-		if pubhash, err := common.ParsePublicHash(str); err != nil {
-			return nil, err
-		} else {
-			ObserverKeyMap[pubhash] = true
-		}
-	}
-
 	ob := &Observer{
-		Config:         Config,
-		ObserverKeyMap: ObserverKeyMap,
-		roundVoteMap:   map[common.PublicHash]*RoundVote{},
-		roundState:     RoundVoteState,
-		cm:             chain.NewManager(kn),
-		kn:             kn,
-		manager:        message.NewManager(),
+		Config:       Config,
+		roundVoteMap: map[common.PublicHash]*RoundVote{},
+		roundState:   RoundVoteState,
+		cm:           chain.NewManager(kn),
+		kn:           kn,
+		manager:      message.NewManager(),
 	}
 	ob.manager.SetCreator(RoundVoteMessageType, ob.messageCreator)
 	ob.manager.SetCreator(RoundVoteAckMessageType, ob.messageCreator)
@@ -70,7 +59,7 @@ func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 	kn.AddEventHandler(ob)
 
 	ob.fs = NewFormulatorService(Config.Key, kn, ob)
-	ob.ms = NewObserverMesh(Config.Key, Config.NetAddressMap, ob, ob.cm)
+	ob.ms = NewObserverMesh(Config.Key, Config.ObserverKeyMap, ob, ob.cm)
 	ob.cm.Mesh = ob.ms
 
 	if err := ob.cm.Init(); err != nil {
@@ -79,15 +68,7 @@ func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 	return ob, nil
 }
 
-// AccessKernel TODO
-func (ob *Observer) AccessKernel(f func(kn *kernel.Kernel)) {
-	ob.kn.Lock()
-	ob.kn.Unlock()
-
-	f(ob.kn)
-}
-
-// Run TODO
+// Run operates servers and a round voting
 func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 	ob.Lock()
 	if ob.isRunning {
@@ -169,22 +150,25 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return ErrInvalidVote
 		}
 
-		Top, err := ob.kn.TopRank(int(msg.RoundVote.TimeoutCount))
-		if err != nil {
-			return err
-		}
-		if !msg.RoundVote.Formulator.Equal(Top.Address) {
-			return ErrInvalidVote
-		}
-		if !msg.RoundVote.FormulatorPublicHash.Equal(Top.PublicHash) {
-			return ErrInvalidVote
+		var emptyAddr common.Address
+		if !msg.RoundVote.Formulator.Equal(emptyAddr) {
+			Top, err := ob.kn.TopRank(int(msg.RoundVote.TimeoutCount))
+			if err != nil {
+				return err
+			}
+			if !msg.RoundVote.Formulator.Equal(Top.Address) {
+				return ErrInvalidVote
+			}
+			if !msg.RoundVote.FormulatorPublicHash.Equal(Top.PublicHash) {
+				return ErrInvalidVote
+			}
 		}
 
 		if pubkey, err := common.RecoverPubkey(msg.RoundVote.Hash(), msg.Signature); err != nil {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			if _, has := ob.roundVoteMap[pubhash]; has {
@@ -193,10 +177,9 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			ob.roundVoteMap[pubhash] = msg.RoundVote
 		}
 
-		if len(ob.roundVoteMap) >= len(ob.ObserverKeyMap)/2+2 {
+		if len(ob.roundVoteMap) >= len(ob.Config.ObserverKeyMap)/2+2 {
 			var MinRoundVote *RoundVote
 			for _, vt := range ob.roundVoteMap {
-				var emptyAddr common.Address
 				if !vt.Formulator.Equal(emptyAddr) {
 					if MinRoundVote == nil || MinRoundVote.TimeoutCount > vt.TimeoutCount {
 						MinRoundVote = vt
@@ -315,7 +298,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			if _, has := ob.round.RoundVoteAckMap[pubhash]; has {
@@ -330,7 +313,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			Count := TimeoutCountMap[vt.TimeoutCount]
 			Count++
 			TimeoutCountMap[vt.TimeoutCount] = Count
-			if Count >= len(ob.ObserverKeyMap)/2+1 {
+			if Count >= len(ob.Config.ObserverKeyMap)/2+1 {
 				MinRoundVoteAck = vt
 				break
 			}
@@ -431,7 +414,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			ObserverBlockPublicHash = pubhash
@@ -441,7 +424,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			if !ObserverBlockPublicHash.Equal(pubhash) {
@@ -453,7 +436,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			ob.round.BlockVoteMap[pubhash] = msg.BlockVote
 		}
 
-		if len(ob.round.BlockVoteMap) >= len(ob.ObserverKeyMap)/2+1 {
+		if len(ob.round.BlockVoteMap) >= len(ob.Config.ObserverKeyMap)/2+1 {
 			sigs := []common.Signature{}
 			var AnyBlockVote *BlockVote
 			for _, vt := range ob.round.BlockVoteMap {
@@ -533,7 +516,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			if _, has := ob.round.RoundFailVoteMap[pubhash]; has {
@@ -542,7 +525,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			ob.round.RoundFailVoteMap[pubhash] = msg.RoundFailVote
 		}
 
-		if len(ob.round.RoundFailVoteMap) >= len(ob.ObserverKeyMap)/2+1 {
+		if len(ob.round.RoundFailVoteMap) >= len(ob.Config.ObserverKeyMap)/2+1 {
 			if ob.round.MinRoundVoteAck != nil {
 				ob.prevTimeoutCount = ob.round.MinRoundVoteAck.TimeoutCount + 1
 			} else {

@@ -15,7 +15,7 @@ const (
 	BlockVoteState    = iota
 )
 
-// VoteRound TODO
+// VoteRound is data for the voting round
 type VoteRound struct {
 	RoundHash                   hash.Hash256
 	RoundVoteAckMap             map[common.PublicHash]*RoundVoteAck
@@ -30,7 +30,7 @@ type VoteRound struct {
 	BlockGenMessageWaitMap      map[hash.Hash256]*message_def.BlockGenMessage
 }
 
-// NewVoteRound TODO
+// NewVoteRound returns a VoteRound
 func NewVoteRound(RoundHash hash.Hash256) *VoteRound {
 	vr := &VoteRound{
 		RoundHash:                   RoundHash,

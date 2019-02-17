@@ -119,7 +119,7 @@ func (vt *RoundVote) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// RoundVoteAck TODO
+// RoundVoteAck is a message for a round vote ack
 type RoundVoteAck struct {
 	RoundHash            hash.Hash256
 	TimeoutCount         uint32
@@ -127,12 +127,12 @@ type RoundVoteAck struct {
 	FormulatorPublicHash common.PublicHash
 }
 
-// Hash TODO
+// Hash returns the hash value of it
 func (vt *RoundVoteAck) Hash() hash.Hash256 {
 	return hash.DoubleHashByWriterTo(vt)
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (vt *RoundVoteAck) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := vt.RoundHash.WriteTo(w); err != nil {
@@ -158,7 +158,7 @@ func (vt *RoundVoteAck) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (vt *RoundVoteAck) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := vt.RoundHash.ReadFrom(r); err != nil {
@@ -185,7 +185,7 @@ func (vt *RoundVoteAck) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// BlockVote TODO
+// BlockVote is message for a block vote
 type BlockVote struct {
 	RoundHash          hash.Hash256
 	Header             chain.Header
@@ -193,12 +193,12 @@ type BlockVote struct {
 	ObserverSignature  common.Signature
 }
 
-// Hash TODO
+// Hash returns the hash value of it
 func (vt *BlockVote) Hash() hash.Hash256 {
 	return hash.DoubleHashByWriterTo(vt)
 }
 
-// WriteTo TODO
+// WriteTo is a serialization function
 func (vt *BlockVote) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := vt.RoundHash.WriteTo(w); err != nil {
@@ -224,7 +224,7 @@ func (vt *BlockVote) WriteTo(w io.Writer) (int64, error) {
 	return wrote, nil
 }
 
-// ReadFrom TODO
+// ReadFrom is a deserialization function
 func (vt *BlockVote) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := vt.RoundHash.ReadFrom(r); err != nil {

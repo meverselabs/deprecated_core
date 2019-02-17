@@ -11,7 +11,7 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-// BlockGenMessage TODO
+// BlockGenMessage is a message for a block generation
 type BlockGenMessage struct {
 	RoundHash          hash.Hash256
 	Block              *block.Block
@@ -19,10 +19,7 @@ type BlockGenMessage struct {
 	Tran               *data.Transactor
 }
 
-// BlockGenMessageType TODO
-var BlockGenMessageType = message.DefineType("fleta.BlockGen")
-
-// Type returns the type of the transaction
+// Type returns the type of the message
 func (b *BlockGenMessage) Type() message.Type {
 	return BlockGenMessageType
 }
