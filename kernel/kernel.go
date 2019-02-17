@@ -207,6 +207,11 @@ func (kn *Kernel) Init() error {
 	return nil
 }
 
+// CandidateCount returns a count of the rank table
+func (kn *Kernel) CandidateCount() int {
+	return kn.consensus.CandidateCount()
+}
+
 // TopRank returns the top rank by the given timeout count
 func (kn *Kernel) TopRank(TimeoutCount int) (*consensus.Rank, error) {
 	return kn.consensus.TopRank(TimeoutCount)
