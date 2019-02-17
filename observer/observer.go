@@ -99,11 +99,11 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 }
 
 // OnRecv is called when a message is received from the peer
-func (ob *Observer) OnRecv(p mesh.Peer, t message.Type, r io.Reader) error {
+func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 	ob.Lock()
 	defer ob.Unlock()
 
-	if err := ob.cm.OnRecv(p, t, r); err != nil {
+	if err := ob.cm.OnRecv(p, r, t); err != nil {
 		if err != message.ErrUnknownMessage {
 			return err
 		} else {

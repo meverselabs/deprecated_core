@@ -19,7 +19,7 @@ import (
 )
 
 type RecvDeligator interface {
-	OnRecv(p mesh.Peer, t message.Type, r io.Reader) error
+	OnRecv(p mesh.Peer, r io.Reader, t message.Type) error
 }
 
 type ObserverMesh struct {
@@ -214,7 +214,7 @@ func (ms *ObserverMesh) handleConnection(p *ObserverPeer) error {
 			t = message.Type(v)
 		}
 
-		if err := ms.deligator.OnRecv(p, t, p.conn); err != nil {
+		if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
 			return err
 		}
 	}

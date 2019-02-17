@@ -92,6 +92,7 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 
 	fr.ms = NewFormulatorMesh(Config.Key, Config.Formulator, Config.ObserverKeyMap, fr)
 	fr.cm.Mesh = pm
+	fr.cm.Deligator = fr
 
 	if err := fr.cm.Init(); err != nil {
 		return nil, err
