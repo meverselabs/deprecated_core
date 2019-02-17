@@ -30,6 +30,11 @@ func NewConsensus(ObserverKeyMap map[common.PublicHash]bool, FormulationAccountT
 	return cs
 }
 
+// CandidateCount returns a count of the rank table
+func (cs *Consensus) CandidateCount() int {
+	return cs.rankTable.CandidateCount()
+}
+
 // TopRank returns the top rank by Timeoutcount
 func (cs *Consensus) TopRank(TimeoutCount int) (*Rank, error) {
 	cs.Lock()
