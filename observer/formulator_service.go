@@ -16,21 +16,28 @@ import (
 	"git.fleta.io/fleta/core/kernel"
 	"git.fleta.io/fleta/core/key"
 	"git.fleta.io/fleta/framework/chain"
+	"git.fleta.io/fleta/framework/chain/mesh"
 	"git.fleta.io/fleta/framework/message"
 )
+
+// FormulatorServiceDeligator deligates unhandled messages of the formulator mesh
+type FormulatorServiceDeligator interface {
+	OnFormulatorConnected(p *FormulatorPeer)
+	OnRecv(p mesh.Peer, r io.Reader, t message.Type) error
+}
 
 // FormulatorService provides connectivity with formulators
 type FormulatorService struct {
 	sync.Mutex
 	Key       key.Key
 	peerHash  map[common.Address]*FormulatorPeer
-	deligator RecvDeligator
+	deligator FormulatorServiceDeligator
 	kn        *kernel.Kernel
 	manager   *message.Manager
 }
 
 // NewFormulatorService returns a FormulatorService
-func NewFormulatorService(Key key.Key, kn *kernel.Kernel, Deligator RecvDeligator) *FormulatorService {
+func NewFormulatorService(Key key.Key, kn *kernel.Kernel, Deligator FormulatorServiceDeligator) *FormulatorService {
 	ms := &FormulatorService{
 		Key:       Key,
 		kn:        kn,
@@ -67,6 +74,7 @@ func (ms *FormulatorService) server(BindAddress string) error {
 		return err
 	}
 	log.Println("Observer", common.NewPublicHash(ms.Key.PublicKey()), "Start to Listen", BindAddress)
+
 	for {
 		conn, err := lstn.Accept()
 		if err != nil {
@@ -114,6 +122,8 @@ func (ms *FormulatorService) server(BindAddress string) error {
 
 func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 	log.Println("Observer", common.NewPublicHash(ms.Key.PublicKey()).String(), "Fromulator Connected", p.address.String())
+
+	ms.deligator.OnFormulatorConnected(p)
 
 	cp := ms.kn.Provider()
 	if err := p.Send(&chain.StatusMessage{

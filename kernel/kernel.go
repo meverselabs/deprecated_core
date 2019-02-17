@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 
@@ -165,8 +166,13 @@ func (kn *Kernel) Init() error {
 	if _, err := kn.Config.ChainCoord.WriteTo(&buffer); err != nil {
 		return err
 	}
+	keys := []string{}
 	for _, pubhash := range kn.Config.ObserverKeys {
-		buffer.WriteString(pubhash.String())
+		keys = append(keys, pubhash.String())
+	}
+	sort.Strings(keys)
+	for _, v := range keys {
+		buffer.WriteString(v)
 		buffer.WriteString(":")
 	}
 	GenesisHash := hash.TwoHash(hash.DoubleHash(buffer.Bytes()), kn.genesisContextData.Hash())
@@ -196,7 +202,7 @@ func (kn *Kernel) Init() error {
 	}
 	kn.genesisContextData = nil // to reduce memory usagse
 
-	//log.Println("Kernel", "Init with height of", kn.Provider().Height(), kn.Provider().PrevHash())
+	log.Println("Kernel", "Init with height of", kn.Provider().Height(), kn.Provider().PrevHash())
 
 	return nil
 }
@@ -403,6 +409,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	for _, eh := range kn.eventHandlers {
 		eh.AfterProcessBlock(kn, b, s, ctx)
 	}
+	log.Println(kn.store.Height())
 	return nil
 }
 
@@ -421,6 +428,11 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	TxHash := tx.Hash()
 	if kn.txPool.IsExist(TxHash) {
 		return txpool.ErrExistTransaction
+	}
+	if atx, is := tx.(txpool.AccountTransaction); is {
+		if atx.Seq() <= loader.Seq(atx.From()) {
+			return ErrPastSeq
+		}
 	}
 	signers := make([]common.PublicHash, 0, len(sigs))
 	for _, sig := range sigs {
@@ -442,6 +454,11 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 		return err
 	}
 	return nil
+}
+
+// HasTransaction validate the transaction and push it to the transaction pool
+func (kn *Kernel) HasTransaction(TxHash hash.Hash256) bool {
+	return kn.txPool.IsExist(TxHash)
 }
 
 // ContextByBlock creates context using the target block

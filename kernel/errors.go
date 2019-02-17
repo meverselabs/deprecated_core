@@ -20,4 +20,5 @@ var (
 	ErrInvalidAppendContextHash  = errors.New("invalid append context hash")
 	ErrInvalidTopSignature       = errors.New("invalid top signature")
 	ErrNotFormulator             = errors.New("not formulator")
+	ErrPastSeq                   = errors.New("past seq")
 )

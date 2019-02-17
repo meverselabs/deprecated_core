@@ -98,6 +98,27 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 	}
 }
 
+// OnFormulatorConnected is called after a new formulator connected
+func (ob *Observer) OnFormulatorConnected(p *FormulatorPeer) {
+	ob.Lock()
+	defer ob.Unlock()
+
+	if ob.round != nil && ob.round.MinRoundVoteAck != nil {
+		if ob.round.MinRoundVoteAck.Formulator.Equal(p.address) {
+			cp := ob.kn.Provider()
+			nm := &message_def.BlockReqMessage{
+				RoundHash:            ob.round.RoundHash,
+				PrevHash:             cp.PrevHash(),
+				TargetHeight:         cp.Height() + 1,
+				TimeoutCount:         ob.round.MinRoundVoteAck.TimeoutCount,
+				Formulator:           ob.round.MinRoundVoteAck.Formulator,
+				FormulatorPublicHash: ob.round.MinRoundVoteAck.FormulatorPublicHash,
+			}
+			p.Send(nm)
+		}
+	}
+}
+
 // OnRecv is called when a message is received from the peer
 func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 	ob.Lock()

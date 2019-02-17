@@ -1,4 +1,4 @@
-package formulator
+package node
 
 import "errors"
 
@@ -6,5 +6,4 @@ import "errors"
 var (
 	ErrInvalidTimestamp     = errors.New("invalid timestamp")
 	ErrNotAllowedPublicHash = errors.New("not allowed public hash")
-	ErrInvalidRequest       = errors.New("invalid request")
 )

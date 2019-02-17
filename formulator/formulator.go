@@ -2,9 +2,11 @@ package formulator
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"sync"
+	"time"
+
+	"git.fleta.io/fleta/common/queue"
 
 	"git.fleta.io/fleta/framework/router"
 
@@ -15,7 +17,6 @@ import (
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/block"
-	"git.fleta.io/fleta/core/key"
 	"git.fleta.io/fleta/core/message_def"
 	"git.fleta.io/fleta/framework/chain"
 	"git.fleta.io/fleta/framework/chain/mesh"
@@ -23,27 +24,7 @@ import (
 	"git.fleta.io/fleta/framework/peer"
 )
 
-// errors
-var (
-	ErrInvalidRequest = errors.New("invalid request")
-	/*
-		ErrInvalidTimestamp           = errors.New("invalid timestamp")
-		ErrNotAllowedPublicHash       = errors.New("not allowed public hash")
-		ErrInvalidModerator           = errors.New("invalid moderator")
-		ErrInvalidRoundState          = errors.New("invalid round state")
-		ErrInvalidRoundHash           = errors.New("invalid round hash")
-		ErrInvalidVote                = errors.New("invalid vote")
-		ErrInvalidVoteType            = errors.New("invalid vote type")
-		ErrInvalidVoteSignature       = errors.New("invalid vote signature")
-		ErrInvalidFormulatorSignature = errors.New("invalid formulator signature")
-		ErrInvalidBlockGen            = errors.New("invalid block gen")
-		ErrInitialTimeout             = errors.New("initial timeout")
-		ErrDuplicatedVote             = errors.New("duplicated vote")
-		ErrDuplicatedAckAndTimeout    = errors.New("duplicated akc and timeout")
-		ErrAlreadyVoted               = errors.New("already voted")
-	*/
-)
-
+// Formulator procudes a block by the consensus
 type Formulator struct {
 	sync.Mutex
 	Config         *Config
@@ -55,18 +36,12 @@ type Formulator struct {
 	lastGenMessage *message_def.BlockGenMessage
 	lastReqMessage *message_def.BlockReqMessage
 	lastContext    *data.Context
+	txQueue        *queue.Queue
+	txCastMap      map[string]bool
 	isRunning      bool
 }
 
-type Config struct {
-	ChainCoord     *common.Coordinate
-	ObserverKeyMap map[common.PublicHash]string
-	Key            key.Key
-	Formulator     common.Address
-	Router         router.Config
-	Peer           peer.Config
-}
-
+// NewFormulator returns a Formulator
 func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 	r, err := router.NewRouter(&Config.Router)
 	if err != nil {
@@ -77,22 +52,29 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 	if err != nil {
 		return nil, err
 	}
+	for _, v := range Config.SeedNodes {
+		pm.AddNode(v)
+	}
 
 	fr := &Formulator{
-		Config:  Config,
-		cm:      chain.NewManager(kn),
-		pm:      pm,
-		kn:      kn,
-		manager: message.NewManager(),
+		Config:    Config,
+		cm:        chain.NewManager(kn),
+		pm:        pm,
+		kn:        kn,
+		manager:   message.NewManager(),
+		txQueue:   queue.NewQueue(),
+		txCastMap: map[string]bool{},
 	}
 	fr.manager.SetCreator(message_def.BlockReqMessageType, fr.messageCreator)
 	fr.manager.SetCreator(message_def.BlockObSignMessageType, fr.messageCreator)
+	fr.manager.SetCreator(message_def.TransactionMessageType, fr.messageCreator)
 	fr.manager.SetCreator(chain.DataMessageType, fr.messageCreator)
 	fr.manager.SetCreator(chain.StatusMessageType, fr.messageCreator)
 
 	fr.ms = NewFormulatorMesh(Config.Key, Config.Formulator, Config.ObserverKeyMap, fr)
 	fr.cm.Mesh = pm
 	fr.cm.Deligator = fr
+	fr.pm.RegisterEventHandler(fr.cm)
 
 	if err := fr.cm.Init(); err != nil {
 		return nil, err
@@ -100,6 +82,26 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 	return fr, nil
 }
 
+// NextRoundHash provides next round hash value
+func (fr *Formulator) NextRoundHash() hash.Hash256 {
+	cp := fr.kn.Provider()
+	var buffer bytes.Buffer
+	if _, err := fr.kn.ChainCoord().WriteTo(&buffer); err != nil {
+		panic(err)
+	}
+	buffer.WriteString(",")
+	PrevHash := cp.PrevHash()
+	if _, err := PrevHash.WriteTo(&buffer); err != nil {
+		panic(err)
+	}
+	buffer.WriteString(",")
+	if _, err := util.WriteUint32(&buffer, cp.Height()+1); err != nil {
+		panic(err)
+	}
+	return hash.DoubleHash(buffer.Bytes())
+}
+
+// Run runs the formulator
 func (fr *Formulator) Run() {
 	fr.Lock()
 	if fr.isRunning {
@@ -109,8 +111,40 @@ func (fr *Formulator) Run() {
 	fr.isRunning = true
 	fr.Unlock()
 
+	fr.pm.StartManage()
+	fr.pm.EnforceConnect()
 	go fr.cm.Run()
-	fr.ms.Run()
+	go fr.ms.Run()
+
+	timer := time.NewTimer(time.Minute)
+	for {
+		select {
+		case <-timer.C:
+			fr.Lock()
+			txCastTargetMap := map[string]bool{}
+			for _, id := range fr.pm.ConnectedList() {
+				if !fr.txCastMap[id] {
+					txCastTargetMap[id] = true
+				}
+			}
+			fr.txCastMap = map[string]bool{}
+			msgs := []*message_def.TransactionMessage{}
+			item := fr.txQueue.Pop()
+			for item != nil {
+				msgs = append(msgs, item.(*message_def.TransactionMessage))
+				item = fr.txQueue.Pop()
+			}
+			fr.Unlock()
+
+			for _, msg := range msgs {
+				if fr.kn.HasTransaction(msg.Tx.Hash()) {
+					for id := range txCastTargetMap {
+						fr.pm.TargetCast(id, msg)
+					}
+				}
+			}
+		}
+	}
 }
 
 // OnRecv is called when a message is received from the peer
@@ -119,9 +153,27 @@ func (fr *Formulator) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 	if err != nil {
 		return err
 	}
-	if err := fr.handleMessage(p, m); err != nil {
-		//log.Println(err)
-		return nil
+	if msg, is := m.(*message_def.TransactionMessage); is {
+		if err := fr.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
+			if err != kernel.ErrPastSeq {
+				return err
+			} else {
+				return nil
+			}
+		}
+		fr.pm.ExceptCast(p.ID(), msg)
+
+		fr.Lock()
+		for _, id := range fr.pm.ConnectedList() {
+			fr.txCastMap[id] = true
+		}
+		fr.Unlock()
+		fr.txQueue.Push(msg)
+	} else {
+		if err := fr.handleMessage(p, m); err != nil {
+			//log.Println(err)
+			return nil
+		}
 	}
 	return nil
 }
@@ -253,25 +305,6 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 	}
 }
 
-// NextRoundHash provides next round hash value
-func (fr *Formulator) NextRoundHash() hash.Hash256 {
-	cp := fr.kn.Provider()
-	var buffer bytes.Buffer
-	if _, err := fr.kn.ChainCoord().WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	buffer.WriteString(",")
-	PrevHash := cp.PrevHash()
-	if _, err := PrevHash.WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	buffer.WriteString(",")
-	if _, err := util.WriteUint32(&buffer, cp.Height()+1); err != nil {
-		panic(err)
-	}
-	return hash.DoubleHash(buffer.Bytes())
-}
-
 func (fr *Formulator) messageCreator(r io.Reader, t message.Type) (message.Message, error) {
 	switch t {
 	case message_def.BlockReqMessageType:
@@ -283,6 +316,14 @@ func (fr *Formulator) messageCreator(r io.Reader, t message.Type) (message.Messa
 	case message_def.BlockObSignMessageType:
 		p := &message_def.BlockObSignMessage{
 			ObserverSigned: &block.ObserverSigned{},
+		}
+		if _, err := p.ReadFrom(r); err != nil {
+			return nil, err
+		}
+		return p, nil
+	case message_def.TransactionMessageType:
+		p := &message_def.TransactionMessage{
+			Tran: fr.kn.Transactor(),
 		}
 		if _, err := p.ReadFrom(r); err != nil {
 			return nil, err

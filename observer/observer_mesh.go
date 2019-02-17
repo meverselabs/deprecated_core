@@ -18,7 +18,8 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-type RecvDeligator interface {
+// ObserverMeshDeligator deligates unhandled messages of the observer mesh
+type ObserverMeshDeligator interface {
 	OnRecv(p mesh.Peer, r io.Reader, t message.Type) error
 }
 
@@ -27,11 +28,11 @@ type ObserverMesh struct {
 	Key           key.Key
 	NetAddressMap map[common.PublicHash]string
 	peerHash      map[common.PublicHash]*ObserverPeer
-	deligator     RecvDeligator
+	deligator     ObserverMeshDeligator
 	handler       mesh.EventHandler
 }
 
-func NewObserverMesh(Key key.Key, NetAddressMap map[common.PublicHash]string, Deligator RecvDeligator, handler mesh.EventHandler) *ObserverMesh {
+func NewObserverMesh(Key key.Key, NetAddressMap map[common.PublicHash]string, Deligator ObserverMeshDeligator, handler mesh.EventHandler) *ObserverMesh {
 	ms := &ObserverMesh{
 		Key:           Key,
 		NetAddressMap: NetAddressMap,
