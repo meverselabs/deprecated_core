@@ -3,6 +3,7 @@ package formulator
 import (
 	"bytes"
 	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/kernel"
+	"git.fleta.io/fleta/core/transaction"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
@@ -38,6 +40,7 @@ type Formulator struct {
 	lastContext    *data.Context
 	txQueue        *queue.Queue
 	txCastMap      map[string]bool
+	statusMap      map[string]*chain.Status
 	isRunning      bool
 }
 
@@ -64,12 +67,14 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 		manager:   message.NewManager(),
 		txQueue:   queue.NewQueue(),
 		txCastMap: map[string]bool{},
+		statusMap: map[string]*chain.Status{},
 	}
 	fr.manager.SetCreator(message_def.BlockReqMessageType, fr.messageCreator)
 	fr.manager.SetCreator(message_def.BlockObSignMessageType, fr.messageCreator)
 	fr.manager.SetCreator(message_def.TransactionMessageType, fr.messageCreator)
 	fr.manager.SetCreator(chain.DataMessageType, fr.messageCreator)
 	fr.manager.SetCreator(chain.StatusMessageType, fr.messageCreator)
+	kn.AddEventHandler(fr)
 
 	fr.ms = NewFormulatorMesh(Config.Key, Config.Formulator, Config.ObserverKeyMap, fr)
 	fr.cm.Mesh = pm
@@ -143,6 +148,56 @@ func (fr *Formulator) Run() {
 					}
 				}
 			}
+		}
+	}
+}
+
+// OnClosed is called when the peer is disconnected
+func (fr *Formulator) OnClosed(p mesh.Peer) {
+	fr.Lock()
+	defer fr.Unlock()
+
+	delete(fr.statusMap, p.ID())
+}
+
+// BeforeConnect is called before a new peer is handled
+func (fr *Formulator) BeforeConnect(p mesh.Peer) error {
+	return nil
+}
+
+// AfterConnect is called after a new peer is connected
+func (fr *Formulator) AfterConnect(p mesh.Peer) {
+	fr.Lock()
+	defer fr.Unlock()
+
+	fr.statusMap[p.ID()] = &chain.Status{}
+}
+
+// OnCreateContext called when a context creation (error prevent using context)
+func (fr *Formulator) OnCreateContext(kn *kernel.Kernel, ctx *data.Context) error {
+	return nil
+}
+
+// OnProcessBlock called when processing block to the chain (error prevent processing block)
+func (fr *Formulator) OnProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
+	return nil
+}
+
+// OnPushTransaction called when pushing a transaction to the transaction pool (error prevent push transaction)
+func (fr *Formulator) OnPushTransaction(kn *kernel.Kernel, tx transaction.Transaction, sigs []common.Signature) error {
+	return nil
+}
+
+// AfterProcessBlock called when processed block to the chain
+func (fr *Formulator) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) {
+	Height := fr.kn.Provider().Height()
+	for id, status := range fr.statusMap {
+		if status.Height > Height {
+			sm := &chain.RequestMessage{
+				Height: Height + 1,
+			}
+			fr.ms.SendTo(id, sm)
+			break
 		}
 	}
 }
@@ -281,22 +336,34 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 		if err := fr.cm.AddData(msg.Data); err != nil {
 			return err
 		}
+
+		status, has := fr.statusMap[p.ID()]
+		if !has {
+			return nil
+		}
+		if status.Height < msg.Data.Header.Height() {
+			status.Height = msg.Data.Header.Height()
+		}
 		return nil
 	case *chain.StatusMessage:
-		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.DataMessage")
+		log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.DataMessage")
+		status, has := fr.statusMap[p.ID()]
+		if !has {
+			return nil
+		}
+		if status.Height < msg.Height {
+			status.Version = msg.Version
+			status.Height = msg.Height
+			status.PrevHash = msg.PrevHash
+		}
+
 		Height := fr.kn.Provider().Height()
-		if Height < msg.Height && msg.Height <= Height+10 {
-			Limit := msg.Height
-			if Limit > Height+10 {
-				Limit = Height + 10
+		if msg.Height > Height {
+			sm := &chain.RequestMessage{
+				Height: Height + 1,
 			}
-			for i := Height + 1; i <= Limit; i++ {
-				sm := &chain.RequestMessage{
-					Height: i,
-				}
-				if err := p.Send(sm); err != nil {
-					return err
-				}
+			if err := p.Send(sm); err != nil {
+				return err
 			}
 		}
 		return nil

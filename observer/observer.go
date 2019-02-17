@@ -31,7 +31,6 @@ type Observer struct {
 	roundVoteMap     map[common.PublicHash]*RoundVote
 	roundFirstTime   uint64
 	roundFirstHeight uint32
-	prevTimeoutCount uint32
 	ms               *ObserverMesh
 	cm               *chain.Manager
 	kn               *kernel.Kernel
@@ -86,6 +85,7 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 	for {
 		select {
 		case <-timer.C:
+			//log.Println(ob.Config.Key.PublicKey().String(), "Current State", ob.roundState, len(ob.fs.peerHash))
 			if len(ob.fs.peerHash) > 0 {
 				if ob.roundState == RoundVoteState {
 					ob.Lock()
@@ -262,20 +262,18 @@ func (ob *Observer) handleMessage(m message.Message) error {
 				}(v)
 			}
 
-			RoundHash := MinRoundVote.RoundHash
 			time.AfterFunc(2*time.Second, func() {
 				ob.Lock()
 				defer ob.Unlock()
 
-				if RoundHash.Equal(ob.NextRoundHash()) {
-					cp := ob.kn.Provider()
-					NextRoundHash := ob.NextRoundHash()
+				NextRoundHash := ob.NextRoundHash()
+				if MinRoundVote.RoundHash.Equal(NextRoundHash) {
 					nm := &RoundFailVoteMessage{
 						RoundFailVote: &RoundFailVote{
 							RoundHash:    NextRoundHash,
-							ChainCoord:   ob.kn.ChainCoord(),
-							PrevHash:     cp.PrevHash(),
-							TargetHeight: cp.Height() + 1,
+							ChainCoord:   MinRoundVote.ChainCoord,
+							PrevHash:     MinRoundVote.PrevHash,
+							TargetHeight: MinRoundVote.TargetHeight,
 						},
 					}
 					if sig, err := ob.Config.Key.Sign(nm.RoundFailVote.Hash()); err != nil {
@@ -500,9 +498,8 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			//log.Println(ob.Config.Key.PublicKey().String(), "Change State", RoundVoteState)
 			ob.roundVoteMap = map[common.PublicHash]*RoundVote{}
 			ob.round = nil
-			ob.prevTimeoutCount = 0
 
-			if Top, _, err := ob.kn.TopRankInMap(int(ob.prevTimeoutCount), ob.fs.FormulatorMap()); err != nil {
+			if Top, _, err := ob.kn.TopRankInMap(0, ob.fs.FormulatorMap()); err != nil {
 				if err != consensus.ErrInsufficientCandidateCount {
 					return err
 				}
@@ -555,9 +552,12 @@ func (ob *Observer) handleMessage(m message.Message) error {
 
 		if len(ob.round.RoundFailVoteMap) >= len(ob.Config.ObserverKeyMap)/2+1 {
 			if ob.round.MinRoundVoteAck != nil {
-				ob.prevTimeoutCount = ob.round.MinRoundVoteAck.TimeoutCount + 1
-			} else {
-				ob.prevTimeoutCount++
+				addr := ob.round.MinRoundVoteAck.Formulator
+				ob.fs.Lock()
+				if p, has := ob.fs.peerHash[addr]; has {
+					ob.fs.removePeer(p)
+				}
+				ob.fs.Unlock()
 			}
 			ob.roundState = RoundVoteState
 			//log.Println(ob.Config.Key.PublicKey().String(), "Change State", RoundVoteState)
@@ -692,7 +692,6 @@ func (ob *Observer) OnProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.O
 					//log.Println(ob.Config.Key.PublicKey().String(), "Change State", RoundVoteState)
 					ob.roundVoteMap = map[common.PublicHash]*RoundVote{}
 					ob.round = nil
-					ob.prevTimeoutCount = 0
 					ob.sendRoundVote()
 				}
 			}
@@ -722,7 +721,7 @@ func (ob *Observer) sendRoundVote() error {
 		},
 	}
 
-	if Top, TimeoutCount, err := ob.kn.TopRankInMap(int(ob.prevTimeoutCount), ob.fs.FormulatorMap()); err != nil {
+	if Top, TimeoutCount, err := ob.kn.TopRankInMap(0, ob.fs.FormulatorMap()); err != nil {
 		if err != consensus.ErrInsufficientCandidateCount {
 			return err
 		}

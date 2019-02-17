@@ -152,15 +152,17 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 
 		if msg, is := m.(*chain.RequestMessage); is {
 			cp := ms.kn.Provider()
-			cd, err := cp.Data(msg.Height)
-			if err != nil {
-				return err
-			}
-			sm := &chain.DataMessage{
-				Data: cd,
-			}
-			if err := p.Send(sm); err != nil {
-				return err
+			if len(ms.peerHash) == 1 || msg.Height >= cp.Height()-10 {
+				cd, err := cp.Data(msg.Height)
+				if err != nil {
+					return err
+				}
+				sm := &chain.DataMessage{
+					Data: cd,
+				}
+				if err := p.Send(sm); err != nil {
+					return err
+				}
 			}
 		}
 	}

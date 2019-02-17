@@ -4,7 +4,6 @@ import (
 	"bytes"
 	crand "crypto/rand"
 	"encoding/binary"
-	"io"
 	"log"
 	"net"
 	"sync"
@@ -18,26 +17,22 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-type RecvDeligator interface {
-	OnRecv(p mesh.Peer, r io.Reader, t message.Type) error
-}
-
 type FormulatorMesh struct {
 	sync.Mutex
 	Key           key.Key
 	Formulator    common.Address
 	NetAddressMap map[common.PublicHash]string
-	peerHash      map[common.PublicHash]*FormulatorPeer
-	deligator     RecvDeligator
+	peerHash      map[string]*FormulatorPeer
+	handler       mesh.EventHandler
 }
 
-func NewFormulatorMesh(Key key.Key, Formulator common.Address, NetAddressMap map[common.PublicHash]string, Deligator RecvDeligator) *FormulatorMesh {
+func NewFormulatorMesh(Key key.Key, Formulator common.Address, NetAddressMap map[common.PublicHash]string, handler mesh.EventHandler) *FormulatorMesh {
 	ms := &FormulatorMesh{
 		Key:           Key,
 		Formulator:    Formulator,
 		NetAddressMap: NetAddressMap,
-		peerHash:      map[common.PublicHash]*FormulatorPeer{},
-		deligator:     Deligator,
+		peerHash:      map[string]*FormulatorPeer{},
+		handler:       handler,
 	}
 	return ms
 }
@@ -76,7 +71,7 @@ func (ms *FormulatorMesh) Run() error {
 				time.Sleep(1 * time.Second)
 				for {
 					ms.Lock()
-					_, has := ms.peerHash[pubhash]
+					_, has := ms.peerHash[pubhash.String()]
 					ms.Unlock()
 					if !has {
 						if err := ms.client(NetAddr, pubhash); err != nil {
@@ -94,13 +89,9 @@ func (ms *FormulatorMesh) Run() error {
 	return nil
 }
 
-func (ms *FormulatorMesh) removePeer(p *FormulatorPeer) error {
-	ms.Lock()
-	defer ms.Unlock()
-
-	delete(ms.peerHash, p.pubhash)
+func (ms *FormulatorMesh) removePeer(p *FormulatorPeer) {
+	delete(ms.peerHash, p.ID())
 	p.conn.Close()
-	return nil
 }
 
 func (ms *FormulatorMesh) client(Address string, TargetPubHash common.PublicHash) error {
@@ -127,18 +118,25 @@ func (ms *FormulatorMesh) client(Address string, TargetPubHash common.PublicHash
 	}
 
 	ms.Lock()
-	p, has := ms.peerHash[pubhash]
+	p, has := ms.peerHash[pubhash.String()]
 	if !has {
 		p = NewFormulatorPeer(conn, pubhash)
-		ms.peerHash[pubhash] = p
+		ms.peerHash[pubhash.String()] = p
 
 		defer func() {
+			ms.Lock()
+			defer ms.Unlock()
+
 			ms.removePeer(p)
+			ms.handler.OnClosed(p)
 		}()
 	}
 	ms.Unlock()
 
 	if !has {
+		if err := ms.handler.BeforeConnect(p); err != nil {
+			return err
+		}
 		if err := ms.handleConnection(p); err != nil {
 			return err
 		}
@@ -149,6 +147,8 @@ func (ms *FormulatorMesh) client(Address string, TargetPubHash common.PublicHash
 func (ms *FormulatorMesh) handleConnection(p *FormulatorPeer) error {
 	log.Println(common.NewPublicHash(ms.Key.PublicKey()).String(), "Connected", p.pubhash.String())
 
+	ms.handler.AfterConnect(p)
+
 	for {
 		var t message.Type
 		if v, _, err := util.ReadUint64(p.conn); err != nil {
@@ -157,7 +157,7 @@ func (ms *FormulatorMesh) handleConnection(p *FormulatorPeer) error {
 			t = message.Type(v)
 		}
 
-		if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
+		if err := ms.handler.OnRecv(p, p.conn, t); err != nil {
 			return err
 		}
 	}
@@ -212,8 +212,25 @@ func (ms *FormulatorMesh) sendHandshake(conn net.Conn) (common.PublicHash, error
 	return pubhash, nil
 }
 
-func (ms *FormulatorMesh) BroadcastMessage(m message.Message) error {
+// SendTo sends a message to the target peer
+func (ms *FormulatorMesh) SendTo(id string, m message.Message) error {
+	ms.Lock()
+	p, has := ms.peerHash[id]
+	ms.Unlock()
+	if !has {
+		return ErrUnknownPeer
+	}
 
+	if err := p.Send(m); err != nil {
+		ms.Lock()
+		ms.removePeer(p)
+		ms.Unlock()
+		return err
+	}
+	return nil
+}
+
+func (ms *FormulatorMesh) BroadcastMessage(m message.Message) error {
 	var buffer bytes.Buffer
 	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
 		return err
@@ -232,7 +249,9 @@ func (ms *FormulatorMesh) BroadcastMessage(m message.Message) error {
 	for _, p := range peers {
 		if err := p.SendRaw(data); err != nil {
 			log.Println(err)
+			ms.Lock()
 			ms.removePeer(p)
+			ms.Unlock()
 		}
 	}
 	return nil

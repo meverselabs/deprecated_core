@@ -377,7 +377,8 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	if err != nil {
 		return err
 	}
-	pubkey, err := common.RecoverPubkey(b.Header.Hash(), s.GeneratorSignature)
+	HeaderHash := b.Header.Hash()
+	pubkey, err := common.RecoverPubkey(HeaderHash, s.GeneratorSignature)
 	if err != nil {
 		return err
 	}
@@ -414,7 +415,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	for _, eh := range kn.eventHandlers {
 		eh.AfterProcessBlock(kn, b, s, ctx)
 	}
-	log.Println(kn.store.Height())
+	log.Println("Block Connected :", kn.store.Height(), HeaderHash, len(b.Body.Transactions))
 	return nil
 }
 
