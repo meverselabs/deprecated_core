@@ -7,8 +7,7 @@ import (
 
 // Config is the configuration for the observer
 type Config struct {
-	ChainCoord    *common.Coordinate
-	ObserverKeys  []string
-	NetAddressMap map[common.PublicHash]string
-	Key           key.Key
+	ChainCoord     *common.Coordinate
+	ObserverKeyMap map[common.PublicHash]string
+	Key            key.Key
 }

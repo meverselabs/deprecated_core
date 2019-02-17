@@ -26,7 +26,6 @@ import (
 type Observer struct {
 	sync.Mutex
 	Config           *Config
-	ObserverKeyMap   map[common.PublicHash]bool
 	round            *VoteRound
 	roundState       int
 	roundVoteMap     map[common.PublicHash]*RoundVote
@@ -44,23 +43,13 @@ type Observer struct {
 
 // NewObserver returns a Observer
 func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
-	ObserverKeyMap := map[common.PublicHash]bool{}
-	for _, str := range Config.ObserverKeys {
-		if pubhash, err := common.ParsePublicHash(str); err != nil {
-			return nil, err
-		} else {
-			ObserverKeyMap[pubhash] = true
-		}
-	}
-
 	ob := &Observer{
-		Config:         Config,
-		ObserverKeyMap: ObserverKeyMap,
-		roundVoteMap:   map[common.PublicHash]*RoundVote{},
-		roundState:     RoundVoteState,
-		cm:             chain.NewManager(kn),
-		kn:             kn,
-		manager:        message.NewManager(),
+		Config:       Config,
+		roundVoteMap: map[common.PublicHash]*RoundVote{},
+		roundState:   RoundVoteState,
+		cm:           chain.NewManager(kn),
+		kn:           kn,
+		manager:      message.NewManager(),
 	}
 	ob.manager.SetCreator(RoundVoteMessageType, ob.messageCreator)
 	ob.manager.SetCreator(RoundVoteAckMessageType, ob.messageCreator)
@@ -70,7 +59,7 @@ func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 	kn.AddEventHandler(ob)
 
 	ob.fs = NewFormulatorService(Config.Key, kn, ob)
-	ob.ms = NewObserverMesh(Config.Key, Config.NetAddressMap, ob, ob.cm)
+	ob.ms = NewObserverMesh(Config.Key, Config.ObserverKeyMap, ob, ob.cm)
 	ob.cm.Mesh = ob.ms
 
 	if err := ob.cm.Init(); err != nil {
@@ -179,7 +168,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			if _, has := ob.roundVoteMap[pubhash]; has {
@@ -188,7 +177,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			ob.roundVoteMap[pubhash] = msg.RoundVote
 		}
 
-		if len(ob.roundVoteMap) >= len(ob.ObserverKeyMap)/2+2 {
+		if len(ob.roundVoteMap) >= len(ob.Config.ObserverKeyMap)/2+2 {
 			var MinRoundVote *RoundVote
 			for _, vt := range ob.roundVoteMap {
 				if !vt.Formulator.Equal(emptyAddr) {
@@ -309,7 +298,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			if _, has := ob.round.RoundVoteAckMap[pubhash]; has {
@@ -324,7 +313,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			Count := TimeoutCountMap[vt.TimeoutCount]
 			Count++
 			TimeoutCountMap[vt.TimeoutCount] = Count
-			if Count >= len(ob.ObserverKeyMap)/2+1 {
+			if Count >= len(ob.Config.ObserverKeyMap)/2+1 {
 				MinRoundVoteAck = vt
 				break
 			}
@@ -425,7 +414,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			ObserverBlockPublicHash = pubhash
@@ -435,7 +424,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			if !ObserverBlockPublicHash.Equal(pubhash) {
@@ -447,7 +436,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			ob.round.BlockVoteMap[pubhash] = msg.BlockVote
 		}
 
-		if len(ob.round.BlockVoteMap) >= len(ob.ObserverKeyMap)/2+1 {
+		if len(ob.round.BlockVoteMap) >= len(ob.Config.ObserverKeyMap)/2+1 {
 			sigs := []common.Signature{}
 			var AnyBlockVote *BlockVote
 			for _, vt := range ob.round.BlockVoteMap {
@@ -527,7 +516,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return err
 		} else {
 			pubhash := common.NewPublicHash(pubkey)
-			if !ob.ObserverKeyMap[pubhash] {
+			if _, has := ob.Config.ObserverKeyMap[pubhash]; !has {
 				return ErrInvalidVoteSignature
 			}
 			if _, has := ob.round.RoundFailVoteMap[pubhash]; has {
@@ -536,7 +525,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			ob.round.RoundFailVoteMap[pubhash] = msg.RoundFailVote
 		}
 
-		if len(ob.round.RoundFailVoteMap) >= len(ob.ObserverKeyMap)/2+1 {
+		if len(ob.round.RoundFailVoteMap) >= len(ob.Config.ObserverKeyMap)/2+1 {
 			if ob.round.MinRoundVoteAck != nil {
 				ob.prevTimeoutCount = ob.round.MinRoundVoteAck.TimeoutCount + 1
 			} else {

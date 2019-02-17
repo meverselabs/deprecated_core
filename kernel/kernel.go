@@ -45,18 +45,14 @@ type Kernel struct {
 
 // NewKernel returns a Kernel
 func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisContextData *data.ContextData) (*Kernel, error) {
-	ObserverKeyMap := map[common.PublicHash]bool{}
-	for _, str := range Config.ObserverKeys {
-		if pubhash, err := common.ParsePublicHash(str); err != nil {
-			return nil, err
-		} else {
-			ObserverKeyMap[pubhash] = true
-		}
-	}
-
 	FormulationAccountType, err := st.Accounter().TypeByName("consensus.FormulationAccount")
 	if err != nil {
 		return nil, err
+	}
+
+	ObserverKeyMap := map[common.PublicHash]bool{}
+	for _, pubhash := range Config.ObserverKeys {
+		ObserverKeyMap[pubhash] = true
 	}
 
 	kn := &Kernel{
@@ -169,8 +165,8 @@ func (kn *Kernel) Init() error {
 	if _, err := kn.Config.ChainCoord.WriteTo(&buffer); err != nil {
 		return err
 	}
-	for _, str := range kn.Config.ObserverKeys {
-		buffer.WriteString(str)
+	for _, pubhash := range kn.Config.ObserverKeys {
+		buffer.WriteString(pubhash.String())
 		buffer.WriteString(":")
 	}
 	GenesisHash := hash.TwoHash(hash.DoubleHash(buffer.Bytes()), kn.genesisContextData.Hash())

@@ -47,7 +47,6 @@ var (
 type Formulator struct {
 	sync.Mutex
 	Config         *Config
-	ObserverKeyMap map[common.PublicHash]bool
 	ms             *FormulatorMesh
 	cm             *chain.Manager
 	kn             *kernel.Kernel
@@ -60,25 +59,15 @@ type Formulator struct {
 }
 
 type Config struct {
-	ChainCoord    *common.Coordinate
-	ObserverKeys  []string
-	NetAddressMap map[common.PublicHash]string
-	Key           key.Key
-	Formulator    common.Address
-	Router        router.Config
-	Peer          peer.Config
+	ChainCoord     *common.Coordinate
+	ObserverKeyMap map[common.PublicHash]string
+	Key            key.Key
+	Formulator     common.Address
+	Router         router.Config
+	Peer           peer.Config
 }
 
 func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
-	ObserverKeyMap := map[common.PublicHash]bool{}
-	for _, str := range Config.ObserverKeys {
-		if pubhash, err := common.ParsePublicHash(str); err != nil {
-			return nil, err
-		} else {
-			ObserverKeyMap[pubhash] = true
-		}
-	}
-
 	r, err := router.NewRouter(&Config.Router)
 	if err != nil {
 		return nil, err
@@ -90,19 +79,18 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 	}
 
 	fr := &Formulator{
-		Config:         Config,
-		ObserverKeyMap: ObserverKeyMap,
-		cm:             chain.NewManager(kn),
-		pm:             pm,
-		kn:             kn,
-		manager:        message.NewManager(),
+		Config:  Config,
+		cm:      chain.NewManager(kn),
+		pm:      pm,
+		kn:      kn,
+		manager: message.NewManager(),
 	}
 	fr.manager.SetCreator(message_def.BlockReqMessageType, fr.messageCreator)
 	fr.manager.SetCreator(message_def.BlockObSignMessageType, fr.messageCreator)
 	fr.manager.SetCreator(chain.DataMessageType, fr.messageCreator)
 	fr.manager.SetCreator(chain.StatusMessageType, fr.messageCreator)
 
-	fr.ms = NewFormulatorMesh(Config.Key, Config.Formulator, Config.NetAddressMap, fr)
+	fr.ms = NewFormulatorMesh(Config.Key, Config.Formulator, Config.ObserverKeyMap, fr)
 	fr.cm.Mesh = pm
 
 	if err := fr.cm.Init(); err != nil {

@@ -48,6 +48,7 @@ func (ms *FormulatorService) Run(BindAddress string) error {
 		if err := ms.server(BindAddress); err != nil {
 			log.Println("[server]", err)
 		}
+		time.Sleep(1 * time.Second)
 	}
 }
 
