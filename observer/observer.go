@@ -169,15 +169,18 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return ErrInvalidVote
 		}
 
-		Top, err := ob.kn.TopRank(int(msg.RoundVote.TimeoutCount))
-		if err != nil {
-			return err
-		}
-		if !msg.RoundVote.Formulator.Equal(Top.Address) {
-			return ErrInvalidVote
-		}
-		if !msg.RoundVote.FormulatorPublicHash.Equal(Top.PublicHash) {
-			return ErrInvalidVote
+		var emptyAddr common.Address
+		if !msg.RoundVote.Formulator.Equal(emptyAddr) {
+			Top, err := ob.kn.TopRank(int(msg.RoundVote.TimeoutCount))
+			if err != nil {
+				return err
+			}
+			if !msg.RoundVote.Formulator.Equal(Top.Address) {
+				return ErrInvalidVote
+			}
+			if !msg.RoundVote.FormulatorPublicHash.Equal(Top.PublicHash) {
+				return ErrInvalidVote
+			}
 		}
 
 		if pubkey, err := common.RecoverPubkey(msg.RoundVote.Hash(), msg.Signature); err != nil {
@@ -196,7 +199,6 @@ func (ob *Observer) handleMessage(m message.Message) error {
 		if len(ob.roundVoteMap) >= len(ob.ObserverKeyMap)/2+2 {
 			var MinRoundVote *RoundVote
 			for _, vt := range ob.roundVoteMap {
-				var emptyAddr common.Address
 				if !vt.Formulator.Equal(emptyAddr) {
 					if MinRoundVote == nil || MinRoundVote.TimeoutCount > vt.TimeoutCount {
 						MinRoundVote = vt
