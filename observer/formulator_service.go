@@ -59,13 +59,9 @@ func (ms *FormulatorService) Run(BindAddress string) error {
 	}
 }
 
-func (ms *FormulatorService) removePeer(p *FormulatorPeer) error {
-	ms.Lock()
-	defer ms.Unlock()
-
+func (ms *FormulatorService) removePeer(p *FormulatorPeer) {
 	delete(ms.peerHash, p.address)
 	p.conn.Close()
-	return nil
 }
 
 func (ms *FormulatorService) server(BindAddress string) error {
@@ -105,6 +101,9 @@ func (ms *FormulatorService) server(BindAddress string) error {
 				ms.peerHash[Formulator] = p
 
 				defer func() {
+					ms.Lock()
+					defer ms.Unlock()
+
 					ms.removePeer(p)
 				}()
 			}
@@ -113,7 +112,6 @@ func (ms *FormulatorService) server(BindAddress string) error {
 			if !has {
 				if err := ms.handleConnection(p); err != nil {
 					log.Println("[handleConnection]", err)
-					return
 				}
 			}
 		}()
@@ -246,9 +244,6 @@ func (ms *FormulatorService) SendTo(Formulator common.Address, m message.Message
 
 // BroadcastMessage sends a message to all peers
 func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
-	ms.Lock()
-	defer ms.Unlock()
-
 	var buffer bytes.Buffer
 	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
 		return err
@@ -257,10 +252,20 @@ func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
 		return err
 	}
 	data := buffer.Bytes()
+
+	peers := []*FormulatorPeer{}
+	ms.Lock()
 	for _, p := range ms.peerHash {
+		peers = append(peers, p)
+	}
+	ms.Unlock()
+
+	for _, p := range peers {
 		if err := p.SendRaw(data); err != nil {
 			log.Println(err)
+			ms.Lock()
 			ms.removePeer(p)
+			ms.Unlock()
 		}
 	}
 	return nil
