@@ -162,7 +162,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 		if !msg.RoundHash.Equal(NextRoundHash) {
 			return ErrInvalidRequest
 		}
-		Top, err := fr.kn.TopRank(int(msg.TimeoutCount)) //TEMP
+		Top, err := fr.kn.TopRank(int(msg.TimeoutCount))
 		if err != nil {
 			return err
 		}
