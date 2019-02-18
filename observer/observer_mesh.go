@@ -1,7 +1,6 @@
 package observer
 
 import (
-	"bufio"
 	"bytes"
 	crand "crypto/rand"
 	"encoding/binary"
@@ -215,16 +214,15 @@ func (ms *ObserverMesh) handleConnection(p *ObserverPeer) error {
 	}()
 	ms.handler.AfterConnect(p)
 
-	r := bufio.NewReader(p.conn)
 	for {
 		var t message.Type
-		if v, _, err := util.ReadUint64(r); err != nil {
+		if v, _, err := util.ReadUint64(p.conn); err != nil {
 			return err
 		} else {
 			t = message.Type(v)
 		}
 
-		if err := ms.deligator.OnRecv(p, r, t); err != nil {
+		if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
 			return err
 		}
 	}
