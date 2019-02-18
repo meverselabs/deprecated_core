@@ -194,27 +194,21 @@ func (fr *Formulator) OnPushTransaction(kn *kernel.Kernel, tx transaction.Transa
 // AfterProcessBlock called when processed block to the chain
 func (fr *Formulator) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) {
 	if fr.isProcessing {
-		var MaxID string
-		var MaxHeight uint32
-		for id, status := range fr.statusMap {
-			if MaxHeight < status.Height {
-				MaxHeight = status.Height
-				MaxID = id
-			}
-		}
-		TargetHeight := fr.kn.Provider().Height() + 1
-		for TargetHeight < MaxHeight {
-			if fr.requestedMap[TargetHeight] {
-				sm := &chain.RequestMessage{
-					Height: TargetHeight,
-				}
-				if err := fr.ms.SendTo(MaxID, sm); err != nil {
+		delete(fr.requestedMap, b.Header.Height())
+		TargetHeight := b.Header.Height() + 1
+		if !fr.requestedMap[TargetHeight] {
+			for id, status := range fr.statusMap {
+				if TargetHeight < status.Height {
+					sm := &chain.RequestMessage{
+						Height: TargetHeight,
+					}
+					if err := fr.ms.SendTo(id, sm); err != nil {
+						return
+					}
+					fr.requestedMap[TargetHeight] = true
 					return
 				}
-				fr.requestedMap[TargetHeight] = true
-				return
 			}
-			TargetHeight++
 		}
 	}
 }
