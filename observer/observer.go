@@ -238,7 +238,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			}
 
 			RoundHash := MinRoundVote.RoundHash
-			time.AfterFunc(10*time.Second, func() {
+			time.AfterFunc(5*time.Second, func() {
 				ob.Lock()
 				if ob.round != nil && ob.round.RoundHash.Equal(RoundHash) {
 					//log.Println(ob.Config.Key.PublicKey().String(), "Fail State", ob.roundState, ob.kn.Provider().Height(), len(ob.adjustFormulatorMap()), len(ob.fs.peerHash))
