@@ -25,20 +25,22 @@ type ObserverMeshDeligator interface {
 
 type ObserverMesh struct {
 	sync.Mutex
-	Key           key.Key
-	NetAddressMap map[common.PublicHash]string
-	peerHash      map[common.PublicHash]*ObserverPeer
-	deligator     ObserverMeshDeligator
-	handler       mesh.EventHandler
+	Key            key.Key
+	NetAddressMap  map[common.PublicHash]string
+	clientPeerHash map[common.PublicHash]*ObserverPeer
+	serverPeerHash map[common.PublicHash]*ObserverPeer
+	deligator      ObserverMeshDeligator
+	handler        mesh.EventHandler
 }
 
 func NewObserverMesh(Key key.Key, NetAddressMap map[common.PublicHash]string, Deligator ObserverMeshDeligator, handler mesh.EventHandler) *ObserverMesh {
 	ms := &ObserverMesh{
-		Key:           Key,
-		NetAddressMap: NetAddressMap,
-		peerHash:      map[common.PublicHash]*ObserverPeer{},
-		deligator:     Deligator,
-		handler:       handler,
+		Key:            Key,
+		NetAddressMap:  NetAddressMap,
+		clientPeerHash: map[common.PublicHash]*ObserverPeer{},
+		serverPeerHash: map[common.PublicHash]*ObserverPeer{},
+		deligator:      Deligator,
+		handler:        handler,
 	}
 	return ms
 }
@@ -62,8 +64,18 @@ func (ms *ObserverMesh) Unban(netAddr string) {
 	log.Println("ObserverMesh", "Unban", netAddr)
 }
 func (ms *ObserverMesh) Peers() []mesh.Peer {
+	peerMap := map[common.PublicHash]*ObserverPeer{}
+	ms.Lock()
+	for _, p := range ms.clientPeerHash {
+		peerMap[p.pubhash] = p
+	}
+	for _, p := range ms.serverPeerHash {
+		peerMap[p.pubhash] = p
+	}
+	ms.Unlock()
+
 	peers := []mesh.Peer{}
-	for _, p := range ms.peerHash {
+	for _, p := range peerMap {
 		peers = append(peers, p)
 	}
 	return peers
@@ -77,7 +89,7 @@ func (ms *ObserverMesh) Run(BindAddress string) error {
 				time.Sleep(1 * time.Second)
 				for {
 					ms.Lock()
-					_, has := ms.peerHash[pubhash]
+					_, has := ms.clientPeerHash[pubhash]
 					ms.Unlock()
 					if !has {
 						if err := ms.client(NetAddr, pubhash); err != nil {
@@ -97,8 +109,8 @@ func (ms *ObserverMesh) Run(BindAddress string) error {
 	}
 }
 
-func (ms *ObserverMesh) removePeer(p *ObserverPeer) {
-	delete(ms.peerHash, p.pubhash)
+func (ms *ObserverMesh) removePeer(p *ObserverPeer, peerHash map[common.PublicHash]*ObserverPeer) {
+	delete(peerHash, p.pubhash)
 	p.conn.Close()
 }
 
@@ -126,16 +138,16 @@ func (ms *ObserverMesh) client(Address string, TargetPubHash common.PublicHash) 
 	}
 
 	ms.Lock()
-	p, has := ms.peerHash[pubhash]
+	p, has := ms.clientPeerHash[pubhash]
 	if !has {
 		p = NewObserverPeer(conn, pubhash)
-		ms.peerHash[pubhash] = p
+		ms.clientPeerHash[pubhash] = p
 
 		defer func() {
 			ms.Lock()
 			defer ms.Unlock()
 
-			ms.removePeer(p)
+			ms.removePeer(p, ms.clientPeerHash)
 		}()
 
 	}
@@ -178,16 +190,16 @@ func (ms *ObserverMesh) server(BindAddress string) error {
 			}
 
 			ms.Lock()
-			p, has := ms.peerHash[pubhash]
+			p, has := ms.serverPeerHash[pubhash]
 			if !has {
 				p = NewObserverPeer(conn, pubhash)
-				ms.peerHash[pubhash] = p
+				ms.serverPeerHash[pubhash] = p
 
 				defer func() {
 					ms.Lock()
 					defer ms.Unlock()
 
-					ms.removePeer(p)
+					ms.removePeer(p, ms.serverPeerHash)
 				}()
 
 			}
@@ -283,18 +295,24 @@ func (ms *ObserverMesh) BroadcastMessage(m message.Message) error {
 	}
 	data := buffer.Bytes()
 
-	peers := []*ObserverPeer{}
+	peerMap := map[common.PublicHash]*ObserverPeer{}
+	targetMap := map[common.PublicHash]map[common.PublicHash]*ObserverPeer{}
 	ms.Lock()
-	for _, p := range ms.peerHash {
-		peers = append(peers, p)
+	for _, p := range ms.clientPeerHash {
+		peerMap[p.pubhash] = p
+		targetMap[p.pubhash] = ms.clientPeerHash
+	}
+	for _, p := range ms.serverPeerHash {
+		peerMap[p.pubhash] = p
+		targetMap[p.pubhash] = ms.serverPeerHash
 	}
 	ms.Unlock()
 
-	for _, p := range peers {
+	for _, p := range peerMap {
 		if err := p.SendRaw(data); err != nil {
 			log.Println(err)
 			ms.Lock()
-			ms.removePeer(p)
+			ms.removePeer(p, targetMap[p.pubhash])
 			ms.Unlock()
 		}
 	}
