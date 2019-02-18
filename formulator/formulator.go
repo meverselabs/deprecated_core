@@ -198,7 +198,7 @@ func (fr *Formulator) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *bl
 		TargetHeight := b.Header.Height() + 1
 		if !fr.requestedMap[TargetHeight] {
 			for id, status := range fr.statusMap {
-				if TargetHeight < status.Height {
+				if TargetHeight <= status.Height {
 					sm := &chain.RequestMessage{
 						Height: TargetHeight,
 					}
@@ -371,7 +371,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 		}
 
 		TargetHeight := fr.kn.Provider().Height() + 1
-		for TargetHeight < msg.Height {
+		for TargetHeight <= msg.Height {
 			if !fr.requestedMap[TargetHeight] {
 				sm := &chain.RequestMessage{
 					Height: TargetHeight,
