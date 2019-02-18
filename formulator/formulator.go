@@ -196,7 +196,6 @@ func (fr *Formulator) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *bl
 	if fr.isProcessing {
 		var MaxID string
 		var MaxHeight uint32
-		fr.Lock()
 		for id, status := range fr.statusMap {
 			if MaxHeight < status.Height {
 				MaxHeight = status.Height
@@ -217,7 +216,6 @@ func (fr *Formulator) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *bl
 			}
 			TargetHeight++
 		}
-		fr.Unlock()
 	}
 }
 
