@@ -1,7 +1,6 @@
 package observer
 
 import (
-	"bufio"
 	"bytes"
 	crand "crypto/rand"
 	"encoding/binary"
@@ -14,6 +13,7 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
+	"git.fleta.io/fleta/core/consensus"
 	"git.fleta.io/fleta/core/kernel"
 	"git.fleta.io/fleta/core/key"
 	"git.fleta.io/fleta/framework/chain"
@@ -130,21 +130,20 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 		return err
 	}
 
-	r := bufio.NewReader(p.conn)
 	for {
 		var t message.Type
-		if v, _, err := util.ReadUint64(r); err != nil {
+		if v, _, err := util.ReadUint64(p.conn); err != nil {
 			return err
 		} else {
 			t = message.Type(v)
 		}
 
-		m, err := ms.manager.ParseMessage(r, t)
+		m, err := ms.manager.ParseMessage(p.conn, t)
 		if err != nil {
 			if err != message.ErrUnknownMessage {
 				return err
 			}
-			if err := ms.deligator.OnRecv(p, r, t); err != nil {
+			if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
 				return err
 			}
 		}
@@ -154,6 +153,15 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 			ms.Lock()
 			is := len(ms.peerHash) == 1
 			ms.Unlock()
+			if !is {
+				if Top, _, err := ms.kn.TopRankInMap(0, ms.FormulatorMap()); err != nil {
+					if err != consensus.ErrInsufficientCandidateCount {
+						return err
+					}
+				} else {
+					is = p.address.Equal(Top.Address)
+				}
+			}
 			if is || msg.Height >= cp.Height()-10 {
 				cd, err := cp.Data(msg.Height)
 				if err != nil {
