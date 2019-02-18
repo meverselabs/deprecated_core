@@ -96,17 +96,18 @@ func (ms *FormulatorService) server(BindAddress string) error {
 
 			ms.Lock()
 			p, has := ms.peerHash[Formulator]
-			if !has {
-				p = NewFormulatorPeer(conn, pubhash, Formulator)
-				ms.peerHash[Formulator] = p
-
-				defer func() {
-					ms.Lock()
-					defer ms.Unlock()
-
-					ms.removePeer(p)
-				}()
+			if has {
+				ms.removePeer(p)
 			}
+			p = NewFormulatorPeer(conn, pubhash, Formulator)
+			ms.peerHash[Formulator] = p
+
+			defer func() {
+				ms.Lock()
+				defer ms.Unlock()
+
+				ms.removePeer(p)
+			}()
 			ms.Unlock()
 
 			if !has {
