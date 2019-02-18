@@ -171,7 +171,7 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 func (ms *FormulatorService) recvHandshake(conn net.Conn) (common.Address, error) {
 	//log.Println("recvHandshake")
 	req := make([]byte, 60)
-	if err := util.FillBytes(conn, req); err != nil {
+	if _, err := util.FillBytes(conn, req); err != nil {
 		return common.Address{}, err
 	}
 	var Formulator common.Address
@@ -207,7 +207,7 @@ func (ms *FormulatorService) sendHandshake(conn net.Conn) (common.PublicHash, er
 	//log.Println("recvHandshakeAsk")
 	h := hash.Hash(req)
 	var sig common.Signature
-	if err := util.FillBytes(conn, sig[:]); err != nil {
+	if _, err := sig.ReadFrom(conn); err != nil {
 		return common.PublicHash{}, err
 	}
 	pubkey, err := common.RecoverPubkey(h, sig)

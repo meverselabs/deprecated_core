@@ -227,7 +227,7 @@ func (ms *ObserverMesh) handleConnection(p *ObserverPeer) error {
 func (ms *ObserverMesh) recvHandshake(conn net.Conn) error {
 	//log.Println("recvHandshake")
 	req := make([]byte, 40)
-	if err := util.FillBytes(conn, req); err != nil {
+	if _, err := util.FillBytes(conn, req); err != nil {
 		return err
 	}
 	timestamp := binary.LittleEndian.Uint64(req[32:])
@@ -261,7 +261,7 @@ func (ms *ObserverMesh) sendHandshake(conn net.Conn) (common.PublicHash, error) 
 	//log.Println("recvHandshakeAsk")
 	h := hash.Hash(req)
 	var sig common.Signature
-	if err := util.FillBytes(conn, sig[:]); err != nil {
+	if _, err := sig.ReadFrom(conn); err != nil {
 		return common.PublicHash{}, err
 	}
 	pubkey, err := common.RecoverPubkey(h, sig)
