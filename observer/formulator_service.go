@@ -15,7 +15,6 @@ import (
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/kernel"
 	"git.fleta.io/fleta/core/key"
-	"git.fleta.io/fleta/framework/chain"
 	"git.fleta.io/fleta/framework/chain/mesh"
 	"git.fleta.io/fleta/framework/message"
 )
@@ -45,7 +44,6 @@ func NewFormulatorService(Key key.Key, kn *kernel.Kernel, Deligator FormulatorSe
 		deligator: Deligator,
 		manager:   message.NewManager(),
 	}
-	ms.manager.SetCreator(chain.RequestMessageType, ms.messageCreator)
 	return ms
 }
 
@@ -128,27 +126,8 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 			t = message.Type(v)
 		}
 
-		m, err := ms.manager.ParseMessage(p.conn, t)
-		if err != nil {
-			if err != message.ErrUnknownMessage {
-				return err
-			}
-			if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
-				return err
-			}
-		}
-
-		if msg, is := m.(*chain.RequestMessage); is {
-			cd, err := ms.kn.Provider().Data(msg.Height)
-			if err != nil {
-				return err
-			}
-			sm := &chain.DataMessage{
-				Data: cd,
-			}
-			if err := p.Send(sm); err != nil {
-				return err
-			}
+		if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
+			return err
 		}
 	}
 }
@@ -260,17 +239,4 @@ func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
 		}
 	}
 	return nil
-}
-
-func (ms *FormulatorService) messageCreator(r io.Reader, t message.Type) (message.Message, error) {
-	switch t {
-	case chain.RequestMessageType:
-		p := &chain.RequestMessage{}
-		if _, err := p.ReadFrom(r); err != nil {
-			return nil, err
-		}
-		return p, nil
-	default:
-		return nil, message.ErrUnknownMessage
-	}
 }

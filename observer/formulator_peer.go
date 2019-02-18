@@ -19,7 +19,7 @@ type FormulatorPeer struct {
 
 func NewFormulatorPeer(conn net.Conn, pubhash common.PublicHash, address common.Address) *FormulatorPeer {
 	p := &FormulatorPeer{
-		id:      pubhash.String(),
+		id:      address.String(),
 		netAddr: conn.RemoteAddr().String(),
 		conn:    conn,
 		pubhash: pubhash,

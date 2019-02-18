@@ -56,6 +56,7 @@ func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 	ob.manager.SetCreator(RoundVoteAckMessageType, ob.messageCreator)
 	ob.manager.SetCreator(BlockVoteMessageType, ob.messageCreator)
 	ob.manager.SetCreator(message_def.BlockGenMessageType, ob.messageCreator)
+	ob.manager.SetCreator(chain.RequestMessageType, ob.messageCreator)
 	kn.AddEventHandler(ob)
 
 	ob.fs = NewFormulatorService(Config.Key, kn, ob)
@@ -146,13 +147,38 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 			if err != nil {
 				return err
 			}
-			if err := ob.handleMessage(m); err != nil {
-				//log.Println(ob.Config.Key.PublicKey().String(), message.NameOfType(t), err)
-				return nil
-			}
-			if err := ob.ms.BroadcastMessage(m); err != nil {
-				//log.Println(ob.Config.Key.PublicKey().String(), message.NameOfType(t), err)
-				return err
+			if msg, is := m.(*chain.RequestMessage); is {
+				is := msg.Height >= ob.kn.Provider().Height()-10
+				if !is {
+					if Top, _, err := ob.kn.TopRankInMap(0, ob.adjustFormulatorMap()); err != nil {
+						if err != consensus.ErrInsufficientCandidateCount {
+							return err
+						}
+					} else {
+						is = p.ID() == Top.String()
+					}
+				}
+				if is {
+					cd, err := ob.kn.Provider().Data(msg.Height)
+					if err != nil {
+						return err
+					}
+					sm := &chain.DataMessage{
+						Data: cd,
+					}
+					if err := p.Send(sm); err != nil {
+						return err
+					}
+				}
+			} else {
+				if err := ob.handleMessage(m); err != nil {
+					//log.Println(ob.Config.Key.PublicKey().String(), message.NameOfType(t), err)
+					return nil
+				}
+				if err := ob.ms.BroadcastMessage(m); err != nil {
+					//log.Println(ob.Config.Key.PublicKey().String(), message.NameOfType(t), err)
+					return err
+				}
 			}
 		}
 	}
@@ -594,7 +620,6 @@ func (ob *Observer) handleMessage(m message.Message) error {
 		if err := ob.ms.BroadcastMessage(nm); err != nil {
 			return err
 		}
-
 		return nil
 	default:
 		return message.ErrUnhandledMessage
@@ -749,6 +774,12 @@ func (ob *Observer) messageCreator(r io.Reader, t message.Type) (message.Message
 			},
 			Tran: ob.kn.Transactor(),
 		}
+		if _, err := p.ReadFrom(r); err != nil {
+			return nil, err
+		}
+		return p, nil
+	case chain.RequestMessageType:
+		p := &chain.RequestMessage{}
 		if _, err := p.ReadFrom(r); err != nil {
 			return nil, err
 		}
