@@ -13,7 +13,6 @@ import (
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/consensus"
 	"git.fleta.io/fleta/core/kernel"
 	"git.fleta.io/fleta/core/key"
 	"git.fleta.io/fleta/framework/chain"
@@ -121,15 +120,6 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 
 	ms.deligator.OnFormulatorConnected(p)
 
-	cp := ms.kn.Provider()
-	if err := p.Send(&chain.StatusMessage{
-		Version:  cp.Version(),
-		Height:   cp.Height(),
-		PrevHash: cp.PrevHash(),
-	}); err != nil {
-		return err
-	}
-
 	for {
 		var t message.Type
 		if v, _, err := util.ReadUint64(p.conn); err != nil {
@@ -149,30 +139,15 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 		}
 
 		if msg, is := m.(*chain.RequestMessage); is {
-			cp := ms.kn.Provider()
-			ms.Lock()
-			is := len(ms.peerHash) == 1
-			ms.Unlock()
-			if !is {
-				if Top, _, err := ms.kn.TopRankInMap(0, ms.FormulatorMap()); err != nil {
-					if err != consensus.ErrInsufficientCandidateCount {
-						return err
-					}
-				} else {
-					is = p.address.Equal(Top.Address)
-				}
+			cd, err := ms.kn.Provider().Data(msg.Height)
+			if err != nil {
+				return err
 			}
-			if is || msg.Height >= cp.Height()-10 {
-				cd, err := cp.Data(msg.Height)
-				if err != nil {
-					return err
-				}
-				sm := &chain.DataMessage{
-					Data: cd,
-				}
-				if err := p.Send(sm); err != nil {
-					return err
-				}
+			sm := &chain.DataMessage{
+				Data: cd,
+			}
+			if err := p.Send(sm); err != nil {
+				return err
 			}
 		}
 	}
