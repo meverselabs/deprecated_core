@@ -415,7 +415,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	for _, eh := range kn.eventHandlers {
 		eh.AfterProcessBlock(kn, b, s, ctx)
 	}
-	log.Println("Block Connected :", kn.store.Height(), HeaderHash, len(b.Body.Transactions))
+	log.Println("Block Connected :", kn.store.Height(), HeaderHash.String(), b.Header.Formulator.String(), len(b.Body.Transactions))
 	return nil
 }
 

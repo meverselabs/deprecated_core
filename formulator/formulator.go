@@ -3,7 +3,6 @@ package formulator
 import (
 	"bytes"
 	"io"
-	"log"
 	"sync"
 	"time"
 
@@ -346,7 +345,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 		}
 		return nil
 	case *chain.StatusMessage:
-		log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.DataMessage")
+		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.DataMessage")
 		status, has := fr.statusMap[p.ID()]
 		if !has {
 			return nil
