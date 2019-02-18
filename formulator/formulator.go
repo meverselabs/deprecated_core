@@ -40,6 +40,8 @@ type Formulator struct {
 	txQueue        *queue.Queue
 	txCastMap      map[string]bool
 	statusMap      map[string]*chain.Status
+	requestedMap   map[uint32]bool
+	isProcessing   bool
 	isRunning      bool
 }
 
@@ -59,14 +61,15 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 	}
 
 	fr := &Formulator{
-		Config:    Config,
-		cm:        chain.NewManager(kn),
-		pm:        pm,
-		kn:        kn,
-		manager:   message.NewManager(),
-		txQueue:   queue.NewQueue(),
-		txCastMap: map[string]bool{},
-		statusMap: map[string]*chain.Status{},
+		Config:       Config,
+		cm:           chain.NewManager(kn),
+		pm:           pm,
+		kn:           kn,
+		manager:      message.NewManager(),
+		txQueue:      queue.NewQueue(),
+		txCastMap:    map[string]bool{},
+		statusMap:    map[string]*chain.Status{},
+		requestedMap: map[uint32]bool{},
 	}
 	fr.manager.SetCreator(message_def.BlockReqMessageType, fr.messageCreator)
 	fr.manager.SetCreator(message_def.BlockObSignMessageType, fr.messageCreator)
@@ -147,6 +150,7 @@ func (fr *Formulator) Run() {
 					}
 				}
 			}
+			timer.Reset(time.Minute)
 		}
 	}
 }
@@ -189,15 +193,31 @@ func (fr *Formulator) OnPushTransaction(kn *kernel.Kernel, tx transaction.Transa
 
 // AfterProcessBlock called when processed block to the chain
 func (fr *Formulator) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) {
-	Height := fr.kn.Provider().Height()
-	for id, status := range fr.statusMap {
-		if status.Height > Height {
-			sm := &chain.RequestMessage{
-				Height: Height + 1,
+	if fr.isProcessing {
+		var MaxID string
+		var MaxHeight uint32
+		fr.Lock()
+		for id, status := range fr.statusMap {
+			if MaxHeight < status.Height {
+				MaxHeight = status.Height
+				MaxID = id
 			}
-			fr.ms.SendTo(id, sm)
-			break
 		}
+		TargetHeight := fr.kn.Provider().Height() + 1
+		for TargetHeight < MaxHeight {
+			if fr.requestedMap[TargetHeight] {
+				sm := &chain.RequestMessage{
+					Height: TargetHeight,
+				}
+				if err := fr.ms.SendTo(MaxID, sm); err != nil {
+					return
+				}
+				fr.requestedMap[TargetHeight] = true
+				return
+			}
+			TargetHeight++
+		}
+		fr.Unlock()
 	}
 }
 
@@ -322,9 +342,11 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			Body:       fr.lastGenMessage.Block.Body,
 			Signatures: append([]common.Signature{msg.ObserverSigned.GeneratorSignature}, msg.ObserverSigned.ObserverSignatures...),
 		}
+		fr.isProcessing = true
 		if err := fr.cm.Process(cd, fr.lastContext); err != nil {
 			return err
 		}
+		fr.isProcessing = false
 		fr.cm.BroadcastHeader(cd.Header)
 		return nil
 	case *chain.DataMessage:
@@ -356,14 +378,18 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			status.PrevHash = msg.PrevHash
 		}
 
-		Height := fr.kn.Provider().Height()
-		if msg.Height > Height {
-			sm := &chain.RequestMessage{
-				Height: Height + 1,
+		TargetHeight := fr.kn.Provider().Height() + 1
+		for TargetHeight < msg.Height {
+			if !fr.requestedMap[TargetHeight] {
+				sm := &chain.RequestMessage{
+					Height: TargetHeight,
+				}
+				if err := p.Send(sm); err != nil {
+					return err
+				}
+				fr.requestedMap[TargetHeight] = true
 			}
-			if err := p.Send(sm); err != nil {
-				return err
-			}
+			TargetHeight++
 		}
 		return nil
 	default:
