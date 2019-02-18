@@ -505,8 +505,10 @@ func (ob *Observer) handleMessage(m message.Message) error {
 					return err
 				}
 			} else {
-				ob.fs.SendTo(Top.Address, &chain.DataMessage{
-					Data: cd,
+				ob.fs.SendTo(Top.Address, &chain.StatusMessage{
+					Version:  cp.Version(),
+					Height:   cp.Height(),
+					PrevHash: cp.PrevHash(),
 				})
 			}
 
