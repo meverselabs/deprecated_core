@@ -1,6 +1,7 @@
 package observer
 
 import (
+	"bufio"
 	"bytes"
 	crand "crypto/rand"
 	"encoding/binary"
@@ -94,26 +95,22 @@ func (ms *FormulatorService) server(BindAddress string) error {
 				return
 			}
 
+			p := NewFormulatorPeer(conn, pubhash, Formulator)
 			ms.Lock()
-			p, has := ms.peerHash[Formulator]
-			if has {
-				ms.removePeer(p)
+			if old, has := ms.peerHash[Formulator]; has {
+				ms.removePeer(old)
 			}
-			p = NewFormulatorPeer(conn, pubhash, Formulator)
 			ms.peerHash[Formulator] = p
+			ms.Unlock()
 
 			defer func() {
 				ms.Lock()
-				defer ms.Unlock()
-
 				ms.removePeer(p)
+				ms.Unlock()
 			}()
-			ms.Unlock()
 
-			if !has {
-				if err := ms.handleConnection(p); err != nil {
-					log.Println("[handleConnection]", err)
-				}
+			if err := ms.handleConnection(p); err != nil {
+				log.Println("[handleConnection]", err)
 			}
 		}()
 	}
@@ -133,27 +130,31 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 		return err
 	}
 
+	r := bufio.NewReader(p.conn)
 	for {
 		var t message.Type
-		if v, _, err := util.ReadUint64(p.conn); err != nil {
+		if v, _, err := util.ReadUint64(r); err != nil {
 			return err
 		} else {
 			t = message.Type(v)
 		}
 
-		m, err := ms.manager.ParseMessage(p.conn, t)
+		m, err := ms.manager.ParseMessage(r, t)
 		if err != nil {
 			if err != message.ErrUnknownMessage {
 				return err
 			}
-			if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
+			if err := ms.deligator.OnRecv(p, r, t); err != nil {
 				return err
 			}
 		}
 
 		if msg, is := m.(*chain.RequestMessage); is {
 			cp := ms.kn.Provider()
-			if len(ms.peerHash) == 1 || msg.Height >= cp.Height()-10 {
+			ms.Lock()
+			is := len(ms.peerHash) == 1
+			ms.Unlock()
+			if is || msg.Height >= cp.Height()-10 {
 				cd, err := cp.Data(msg.Height)
 				if err != nil {
 					return err
@@ -221,6 +222,9 @@ func (ms *FormulatorService) sendHandshake(conn net.Conn) (common.PublicHash, er
 
 // FormulatorMap returns a formulator list as a map
 func (ms *FormulatorService) FormulatorMap() map[common.Address]bool {
+	ms.Lock()
+	defer ms.Unlock()
+
 	FormulatorMap := map[common.Address]bool{}
 	for _, p := range ms.peerHash {
 		FormulatorMap[p.address] = true
@@ -231,16 +235,17 @@ func (ms *FormulatorService) FormulatorMap() map[common.Address]bool {
 // SendTo sends a message to the formulator
 func (ms *FormulatorService) SendTo(Formulator common.Address, m message.Message) error {
 	ms.Lock()
-	defer ms.Unlock()
-
 	p, has := ms.peerHash[Formulator]
+	ms.Unlock()
 	if !has {
 		return ErrUnknownFormulator
 	}
 
 	if err := p.Send(m); err != nil {
 		log.Println(err)
+		ms.Lock()
 		ms.removePeer(p)
+		ms.Unlock()
 	}
 	return nil
 }

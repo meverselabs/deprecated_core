@@ -1,8 +1,8 @@
 package observer
 
 import (
+	"bytes"
 	"net"
-	"sync"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/util"
@@ -10,7 +10,6 @@ import (
 )
 
 type ObserverPeer struct {
-	sync.Mutex
 	id      string
 	netAddr string
 	conn    net.Conn
@@ -36,22 +35,20 @@ func (p *ObserverPeer) NetAddr() string {
 }
 
 func (p *ObserverPeer) Send(m message.Message) error {
-	p.Lock()
-	defer p.Unlock()
-
-	if _, err := util.WriteUint64(p.conn, uint64(m.Type())); err != nil {
+	var buffer bytes.Buffer
+	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
 		return err
 	}
-	if _, err := m.WriteTo(p.conn); err != nil {
+	if _, err := m.WriteTo(&buffer); err != nil {
+		return err
+	}
+	if _, err := p.conn.Write(buffer.Bytes()); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (p *ObserverPeer) SendRaw(bs []byte) error {
-	p.Lock()
-	defer p.Unlock()
-
 	if _, err := p.conn.Write(bs); err != nil {
 		return err
 	}

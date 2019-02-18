@@ -1,6 +1,7 @@
 package observer
 
 import (
+	"bufio"
 	"bytes"
 	crand "crypto/rand"
 	"encoding/binary"
@@ -137,26 +138,22 @@ func (ms *ObserverMesh) client(Address string, TargetPubHash common.PublicHash) 
 		return ErrNotAllowedPublicHash
 	}
 
+	p := NewObserverPeer(conn, pubhash)
 	ms.Lock()
-	p, has := ms.clientPeerHash[pubhash]
-	if !has {
-		p = NewObserverPeer(conn, pubhash)
-		ms.clientPeerHash[pubhash] = p
-
-		defer func() {
-			ms.Lock()
-			defer ms.Unlock()
-
-			ms.removePeer(p, ms.clientPeerHash)
-		}()
-
+	if old, has := ms.clientPeerHash[pubhash]; has {
+		ms.removePeer(old, ms.clientPeerHash)
 	}
+	ms.clientPeerHash[pubhash] = p
 	ms.Unlock()
 
-	if !has {
-		if err := ms.handleConnection(p); err != nil {
-			log.Println("[handleConnection]", err)
-		}
+	defer func() {
+		ms.Lock()
+		ms.removePeer(p, ms.clientPeerHash)
+		ms.Unlock()
+	}()
+
+	if err := ms.handleConnection(p); err != nil {
+		log.Println("[handleConnection]", err)
 	}
 	return nil
 }
@@ -189,26 +186,22 @@ func (ms *ObserverMesh) server(BindAddress string) error {
 				return
 			}
 
+			p := NewObserverPeer(conn, pubhash)
 			ms.Lock()
-			p, has := ms.serverPeerHash[pubhash]
-			if !has {
-				p = NewObserverPeer(conn, pubhash)
-				ms.serverPeerHash[pubhash] = p
-
-				defer func() {
-					ms.Lock()
-					defer ms.Unlock()
-
-					ms.removePeer(p, ms.serverPeerHash)
-				}()
-
+			if old, has := ms.serverPeerHash[pubhash]; has {
+				ms.removePeer(old, ms.serverPeerHash)
 			}
+			ms.serverPeerHash[pubhash] = p
 			ms.Unlock()
 
-			if !has {
-				if err := ms.handleConnection(p); err != nil {
-					log.Println("[handleConnection]", err)
-				}
+			defer func() {
+				ms.Lock()
+				ms.removePeer(p, ms.serverPeerHash)
+				ms.Unlock()
+			}()
+
+			if err := ms.handleConnection(p); err != nil {
+				log.Println("[handleConnection]", err)
 			}
 		}()
 	}
@@ -222,15 +215,16 @@ func (ms *ObserverMesh) handleConnection(p *ObserverPeer) error {
 	}()
 	ms.handler.AfterConnect(p)
 
+	r := bufio.NewReader(p.conn)
 	for {
 		var t message.Type
-		if v, _, err := util.ReadUint64(p.conn); err != nil {
+		if v, _, err := util.ReadUint64(r); err != nil {
 			return err
 		} else {
 			t = message.Type(v)
 		}
 
-		if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
+		if err := ms.deligator.OnRecv(p, r, t); err != nil {
 			return err
 		}
 	}
@@ -308,11 +302,11 @@ func (ms *ObserverMesh) BroadcastMessage(m message.Message) error {
 	}
 	ms.Unlock()
 
-	for _, p := range peerMap {
+	for pubhash, p := range peerMap {
 		if err := p.SendRaw(data); err != nil {
 			log.Println(err)
 			ms.Lock()
-			ms.removePeer(p, targetMap[p.pubhash])
+			ms.removePeer(p, targetMap[pubhash])
 			ms.Unlock()
 		}
 	}

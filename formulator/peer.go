@@ -1,4 +1,4 @@
-package observer
+package formulator
 
 import (
 	"bytes"
@@ -14,16 +14,14 @@ type FormulatorPeer struct {
 	netAddr string
 	conn    net.Conn
 	pubhash common.PublicHash
-	address common.Address
 }
 
-func NewFormulatorPeer(conn net.Conn, pubhash common.PublicHash, address common.Address) *FormulatorPeer {
+func NewFormulatorPeer(conn net.Conn, pubhash common.PublicHash) *FormulatorPeer {
 	p := &FormulatorPeer{
 		id:      pubhash.String(),
 		netAddr: conn.RemoteAddr().String(),
 		conn:    conn,
 		pubhash: pubhash,
-		address: address,
 	}
 	return p
 }
