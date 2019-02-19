@@ -89,6 +89,7 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 			ob.fs.Lock()
 			is := len(ob.fs.peerHash) > 0
 			ob.fs.Unlock()
+			log.Println(ob.kn.Provider().Height(), "Current State", ob.roundState, len(ob.adjustFormulatorMap()), len(ob.fs.peerHash), is)
 			if is {
 				if ob.roundState == RoundVoteState {
 					ob.Lock()
@@ -99,7 +100,7 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 			voteTimer.Reset(500 * time.Millisecond)
 		case <-ob.failTimer.C:
 			ob.Lock()
-			if len(ob.fs.peerHash) > 0 && ob.round != nil && ob.round.RoundHash.Equal(ob.nextRoundHash()) {
+			if len(ob.fs.peerHash) > 0 && ob.roundState != RoundVoteState {
 				log.Println(ob.kn.Provider().Height(), "Fail State", ob.roundState, len(ob.adjustFormulatorMap()), len(ob.fs.peerHash))
 				if ob.round != nil && ob.round.MinRoundVoteAck != nil {
 					addr := ob.round.MinRoundVoteAck.Formulator
@@ -114,6 +115,7 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 				ob.sendRoundVote()
 			}
 			ob.Unlock()
+			ob.failTimer.Reset(5 * time.Second)
 		}
 	}
 }
