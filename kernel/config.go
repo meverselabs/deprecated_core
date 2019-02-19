@@ -9,6 +9,6 @@ import (
 // Config is the configuration of the kernel
 type Config struct {
 	ChainCoord       *common.Coordinate
-	ObserverKeys     []common.PublicHash
+	ObserverKeyMap   map[common.PublicHash]bool
 	GenTimeThreshold time.Duration
 }

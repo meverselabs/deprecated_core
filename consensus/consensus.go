@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"bytes"
+	"sort"
 	"sync"
 
 	"git.fleta.io/fleta/common"
@@ -15,7 +16,9 @@ import (
 // Consensus supports the proof of formulation algorithm
 type Consensus struct {
 	sync.Mutex
-	rankTable              *RankTable
+	height                 uint64
+	candidates             []*Rank
+	rankMap                map[common.Address]*Rank
 	ObserverKeyMap         map[common.PublicHash]bool
 	FormulationAccountType account.Type
 }
@@ -23,7 +26,8 @@ type Consensus struct {
 // NewConsensus returns a Consensus
 func NewConsensus(ObserverKeyMap map[common.PublicHash]bool, FormulationAccountType account.Type) *Consensus {
 	cs := &Consensus{
-		rankTable:              NewRankTable(),
+		candidates:             []*Rank{},
+		rankMap:                map[common.Address]*Rank{},
 		ObserverKeyMap:         ObserverKeyMap,
 		FormulationAccountType: FormulationAccountType,
 	}
@@ -32,7 +36,10 @@ func NewConsensus(ObserverKeyMap map[common.PublicHash]bool, FormulationAccountT
 
 // CandidateCount returns a count of the rank table
 func (cs *Consensus) CandidateCount() int {
-	return cs.rankTable.CandidateCount()
+	cs.Lock()
+	defer cs.Unlock()
+
+	return len(cs.candidates)
 }
 
 // TopRank returns the top rank by Timeoutcount
@@ -40,28 +47,21 @@ func (cs *Consensus) TopRank(TimeoutCount int) (*Rank, error) {
 	cs.Lock()
 	defer cs.Unlock()
 
-	members := cs.rankTable.Candidates(TimeoutCount + 1)
-	if members == nil {
+	if TimeoutCount >= len(cs.candidates) {
 		return nil, ErrInsufficientCandidateCount
 	}
-	Top := members[TimeoutCount]
-	return Top, nil
+	return cs.candidates[TimeoutCount].Clone(), nil
 }
 
-// TopRankInMap returns the top rank by Timeoutcount
-func (cs *Consensus) TopRankInMap(TimeoutCount int, FormulatorMap map[common.Address]bool) (*Rank, int, error) {
+// TopRankInMap returns the top rank
+func (cs *Consensus) TopRankInMap(FormulatorMap map[common.Address]bool) (*Rank, int, error) {
 	cs.Lock()
 	defer cs.Unlock()
 
 	if len(FormulatorMap) == 0 {
 		return nil, 0, ErrInsufficientCandidateCount
 	}
-	members := cs.rankTable.Candidates(cs.rankTable.CandidateCount())
-	if members == nil {
-		return nil, 0, ErrInsufficientCandidateCount
-	}
-	for i := TimeoutCount; i < len(members); i++ {
-		r := members[i]
+	for i, r := range cs.candidates {
 		if FormulatorMap[r.Address] {
 			return r, i, nil
 		}
@@ -74,7 +74,7 @@ func (cs *Consensus) IsFormulator(Formulator common.Address, Publichash common.P
 	cs.Lock()
 	defer cs.Unlock()
 
-	rank := cs.rankTable.Rank(Formulator)
+	rank := cs.rankMap[Formulator]
 	if rank == nil {
 		return false
 	}
@@ -84,47 +84,24 @@ func (cs *Consensus) IsFormulator(Formulator common.Address, Publichash common.P
 	return true
 }
 
-// ValidateObserverSignatures validates observer signatures with the signed hash
-func (cs *Consensus) ValidateObserverSignatures(signedHash hash.Hash256, sigs []common.Signature) error {
-	if len(sigs) != len(cs.ObserverKeyMap)/2+1 {
-		return ErrInsufficientObserverSignature
-	}
-	sigMap := map[common.PublicHash]bool{}
-	for _, sig := range sigs {
-		pubkey, err := common.RecoverPubkey(signedHash, sig)
-		if err != nil {
-			return err
-		}
-		pubhash := common.NewPublicHash(pubkey)
-		if !cs.ObserverKeyMap[pubhash] {
-			return ErrInvalidObserverSignature
-		}
-		sigMap[pubhash] = true
-	}
-	if len(sigMap) != len(sigs) {
-		return ErrDuplicatedObserverSignature
-	}
-	return nil
-}
-
 // ApplyGenesis initialize the consensus using the genesis context data
 func (cs *Consensus) ApplyGenesis(ctd *data.ContextData) ([]byte, error) {
 	cs.Lock()
 	defer cs.Unlock()
 
-	phase := cs.rankTable.LargestPhase() + 1
+	phase := cs.candidates[len(cs.candidates)-1].phase + 1
 	for _, a := range ctd.CreatedAccountMap {
 		if a.Type() == cs.FormulationAccountType {
 			acc := a.(*FormulationAccount)
 			addr := acc.Address()
-			if err := cs.rankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
+			if err := cs.addRank(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
 				return nil, err
 			}
 		}
 	}
 	for _, acc := range ctd.DeletedAccountMap {
 		if acc.Type() == cs.FormulationAccountType {
-			cs.rankTable.Remove(acc.Address())
+			cs.removeRank(acc.Address())
 		}
 	}
 	SaveData, err := cs.buildSaveData()
@@ -139,22 +116,22 @@ func (cs *Consensus) ProcessContext(ctd *data.ContextData, HeaderHash hash.Hash2
 	cs.Lock()
 	defer cs.Unlock()
 
-	if err := cs.rankTable.ForwardCandidates(int(bh.TimeoutCount), HeaderHash); err != nil {
+	if err := cs.forwardCandidates(int(bh.TimeoutCount), HeaderHash); err != nil {
 		return nil, err
 	}
-	phase := cs.rankTable.LargestPhase() + 1
+	phase := cs.candidates[len(cs.candidates)-1].phase + 1
 	for _, a := range ctd.CreatedAccountMap {
 		if a.Type() == cs.FormulationAccountType {
 			acc := a.(*FormulationAccount)
 			addr := acc.Address()
-			if err := cs.rankTable.Add(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
+			if err := cs.addRank(NewRank(addr, acc.KeyHash, phase, hash.DoubleHash(addr[:]))); err != nil {
 				return nil, err
 			}
 		}
 	}
 	for _, acc := range ctd.DeletedAccountMap {
 		if acc.Type() == cs.FormulationAccountType {
-			cs.rankTable.Remove(acc.Address())
+			cs.removeRank(acc.Address())
 		}
 	}
 
@@ -165,29 +142,22 @@ func (cs *Consensus) ProcessContext(ctd *data.ContextData, HeaderHash hash.Hash2
 	return SaveData, nil
 }
 
-// IsMinable checks a mining chance of the address with the timeout count
-func (cs *Consensus) IsMinable(addr common.Address, TimeoutCount uint32) (bool, error) {
-	cs.Lock()
-	defer cs.Unlock()
-
-	members := cs.rankTable.Candidates(int(TimeoutCount) + 1)
-	if len(members) == 0 {
-		return false, ErrInsufficientCandidateCount
-	}
-	return members[TimeoutCount].Address.Equal(addr), nil
-}
-
 func (cs *Consensus) buildSaveData() ([]byte, error) {
 	SaveData := []byte{}
 	{
 		var buffer bytes.Buffer
-		if _, err := cs.rankTable.WriteTo(&buffer); err != nil {
+		if _, err := util.WriteUint64(&buffer, cs.height); err != nil {
 			return nil, err
 		}
-		SaveData = append(SaveData, buffer.Bytes()...)
-	}
-	{
-		var buffer bytes.Buffer
+		if _, err := util.WriteUint32(&buffer, uint32(len(cs.candidates))); err != nil {
+			return nil, err
+		} else {
+			for _, s := range cs.candidates {
+				if _, err := s.WriteTo(&buffer); err != nil {
+					return nil, err
+				}
+			}
+		}
 		if _, err := util.WriteUint8(&buffer, uint8(len(cs.ObserverKeyMap))); err != nil {
 			return nil, err
 		}
@@ -207,8 +177,25 @@ func (cs *Consensus) LoadFromSaveData(SaveData []byte) error {
 	defer cs.Unlock()
 
 	r := bytes.NewReader(SaveData)
-	if _, err := cs.rankTable.ReadFrom(r); err != nil {
+	if v, _, err := util.ReadUint64(r); err != nil {
 		return err
+	} else {
+		cs.height = v
+	}
+	if Len, _, err := util.ReadUint32(r); err != nil {
+		return err
+	} else {
+		cs.candidates = make([]*Rank, 0, Len)
+		cs.rankMap = map[common.Address]*Rank{}
+		for i := 0; i < int(Len); i++ {
+			s := new(Rank)
+			if _, err := s.ReadFrom(r); err != nil {
+				return err
+			} else {
+				cs.candidates = append(cs.candidates, s)
+				cs.rankMap[s.Address] = s
+			}
+		}
 	}
 	ObserverKeyMap := map[common.PublicHash]bool{}
 	if Len, _, err := util.ReadUint8(r); err != nil {
@@ -224,4 +211,70 @@ func (cs *Consensus) LoadFromSaveData(SaveData []byte) error {
 	}
 	cs.ObserverKeyMap = ObserverKeyMap
 	return nil
+}
+
+func (cs *Consensus) addRank(s *Rank) error {
+	if len(cs.candidates) > 0 {
+		if s.Phase() < cs.candidates[0].Phase() {
+			return ErrInvalidPhase
+		}
+	}
+	if cs.rankMap[s.Address] != nil {
+		return ErrExistAddress
+	}
+	cs.candidates = InsertRankToList(cs.candidates, s)
+	cs.rankMap[s.Address] = s
+	return nil
+}
+
+func (cs *Consensus) removeRank(addr common.Address) {
+	if _, has := cs.rankMap[addr]; has {
+		delete(cs.rankMap, addr)
+		candidates := make([]*Rank, 0, len(cs.candidates))
+		for _, s := range cs.candidates {
+			if !s.Address.Equal(addr) {
+				candidates = append(candidates, s)
+			}
+		}
+	}
+}
+
+func (cs *Consensus) forwardCandidates(TimeoutCount int, LastTableAppendHash hash.Hash256) error {
+	if TimeoutCount >= len(cs.candidates) {
+		return ErrExceedCandidateCount
+	}
+
+	// increase phase
+	for i := 0; i < TimeoutCount; i++ {
+		m := cs.candidates[0]
+		m.SetPhase(m.Phase() + 1)
+		idx := sort.Search(len(cs.candidates)-1, func(i int) bool {
+			return m.Less(cs.candidates[i+1])
+		})
+		copy(cs.candidates, cs.candidates[1:idx+1])
+		cs.candidates[idx] = m
+	}
+
+	// update top phase and hashSpace
+	top := cs.candidates[0]
+	top.Set(top.Phase()+1, LastTableAppendHash)
+	idx := sort.Search(len(cs.candidates)-1, func(i int) bool {
+		return top.Less(cs.candidates[i+1])
+	})
+	copy(cs.candidates, cs.candidates[1:idx+1])
+	cs.candidates[idx] = top
+
+	cs.height++
+	return nil
+}
+
+// InsertRankToList inserts the rank by the score to the rank list
+func InsertRankToList(ranks []*Rank, s *Rank) []*Rank {
+	idx := sort.Search(len(ranks), func(i int) bool {
+		return s.Less(ranks[i])
+	})
+	ranks = append(ranks, s)
+	copy(ranks[idx+1:], ranks[idx:])
+	ranks[idx] = s
+	return ranks
 }

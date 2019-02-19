@@ -51,26 +51,82 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		return nil, err
 	}
 
-	ObserverKeyMap := map[common.PublicHash]bool{}
-	for _, pubhash := range Config.ObserverKeys {
-		ObserverKeyMap[pubhash] = true
-	}
-
 	kn := &Kernel{
 		Config:             Config,
 		store:              st,
 		genesisContextData: genesisContextData,
 		rewarder:           rewarder,
-		consensus:          consensus.NewConsensus(ObserverKeyMap, FormulationAccountType),
+		consensus:          consensus.NewConsensus(Config.ObserverKeyMap, FormulationAccountType),
 		txPool:             txpool.NewTransactionPool(),
 		manager:            message.NewManager(),
 		eventHandlers:      []EventHandler{},
 	}
 	kn.manager.SetCreator(message_def.TransactionMessageType, kn.messageCreator)
+
+	if bs := kn.store.CustomData("chaincoord"); bs != nil {
+		var coord common.Coordinate
+		if _, err := coord.ReadFrom(bytes.NewReader(bs)); err != nil {
+			return nil, err
+		}
+		if !coord.Equal(kn.store.ChainCoord()) {
+			return nil, ErrInvalidChainCoord
+		}
+	} else {
+		var buffer bytes.Buffer
+		if _, err := kn.store.ChainCoord().WriteTo(&buffer); err != nil {
+			return nil, err
+		}
+		if err := kn.store.SetCustomData("chaincoord", buffer.Bytes()); err != nil {
+			return nil, err
+		}
+	}
+
+	var buffer bytes.Buffer
+	if _, err := kn.Config.ChainCoord.WriteTo(&buffer); err != nil {
+		return nil, err
+	}
+	keys := []string{}
+	for pubhash := range Config.ObserverKeyMap {
+		keys = append(keys, pubhash.String())
+	}
+	sort.Strings(keys)
+	for _, v := range keys {
+		buffer.WriteString(v)
+		buffer.WriteString(":")
+	}
+	GenesisHash := hash.TwoHash(hash.DoubleHash(buffer.Bytes()), kn.genesisContextData.Hash())
+	if h, err := kn.store.Hash(0); err != nil {
+		if err != db.ErrNotExistKey {
+			return nil, err
+		} else {
+			CustomData := map[string][]byte{}
+			if SaveData, err := kn.consensus.ApplyGenesis(kn.genesisContextData); err != nil {
+				return nil, err
+			} else {
+				CustomData["consensus"] = SaveData
+			}
+			if err := kn.store.StoreGenesis(GenesisHash, kn.genesisContextData, CustomData); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		if !GenesisHash.Equal(h) {
+			return nil, chain.ErrInvalidGenesisHash
+		}
+		if SaveData := kn.store.CustomData("consensus"); SaveData == nil {
+			return nil, ErrNotExistConsensusSaveData
+		} else if err := kn.consensus.LoadFromSaveData(SaveData); err != nil {
+			return nil, err
+		}
+	}
+	kn.genesisContextData = nil // to reduce memory usagse
+
+	log.Println("Kernel", "Loaded with height of", kn.Provider().Height(), kn.Provider().PrevHash())
+
 	return kn, nil
 }
 
-// OnClose terminates and cleans the kernel
+// Close terminates and cleans the kernel
 func (kn *Kernel) Close() {
 	kn.closeLock.Lock()
 	defer kn.closeLock.Unlock()
@@ -82,7 +138,7 @@ func (kn *Kernel) Close() {
 	kn.store.Close()
 }
 
-// AddEventHandler adds a event handler to the vote log
+// AddEventHandler adds a event handler to the kernel
 func (kn *Kernel) AddEventHandler(eh EventHandler) {
 	kn.Lock()
 	defer kn.Unlock()
@@ -133,80 +189,6 @@ func (kn *Kernel) Block(height uint32) (*block.Block, error) {
 	return b, nil
 }
 
-// Init is called when the chain is going to init
-func (kn *Kernel) Init() error {
-	kn.closeLock.RLock()
-	defer kn.closeLock.RUnlock()
-	if kn.isClose {
-		return ErrKernelClosed
-	}
-
-	kn.Lock()
-	defer kn.Unlock()
-
-	if bs := kn.store.CustomData("chaincoord"); bs != nil {
-		var coord common.Coordinate
-		if _, err := coord.ReadFrom(bytes.NewReader(bs)); err != nil {
-			return err
-		}
-		if !coord.Equal(kn.store.ChainCoord()) {
-			return ErrInvalidChainCoord
-		}
-	} else {
-		var buffer bytes.Buffer
-		if _, err := kn.store.ChainCoord().WriteTo(&buffer); err != nil {
-			return err
-		}
-		if err := kn.store.SetCustomData("chaincoord", buffer.Bytes()); err != nil {
-			return err
-		}
-	}
-
-	var buffer bytes.Buffer
-	if _, err := kn.Config.ChainCoord.WriteTo(&buffer); err != nil {
-		return err
-	}
-	keys := []string{}
-	for _, pubhash := range kn.Config.ObserverKeys {
-		keys = append(keys, pubhash.String())
-	}
-	sort.Strings(keys)
-	for _, v := range keys {
-		buffer.WriteString(v)
-		buffer.WriteString(":")
-	}
-	GenesisHash := hash.TwoHash(hash.DoubleHash(buffer.Bytes()), kn.genesisContextData.Hash())
-	if h, err := kn.store.Hash(0); err != nil {
-		if err != db.ErrNotExistKey {
-			return err
-		} else {
-			CustomData := map[string][]byte{}
-			if SaveData, err := kn.consensus.ApplyGenesis(kn.genesisContextData); err != nil {
-				return err
-			} else {
-				CustomData["consensus"] = SaveData
-			}
-			if err := kn.store.StoreGenesis(GenesisHash, kn.genesisContextData, CustomData); err != nil {
-				return err
-			}
-		}
-	} else {
-		if !GenesisHash.Equal(h) {
-			return chain.ErrInvalidGenesisHash
-		}
-		if SaveData := kn.store.CustomData("consensus"); SaveData == nil {
-			return ErrNotExistConsensusSaveData
-		} else if err := kn.consensus.LoadFromSaveData(SaveData); err != nil {
-			return err
-		}
-	}
-	kn.genesisContextData = nil // to reduce memory usagse
-
-	log.Println("Kernel", "Init with height of", kn.Provider().Height(), kn.Provider().PrevHash())
-
-	return nil
-}
-
 // CandidateCount returns a count of the rank table
 func (kn *Kernel) CandidateCount() int {
 	return kn.consensus.CandidateCount()
@@ -218,8 +200,8 @@ func (kn *Kernel) TopRank(TimeoutCount int) (*consensus.Rank, error) {
 }
 
 // TopRankInMap returns the top rank by the given timeout count in the given map
-func (kn *Kernel) TopRankInMap(TimeoutCount int, FormulatorMap map[common.Address]bool) (*consensus.Rank, int, error) {
-	return kn.consensus.TopRankInMap(TimeoutCount, FormulatorMap)
+func (kn *Kernel) TopRankInMap(FormulatorMap map[common.Address]bool) (*consensus.Rank, int, error) {
+	return kn.consensus.TopRankInMap(FormulatorMap)
 }
 
 // IsFormulator returns the given information is correct or not
@@ -240,7 +222,7 @@ func (kn *Kernel) Screening(cd *chain.Data) error {
 	if !bh.ChainCoord.Equal(kn.Config.ChainCoord) {
 		return ErrInvalidChainCoord
 	}
-	if len(cd.Signatures) != len(kn.Config.ObserverKeys)/2+2 {
+	if len(cd.Signatures) != len(kn.Config.ObserverKeyMap)/2+2 {
 		return ErrInvalidSignatureCount
 	}
 	s := &block.ObserverSigned{
@@ -250,7 +232,7 @@ func (kn *Kernel) Screening(cd *chain.Data) error {
 		},
 		ObserverSignatures: cd.Signatures[1:],
 	}
-	if err := kn.consensus.ValidateObserverSignatures(s.Signed.Hash(), s.ObserverSignatures); err != nil {
+	if err := common.ValidateSignaturesMajority(s.Signed.Hash(), s.ObserverSignatures, kn.Config.ObserverKeyMap); err != nil {
 		return err
 	}
 	return nil
@@ -264,10 +246,7 @@ func (kn *Kernel) CheckFork(ch chain.Header, sigs []common.Signature) error {
 		return ErrKernelClosed
 	}
 
-	kn.Lock()
-	defer kn.Unlock()
-
-	if len(sigs) != len(kn.Config.ObserverKeys)/2+2 {
+	if len(sigs) != len(kn.Config.ObserverKeyMap)/2+2 {
 		return nil
 	}
 	s := &block.ObserverSigned{
@@ -277,7 +256,7 @@ func (kn *Kernel) CheckFork(ch chain.Header, sigs []common.Signature) error {
 		},
 		ObserverSignatures: sigs[1:],
 	}
-	if err := kn.consensus.ValidateObserverSignatures(s.Signed.Hash(), s.ObserverSignatures); err != nil {
+	if err := common.ValidateSignaturesMajority(s.Signed.Hash(), s.ObserverSignatures, kn.Config.ObserverKeyMap); err != nil {
 		return nil
 	}
 	return chain.ErrForkDetected
@@ -300,7 +279,7 @@ func (kn *Kernel) Validate(b *block.Block, GeneratorSignature common.Signature) 
 		return nil, chain.ErrInvalidHeight
 	}
 
-	if height == 0 {
+	if b.Header.Height() == 1 {
 		if b.Header.Version() <= 0 {
 			return nil, chain.ErrInvalidVersion
 		}
@@ -336,7 +315,7 @@ func (kn *Kernel) Validate(b *block.Block, GeneratorSignature common.Signature) 
 	if !Top.PublicHash.Equal(pubhash) {
 		return nil, ErrInvalidTopSignature
 	}
-	ctx, err := kn.ContextByBlock(b)
+	ctx, err := kn.contextByBlock(b)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +341,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	if !b.Header.ChainCoord.Equal(kn.Config.ChainCoord) {
 		return ErrInvalidChainCoord
 	}
-	if len(cd.Signatures) != len(kn.Config.ObserverKeys)/2+2 {
+	if len(cd.Signatures) != len(kn.Config.ObserverKeyMap)/2+2 {
 		return ErrInvalidSignatureCount
 	}
 	s := &block.ObserverSigned{
@@ -386,12 +365,12 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	if !Top.PublicHash.Equal(pubhash) {
 		return ErrInvalidTopSignature
 	}
-	if err := kn.consensus.ValidateObserverSignatures(s.Signed.Hash(), s.ObserverSignatures); err != nil {
+	if err := common.ValidateSignaturesMajority(s.Signed.Hash(), s.ObserverSignatures, kn.Config.ObserverKeyMap); err != nil {
 		return err
 	}
 	ctx, is := UserData.(*data.Context)
 	if !is {
-		v, err := kn.ContextByBlock(b)
+		v, err := kn.contextByBlock(b)
 		if err != nil {
 			return err
 		}
@@ -467,14 +446,7 @@ func (kn *Kernel) HasTransaction(TxHash hash.Hash256) bool {
 	return kn.txPool.IsExist(TxHash)
 }
 
-// ContextByBlock creates context using the target block
-func (kn *Kernel) ContextByBlock(b *block.Block) (*data.Context, error) {
-	kn.closeLock.RLock()
-	defer kn.closeLock.RUnlock()
-	if kn.isClose {
-		return nil, ErrKernelClosed
-	}
-
+func (kn *Kernel) contextByBlock(b *block.Block) (*data.Context, error) {
 	if err := kn.validateBlockBody(b); err != nil {
 		return nil, err
 	}
