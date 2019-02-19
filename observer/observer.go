@@ -3,6 +3,7 @@ package observer
 import (
 	"bytes"
 	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -99,13 +100,13 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 		case <-ob.failTimer.C:
 			ob.Lock()
 			if len(ob.fs.peerHash) > 0 && ob.round != nil && ob.round.RoundHash.Equal(ob.nextRoundHash()) {
-				//log.Println(ob.Config.Key.PublicKey().String(), "Fail State", ob.roundState, ob.kn.Provider().Height(), len(ob.adjustFormulatorMap()), len(ob.fs.peerHash))
+				log.Println(ob.kn.Provider().Height(), "Fail State", ob.roundState, len(ob.adjustFormulatorMap()), len(ob.fs.peerHash))
 				if ob.round != nil && ob.round.MinRoundVoteAck != nil {
 					addr := ob.round.MinRoundVoteAck.Formulator
 					ob.ignoreMap[addr] = time.Now().UnixNano() + int64(30*time.Second)
 				}
 				ob.roundState = RoundVoteState
-				//log.Println(ob.Config.Key.PublicKey().String(), "Change State", RoundVoteState)
+				log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteState)
 				ob.roundVoteMap = map[common.PublicHash]*RoundVote{}
 				ob.round = nil
 				ob.roundFirstTime = 0
@@ -119,7 +120,6 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 
 // OnFormulatorDisconnected is called after a formulator disconnected
 func (ob *Observer) OnFormulatorDisconnected(p *FormulatorPeer) {
-	//log.Println("OnFormulatorDisconnected", ob.round != nil, ob.round != nil && ob.round.MinRoundVoteAck != nil)
 }
 
 // OnFormulatorConnected is called after a new formulator connected
@@ -192,7 +192,7 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 				}
 			} else {
 				if err := ob.handleMessage(m); err != nil {
-					//log.Println(ob.Config.Key.PublicKey().String(), message.NameOfType(t), err)
+					//log.Println(ob.kn.Provider().Height(), message.NameOfType(t), err)
 					return nil
 				}
 				ob.ms.BroadcastMessage(m)
@@ -205,7 +205,7 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 func (ob *Observer) handleMessage(m message.Message) error {
 	switch msg := m.(type) {
 	case *RoundVoteMessage:
-		//log.Println(ob.Config.Key.PublicKey().String(), ob.roundState, ob.kn.Provider().Height(), msg.RoundVote.RoundHash, "RoundVoteMessage")
+		//log.Println(ob.kn.Provider().Height(), ob.roundState, ob.kn.Provider().Height(), msg.RoundVote.RoundHash, "RoundVoteMessage")
 		if ob.round != nil {
 			return ErrInvalidRoundState
 		}
@@ -250,7 +250,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 				return ErrInvalidVoteSignature
 			}
 			if old, has := ob.roundVoteMap[pubhash]; has {
-				if !old.Formulator.Equal(emptyAddr) {
+				if !old.Formulator.Equal(emptyAddr) || msg.RoundVote.Formulator.Equal(emptyAddr) {
 					return ErrAlreadyVoted
 				}
 			}
@@ -273,7 +273,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			}
 			ob.roundState = RoundVoteAckState
 			ob.round = NewVoteRound(MinRoundVote.RoundHash)
-			//log.Println(ob.Config.Key.PublicKey().String(), "Change State", RoundVoteAckState)
+			log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteAckState)
 
 			if ob.roundFirstTime == 0 {
 				ob.roundFirstTime = uint64(time.Now().UnixNano())
@@ -304,7 +304,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 					err := ob.handleMessage(msg)
 					ob.Unlock()
 					if err != nil {
-						//log.Println(ob.Config.Key.PublicKey().String(), err)
+						//log.Println(ob.kn.Provider().Height(), err)
 						return
 					}
 					ob.ms.BroadcastMessage(msg)
@@ -313,7 +313,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 		}
 		return nil
 	case *RoundVoteAckMessage:
-		//log.Println(ob.Config.Key.PublicKey().String(), ob.roundState, ob.kn.Provider().Height(), "RoundVoteAckMessage")
+		//log.Println(ob.kn.Provider().Height(), ob.roundState, ob.kn.Provider().Height(), "RoundVoteAckMessage")
 		if ob.round == nil {
 			return ErrInvalidRoundState
 		}
@@ -365,7 +365,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 
 		if MinRoundVoteAck != nil {
 			ob.roundState = BlockVoteState
-			//log.Println(ob.Config.Key.PublicKey().String(), "Change State", BlockVoteState)
+			log.Println(ob.kn.Provider().Height(), "Change State", BlockVoteState)
 			ob.round.MinRoundVoteAck = MinRoundVoteAck
 
 			cp := ob.kn.Provider()
@@ -385,7 +385,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 					err := ob.handleMessage(msg)
 					ob.Unlock()
 					if err != nil {
-						//log.Println(ob.Config.Key.PublicKey().String(), err)
+						//log.Println(ob.kn.Provider().Height(), err)
 						return
 					}
 					ob.ms.BroadcastMessage(msg)
@@ -397,7 +397,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 					err := ob.handleMessage(msg)
 					ob.Unlock()
 					if err != nil {
-						//log.Println(ob.Config.Key.PublicKey().String(), err)
+						//log.Println(ob.kn.Provider().Height(), err)
 						return
 					}
 					ob.ms.BroadcastMessage(msg)
@@ -406,7 +406,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 		}
 		return nil
 	case *BlockVoteMessage:
-		//log.Println(ob.Config.Key.PublicKey().String(), ob.roundState, ob.kn.Provider().Height(), "BlockVoteMessage")
+		//log.Println(ob.kn.Provider().Height(), ob.roundState, ob.kn.Provider().Height(), "BlockVoteMessage")
 		if ob.round == nil {
 			return ErrInvalidRoundState
 		}
@@ -509,7 +509,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			ob.fs.SendTo(ob.round.MinRoundVoteAck.Formulator, nm)
 
 			ob.roundState = RoundVoteState
-			//log.Println(ob.Config.Key.PublicKey().String(), "Change State", RoundVoteState)
+			log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteState)
 			ob.roundVoteMap = map[common.PublicHash]*RoundVote{}
 			ob.round = nil
 
@@ -528,11 +528,11 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			if err := ob.sendRoundVote(); err != nil {
 				return err
 			}
-			//log.Println(ob.Config.Key.PublicKey().String(), "BlockProgressed", ob.kn.Provider().Height())
+			//log.Println(ob.kn.Provider().Height(), "BlockProgressed", ob.kn.Provider().Height())
 		}
 		return nil
 	case *message_def.BlockGenMessage:
-		//log.Println(ob.Config.Key.PublicKey().String(), ob.roundState, ob.kn.Provider().Height(), "BlockGenMessage")
+		//log.Println(ob.kn.Provider().Height(), ob.roundState, ob.kn.Provider().Height(), "BlockGenMessage")
 		if ob.round == nil {
 			return ErrInvalidRoundState
 		}
@@ -644,7 +644,7 @@ func (ob *Observer) OnProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.O
 				}
 				if b.Header.Height() >= AnyRoundVote.TargetHeight {
 					ob.roundState = RoundVoteState
-					//log.Println(ob.Config.Key.PublicKey().String(), "Change State", RoundVoteState)
+					log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteState)
 					ob.roundVoteMap = map[common.PublicHash]*RoundVote{}
 					ob.round = nil
 					ob.sendRoundVote()
@@ -702,7 +702,7 @@ func (ob *Observer) sendRoundVote() error {
 		})
 	}
 
-	//log.Println(ob.Config.Key.PublicKey().String(), "Send Round Vote", nm.RoundVote.Formulator)
+	//log.Println(ob.kn.Provider().Height(), "SendRoundVote", nm.RoundVote.Formulator, nm.RoundVote.RoundHash)
 	ob.failTimer.Reset(5 * time.Second)
 
 	if sig, err := ob.Config.Key.Sign(nm.RoundVote.Hash()); err != nil {

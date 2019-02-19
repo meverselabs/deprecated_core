@@ -298,7 +298,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 		fr.tryRequestNext()
 		return nil
 	case *chain.StatusMessage:
-		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.DataMessage")
+		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.StatusMessage")
 		fr.Lock()
 		if status, has := fr.statusMap[p.ID()]; has {
 			if status.Height < msg.Height {
