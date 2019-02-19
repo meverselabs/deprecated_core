@@ -17,45 +17,75 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-type FormulatorMesh struct {
+// Mesh is a connection mesh of the formulator
+type Mesh struct {
 	sync.Mutex
 	Key           key.Key
 	Formulator    common.Address
 	NetAddressMap map[common.PublicHash]string
-	peerHash      map[string]*FormulatorPeer
 	handler       mesh.EventHandler
+	peerHash      map[string]*Peer
+	closeLock     sync.RWMutex
+	isClose       bool
 }
 
-func NewFormulatorMesh(Key key.Key, Formulator common.Address, NetAddressMap map[common.PublicHash]string, handler mesh.EventHandler) *FormulatorMesh {
-	ms := &FormulatorMesh{
+// NewMesh returns a Mesh
+func NewMesh(Key key.Key, Formulator common.Address, NetAddressMap map[common.PublicHash]string, handler mesh.EventHandler) *Mesh {
+	ms := &Mesh{
 		Key:           Key,
 		Formulator:    Formulator,
 		NetAddressMap: NetAddressMap,
-		peerHash:      map[string]*FormulatorPeer{},
 		handler:       handler,
+		peerHash:      map[string]*Peer{},
 	}
 	return ms
 }
 
-func (ms *FormulatorMesh) Add(netAddr string, doForce bool) {
-	log.Println("FormulatorMesh", "Add", netAddr, doForce)
+// Close terminates the mesh
+func (ms *Mesh) Close() {
+	ms.closeLock.Lock()
+	defer ms.closeLock.Unlock()
+
+	ms.Lock()
+	defer ms.Unlock()
+
+	ms.isClose = true
+	for _, p := range ms.peerHash {
+		p.conn.Close()
+		ms.handler.OnDisconnected(p)
+	}
+	ms.peerHash = map[string]*Peer{}
 }
-func (ms *FormulatorMesh) Remove(netAddr string) {
-	log.Println("FormulatorMesh", "Remove", netAddr)
+
+// Add is not implemented and not used
+func (ms *Mesh) Add(netAddr string, doForce bool) {
 }
-func (ms *FormulatorMesh) RemoveByID(ID string) {
-	log.Println("FormulatorMesh", "RemoveByID", ID)
+
+// Remove is not implemented and not used
+func (ms *Mesh) Remove(netAddr string) {
 }
-func (ms *FormulatorMesh) Ban(netAddr string, Seconds uint32) {
-	log.Println("FormulatorMesh", "Ban", netAddr, Seconds)
+
+// RemoveByID is not implemented and not used
+func (ms *Mesh) RemoveByID(ID string) {
 }
-func (ms *FormulatorMesh) BanByID(ID string, Seconds uint32) {
-	log.Println("FormulatorMesh", "BanByID", ID, Seconds)
+
+// Ban is not implemented and not used
+func (ms *Mesh) Ban(netAddr string, Seconds uint32) {
 }
-func (ms *FormulatorMesh) Unban(netAddr string) {
-	log.Println("FormulatorMesh", "Unban", netAddr)
+
+// BanByID is not implemented and not used
+func (ms *Mesh) BanByID(ID string, Seconds uint32) {
 }
-func (ms *FormulatorMesh) Peers() []mesh.Peer {
+
+// Unban is not implemented and not used
+func (ms *Mesh) Unban(netAddr string) {
+}
+
+// Peers returns peers of the mesh
+func (ms *Mesh) Peers() []mesh.Peer {
+	ms.Lock()
+	defer ms.Unlock()
+
 	peers := []mesh.Peer{}
 	for _, p := range ms.peerHash {
 		peers = append(peers, p)
@@ -63,13 +93,18 @@ func (ms *FormulatorMesh) Peers() []mesh.Peer {
 	return peers
 }
 
-func (ms *FormulatorMesh) Run() error {
+// Run runs a mesh network
+func (ms *Mesh) Run() error {
+	var wg sync.WaitGroup
 	ObPubHash := common.NewPublicHash(ms.Key.PublicKey())
 	for PubHash, v := range ms.NetAddressMap {
 		if !PubHash.Equal(ObPubHash) {
+			wg.Add(1)
 			go func(pubhash common.PublicHash, NetAddr string) {
+				defer wg.Done()
+
 				time.Sleep(1 * time.Second)
-				for {
+				for !ms.isClose {
 					ms.Lock()
 					_, has := ms.peerHash[pubhash.String()]
 					ms.Unlock()
@@ -83,18 +118,21 @@ func (ms *FormulatorMesh) Run() error {
 			}(PubHash, v)
 		}
 	}
-	for {
-		time.Sleep(time.Hour) //TEMP
-	}
+	wg.Wait()
 	return nil
 }
 
-func (ms *FormulatorMesh) removePeer(p *FormulatorPeer) {
+// RemovePeer removes peers from the mesh
+func (ms *Mesh) RemovePeer(p *Peer) {
+	ms.Lock()
 	delete(ms.peerHash, p.ID())
+	ms.Unlock()
+
 	p.conn.Close()
+	ms.handler.OnDisconnected(p)
 }
 
-func (ms *FormulatorMesh) client(Address string, TargetPubHash common.PublicHash) error {
+func (ms *Mesh) client(Address string, TargetPubHash common.PublicHash) error {
 	conn, err := net.DialTimeout("tcp", Address, 10*time.Second)
 	if err != nil {
 		return err
@@ -117,37 +155,30 @@ func (ms *FormulatorMesh) client(Address string, TargetPubHash common.PublicHash
 		return ErrNotAllowedPublicHash
 	}
 
+	p := NewPeer(conn, pubhash)
+
 	ms.Lock()
-	p, has := ms.peerHash[pubhash.String()]
-	if !has {
-		p = NewFormulatorPeer(conn, pubhash)
-		ms.peerHash[pubhash.String()] = p
-
-		defer func() {
-			ms.Lock()
-			defer ms.Unlock()
-
-			ms.removePeer(p)
-			ms.handler.OnClosed(p)
-		}()
-	}
+	old, has := ms.peerHash[pubhash.String()]
+	ms.peerHash[pubhash.String()] = p
 	ms.Unlock()
 
-	if !has {
-		if err := ms.handler.BeforeConnect(p); err != nil {
-			return err
-		}
-		if err := ms.handleConnection(p); err != nil {
-			return err
-		}
+	defer ms.RemovePeer(p)
+
+	if has {
+		old.conn.Close()
+		ms.handler.OnDisconnected(old)
+	}
+
+	if err := ms.handleConnection(p); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (ms *FormulatorMesh) handleConnection(p *FormulatorPeer) error {
-	log.Println(common.NewPublicHash(ms.Key.PublicKey()).String(), "Connected", p.pubhash.String())
+func (ms *Mesh) handleConnection(p *Peer) error {
+	log.Println(ms.Formulator.String(), "Recv Connection From", p.ID())
 
-	ms.handler.AfterConnect(p)
+	ms.handler.OnConnected(p)
 
 	for {
 		var t message.Type
@@ -163,7 +194,7 @@ func (ms *FormulatorMesh) handleConnection(p *FormulatorPeer) error {
 	}
 }
 
-func (ms *FormulatorMesh) recvHandshake(conn net.Conn) error {
+func (ms *Mesh) recvHandshake(conn net.Conn) error {
 	//log.Println("recvHandshake")
 	req := make([]byte, 40)
 	if _, err := util.FillBytes(conn, req); err != nil {
@@ -187,7 +218,7 @@ func (ms *FormulatorMesh) recvHandshake(conn net.Conn) error {
 	return nil
 }
 
-func (ms *FormulatorMesh) sendHandshake(conn net.Conn) (common.PublicHash, error) {
+func (ms *Mesh) sendHandshake(conn net.Conn) (common.PublicHash, error) {
 	//log.Println("sendHandshake")
 	req := make([]byte, 60)
 	if _, err := crand.Read(req[:32]); err != nil {
@@ -213,7 +244,7 @@ func (ms *FormulatorMesh) sendHandshake(conn net.Conn) (common.PublicHash, error
 }
 
 // SendTo sends a message to the target peer
-func (ms *FormulatorMesh) SendTo(id string, m message.Message) error {
+func (ms *Mesh) SendTo(id string, m message.Message) error {
 	ms.Lock()
 	p, has := ms.peerHash[id]
 	ms.Unlock()
@@ -222,15 +253,14 @@ func (ms *FormulatorMesh) SendTo(id string, m message.Message) error {
 	}
 
 	if err := p.Send(m); err != nil {
-		ms.Lock()
-		ms.removePeer(p)
-		ms.Unlock()
+		ms.RemovePeer(p)
 		return err
 	}
 	return nil
 }
 
-func (ms *FormulatorMesh) BroadcastMessage(m message.Message) error {
+// BroadcastMessage sends a message to the peers
+func (ms *Mesh) BroadcastMessage(m message.Message) error {
 	var buffer bytes.Buffer
 	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
 		return err
@@ -240,7 +270,7 @@ func (ms *FormulatorMesh) BroadcastMessage(m message.Message) error {
 	}
 	data := buffer.Bytes()
 
-	peers := []*FormulatorPeer{}
+	peers := []*Peer{}
 	ms.Lock()
 	for _, p := range ms.peerHash {
 		peers = append(peers, p)
@@ -249,9 +279,7 @@ func (ms *FormulatorMesh) BroadcastMessage(m message.Message) error {
 	for _, p := range peers {
 		if err := p.SendRaw(data); err != nil {
 			log.Println(err)
-			ms.Lock()
-			ms.removePeer(p)
-			ms.Unlock()
+			ms.RemovePeer(p)
 		}
 	}
 	return nil

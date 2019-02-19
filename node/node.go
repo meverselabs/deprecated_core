@@ -29,6 +29,8 @@ type Node struct {
 	txQueue   *queue.Queue
 	txCastMap map[string]bool
 	isRunning bool
+	closeLock sync.RWMutex
+	isClose   bool
 }
 
 // NewNode returns a Node
@@ -57,13 +59,17 @@ func NewNode(Config *Config, kn *kernel.Kernel) (*Node, error) {
 	}
 	nd.manager.SetCreator(message_def.TransactionMessageType, nd.messageCreator)
 	nd.cm.Mesh = pm
-	nd.cm.Deligator = nd
 	nd.pm.RegisterEventHandler(nd.cm)
-
-	if err := nd.cm.Init(); err != nil {
-		return nil, err
-	}
 	return nd, nil
+}
+
+// Close terminates the formulator
+func (nd *Node) Close() {
+	nd.closeLock.Lock()
+	defer nd.closeLock.Unlock()
+
+	nd.isClose = true
+	nd.kn.Close()
 }
 
 // Run runs the node
@@ -81,24 +87,24 @@ func (nd *Node) Run() {
 	go nd.cm.Run()
 
 	timer := time.NewTimer(time.Minute)
-	for {
+	for !nd.isClose {
 		select {
 		case <-timer.C:
-			nd.Lock()
 			txCastTargetMap := map[string]bool{}
+			nd.Lock()
 			for _, id := range nd.pm.ConnectedList() {
 				if !nd.txCastMap[id] {
 					txCastTargetMap[id] = true
 				}
 			}
 			nd.txCastMap = map[string]bool{}
+			nd.Unlock()
 			msgs := []*message_def.TransactionMessage{}
 			item := nd.txQueue.Pop()
 			for item != nil {
 				msgs = append(msgs, item.(*message_def.TransactionMessage))
 				item = nd.txQueue.Pop()
 			}
-			nd.Unlock()
 
 			for _, msg := range msgs {
 				if nd.kn.HasTransaction(msg.Tx.Hash()) {
@@ -118,8 +124,7 @@ func (nd *Node) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 		return err
 	}
 	if err := nd.handleMessage(p, m); err != nil {
-		//log.Println(err)
-		return nil
+		return err
 	}
 	return nil
 }
@@ -133,12 +138,10 @@ func (nd *Node) handleMessage(p mesh.Peer, m message.Message) error {
 		if err := nd.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
 			if err != kernel.ErrPastSeq {
 				return err
-			} else {
-				return nil
 			}
+			return nil
 		}
 		nd.pm.ExceptCast(p.ID(), msg)
-
 		nd.Lock()
 		for _, id := range nd.pm.ConnectedList() {
 			nd.txCastMap[id] = true

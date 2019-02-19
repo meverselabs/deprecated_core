@@ -12,7 +12,6 @@ import (
 
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/kernel"
-	"git.fleta.io/fleta/core/transaction"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
@@ -29,20 +28,23 @@ import (
 type Formulator struct {
 	sync.Mutex
 	Config         *Config
-	ms             *FormulatorMesh
+	ms             *Mesh
 	cm             *chain.Manager
 	kn             *kernel.Kernel
 	pm             peer.Manager
-	manager        *message.Manager
+	mm             *message.Manager
 	lastGenMessage *message_def.BlockGenMessage
 	lastReqMessage *message_def.BlockReqMessage
 	lastContext    *data.Context
 	txQueue        *queue.Queue
 	txCastMap      map[string]bool
 	statusMap      map[string]*chain.Status
-	requestedMap   map[uint32]bool
+	requestTimer   *chain.RequestTimer
+	requestLock    sync.RWMutex
 	isProcessing   bool
 	isRunning      bool
+	closeLock      sync.RWMutex
+	isClose        bool
 }
 
 // NewFormulator returns a Formulator
@@ -65,47 +67,32 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 		cm:           chain.NewManager(kn),
 		pm:           pm,
 		kn:           kn,
-		manager:      message.NewManager(),
+		mm:           message.NewManager(),
 		txQueue:      queue.NewQueue(),
 		txCastMap:    map[string]bool{},
 		statusMap:    map[string]*chain.Status{},
-		requestedMap: map[uint32]bool{},
+		requestTimer: chain.NewRequestTimer(nil),
 	}
-	fr.manager.SetCreator(message_def.BlockReqMessageType, fr.messageCreator)
-	fr.manager.SetCreator(message_def.BlockObSignMessageType, fr.messageCreator)
-	fr.manager.SetCreator(message_def.TransactionMessageType, fr.messageCreator)
-	fr.manager.SetCreator(chain.DataMessageType, fr.messageCreator)
-	fr.manager.SetCreator(chain.StatusMessageType, fr.messageCreator)
-	kn.AddEventHandler(fr)
+	fr.mm.SetCreator(message_def.BlockReqMessageType, fr.messageCreator)
+	fr.mm.SetCreator(message_def.BlockObSignMessageType, fr.messageCreator)
+	fr.mm.SetCreator(message_def.TransactionMessageType, fr.messageCreator)
+	fr.mm.SetCreator(chain.DataMessageType, fr.messageCreator)
+	fr.mm.SetCreator(chain.StatusMessageType, fr.messageCreator)
 
-	fr.ms = NewFormulatorMesh(Config.Key, Config.Formulator, Config.ObserverKeyMap, fr)
+	fr.ms = NewMesh(Config.Key, Config.Formulator, Config.ObserverKeyMap, fr)
 	fr.cm.Mesh = pm
-	fr.cm.Deligator = fr
 	fr.pm.RegisterEventHandler(fr.cm)
-
-	if err := fr.cm.Init(); err != nil {
-		return nil, err
-	}
 	return fr, nil
 }
 
-// NextRoundHash provides next round hash value
-func (fr *Formulator) NextRoundHash() hash.Hash256 {
-	cp := fr.kn.Provider()
-	var buffer bytes.Buffer
-	if _, err := fr.kn.ChainCoord().WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	buffer.WriteString(",")
-	PrevHash := cp.PrevHash()
-	if _, err := PrevHash.WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	buffer.WriteString(",")
-	if _, err := util.WriteUint32(&buffer, cp.Height()+1); err != nil {
-		panic(err)
-	}
-	return hash.DoubleHash(buffer.Bytes())
+// Close terminates the formulator
+func (fr *Formulator) Close() {
+	fr.closeLock.Lock()
+	defer fr.closeLock.Unlock()
+
+	fr.isClose = true
+	fr.ms.Close()
+	fr.kn.Close()
 }
 
 // Run runs the formulator
@@ -124,24 +111,25 @@ func (fr *Formulator) Run() {
 	go fr.ms.Run()
 
 	timer := time.NewTimer(time.Minute)
-	for {
+	for !fr.isClose {
 		select {
 		case <-timer.C:
-			fr.Lock()
 			txCastTargetMap := map[string]bool{}
+			fr.Lock()
 			for _, id := range fr.pm.ConnectedList() {
 				if !fr.txCastMap[id] {
 					txCastTargetMap[id] = true
 				}
 			}
 			fr.txCastMap = map[string]bool{}
+			fr.Unlock()
+
 			msgs := []*message_def.TransactionMessage{}
 			item := fr.txQueue.Pop()
 			for item != nil {
 				msgs = append(msgs, item.(*message_def.TransactionMessage))
 				item = fr.txQueue.Pop()
 			}
-			fr.Unlock()
 
 			for _, msg := range msgs {
 				if fr.kn.HasTransaction(msg.Tx.Hash()) {
@@ -155,103 +143,42 @@ func (fr *Formulator) Run() {
 	}
 }
 
-// OnClosed is called when the peer is disconnected
-func (fr *Formulator) OnClosed(p mesh.Peer) {
+// OnDisconnected is called when the peer is disconnected
+func (fr *Formulator) OnDisconnected(p mesh.Peer) {
 	fr.Lock()
-	defer fr.Unlock()
-
 	delete(fr.statusMap, p.ID())
+	fr.Unlock()
 }
 
-// BeforeConnect is called before a new peer is handled
-func (fr *Formulator) BeforeConnect(p mesh.Peer) error {
-	return nil
-}
-
-// AfterConnect is called after a new peer is connected
-func (fr *Formulator) AfterConnect(p mesh.Peer) {
+// OnConnected is called after a new peer is connected
+func (fr *Formulator) OnConnected(p mesh.Peer) {
 	fr.Lock()
-	defer fr.Unlock()
-
 	fr.statusMap[p.ID()] = &chain.Status{}
-}
-
-// OnCreateContext called when a context creation (error prevent using context)
-func (fr *Formulator) OnCreateContext(kn *kernel.Kernel, ctx *data.Context) error {
-	return nil
-}
-
-// OnProcessBlock called when processing block to the chain (error prevent processing block)
-func (fr *Formulator) OnProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
-	return nil
-}
-
-// OnPushTransaction called when pushing a transaction to the transaction pool (error prevent push transaction)
-func (fr *Formulator) OnPushTransaction(kn *kernel.Kernel, tx transaction.Transaction, sigs []common.Signature) error {
-	return nil
-}
-
-// AfterProcessBlock called when processed block to the chain
-func (fr *Formulator) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) {
-	if fr.isProcessing {
-		delete(fr.requestedMap, b.Header.Height())
-		TargetHeight := b.Header.Height() + 1
-		if !fr.requestedMap[TargetHeight] {
-			for id, status := range fr.statusMap {
-				if TargetHeight <= status.Height {
-					sm := &chain.RequestMessage{
-						Height: TargetHeight,
-					}
-					if err := fr.ms.SendTo(id, sm); err != nil {
-						return
-					}
-					fr.requestedMap[TargetHeight] = true
-					return
-				}
-			}
-		}
-	}
+	fr.Unlock()
 }
 
 // OnRecv is called when a message is received from the peer
 func (fr *Formulator) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
-	m, err := fr.manager.ParseMessage(r, t)
+	m, err := fr.mm.ParseMessage(r, t)
 	if err != nil {
 		return err
 	}
-	if msg, is := m.(*message_def.TransactionMessage); is {
-		if err := fr.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
-			if err != kernel.ErrPastSeq {
-				return err
-			} else {
-				return nil
-			}
-		}
-		fr.pm.ExceptCast(p.ID(), msg)
-
-		fr.Lock()
-		for _, id := range fr.pm.ConnectedList() {
-			fr.txCastMap[id] = true
-		}
-		fr.Unlock()
-		fr.txQueue.Push(msg)
-	} else {
-		if err := fr.handleMessage(p, m); err != nil {
-			//log.Println(err)
-			return nil
-		}
+	if err := fr.handleMessage(p, m); err != nil {
+		//log.Println(err)
+		return nil
 	}
 	return nil
 }
 
 func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
-	fr.Lock()
-	defer fr.Unlock()
-
 	switch msg := m.(type) {
 	case *message_def.BlockReqMessage:
+		fr.Lock()
+		defer fr.Unlock()
+
 		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), msg.TargetHeight, "BlockReqMessage")
-		if msg.TargetHeight <= fr.kn.Provider().Height() {
+		cp := fr.kn.Provider()
+		if msg.TargetHeight <= cp.Height() {
 			return nil
 		}
 		if fr.lastGenMessage != nil {
@@ -265,8 +192,8 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			}
 		}
 
-		NextRoundHash := fr.NextRoundHash()
-		if !msg.RoundHash.Equal(NextRoundHash) {
+		nextRoundHash := fr.nextRoundHash()
+		if !msg.RoundHash.Equal(nextRoundHash) {
 			return ErrInvalidRequest
 		}
 		Top, err := fr.kn.TopRank(int(msg.TimeoutCount))
@@ -283,7 +210,6 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			return ErrInvalidRequest
 		}
 
-		cp := fr.kn.Provider()
 		if !msg.PrevHash.Equal(cp.PrevHash()) {
 			return ErrInvalidRequest
 		}
@@ -318,6 +244,9 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 
 		return nil
 	case *message_def.BlockObSignMessage:
+		fr.Lock()
+		defer fr.Unlock()
+
 		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "BlockObSignMessage")
 		if fr.lastGenMessage == nil {
 			return nil
@@ -340,6 +269,14 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 		}
 		fr.isProcessing = false
 		fr.cm.BroadcastHeader(cd.Header)
+
+		if status, has := fr.statusMap[p.ID()]; has {
+			if status.Height < fr.lastGenMessage.Block.Header.Height() {
+				status.Height = fr.lastGenMessage.Block.Header.Height()
+			}
+		}
+
+		go fr.tryRequestNext()
 		return nil
 	case *chain.DataMessage:
 		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.DataMessage")
@@ -350,43 +287,102 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			return err
 		}
 
-		status, has := fr.statusMap[p.ID()]
-		if !has {
-			return nil
+		fr.Lock()
+		if status, has := fr.statusMap[p.ID()]; has {
+			if status.Height < msg.Data.Header.Height() {
+				status.Height = msg.Data.Header.Height()
+			}
 		}
-		if status.Height < msg.Data.Header.Height() {
-			status.Height = msg.Data.Header.Height()
-		}
+		fr.Unlock()
+
+		fr.tryRequestNext()
 		return nil
 	case *chain.StatusMessage:
 		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.DataMessage")
-		status, has := fr.statusMap[p.ID()]
-		if !has {
-			return nil
+		fr.Lock()
+		if status, has := fr.statusMap[p.ID()]; has {
+			if status.Height < msg.Height {
+				status.Version = msg.Version
+				status.Height = msg.Height
+				status.PrevHash = msg.PrevHash
+			}
 		}
-		if status.Height < msg.Height {
-			status.Version = msg.Version
-			status.Height = msg.Height
-			status.PrevHash = msg.PrevHash
-		}
+		fr.Unlock()
 
 		TargetHeight := fr.kn.Provider().Height() + 1
 		for TargetHeight <= msg.Height {
-			if !fr.requestedMap[TargetHeight] {
+			if !fr.requestTimer.Exist(TargetHeight) {
 				sm := &chain.RequestMessage{
 					Height: TargetHeight,
 				}
 				if err := p.Send(sm); err != nil {
 					return err
 				}
-				fr.requestedMap[TargetHeight] = true
+				fr.requestTimer.Add(TargetHeight, 10*time.Second, p.ID())
 			}
 			TargetHeight++
 		}
 		return nil
+	case *message_def.TransactionMessage:
+		if err := fr.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
+			if err != kernel.ErrPastSeq {
+				return err
+			}
+			return nil
+		}
+		fr.pm.ExceptCast(p.ID(), msg)
+		fr.Lock()
+		for _, id := range fr.pm.ConnectedList() {
+			fr.txCastMap[id] = true
+		}
+		fr.Unlock()
+		fr.txQueue.Push(msg)
+		return nil
 	default:
 		return message.ErrUnhandledMessage
 	}
+}
+
+func (fr *Formulator) tryRequestNext() {
+	fr.requestLock.Lock()
+	defer fr.requestLock.Unlock()
+
+	TargetHeight := fr.kn.Provider().Height()
+	if !fr.requestTimer.Exist(TargetHeight) {
+		fr.Lock()
+		defer fr.Unlock()
+
+		for id, status := range fr.statusMap {
+			if TargetHeight <= status.Height {
+				sm := &chain.RequestMessage{
+					Height: TargetHeight,
+				}
+				if err := fr.ms.SendTo(id, sm); err != nil {
+					return
+				}
+				fr.requestTimer.Add(TargetHeight, 10*time.Second, id)
+				return
+			}
+		}
+	}
+}
+
+func (fr *Formulator) nextRoundHash() hash.Hash256 {
+	cp := fr.kn.Provider()
+	var buffer bytes.Buffer
+	if _, err := fr.kn.ChainCoord().WriteTo(&buffer); err != nil {
+		panic(err)
+	}
+	buffer.WriteString(",")
+	PrevHash := cp.PrevHash()
+	if _, err := PrevHash.WriteTo(&buffer); err != nil {
+		panic(err)
+	}
+	buffer.WriteString(",")
+	if _, err := util.WriteUint32(&buffer, cp.Height()+1); err != nil {
+		panic(err)
+	}
+	return hash.DoubleHash(buffer.Bytes())
 }
 
 func (fr *Formulator) messageCreator(r io.Reader, t message.Type) (message.Message, error) {

@@ -2,14 +2,12 @@ package kernel
 
 import (
 	"bytes"
-	"io"
 	"log"
 	"runtime"
 	"sort"
 	"sync"
 	"time"
 
-	"git.fleta.io/fleta/core/message_def"
 	"git.fleta.io/fleta/core/reward"
 
 	"git.fleta.io/fleta/common"
@@ -22,7 +20,6 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 	"git.fleta.io/fleta/core/txpool"
 	"git.fleta.io/fleta/framework/chain"
-	"git.fleta.io/fleta/framework/message"
 )
 
 // Kernel processes the block chain using its components and stores state of the block chain
@@ -36,12 +33,10 @@ type Kernel struct {
 	txPool             *txpool.TransactionPool
 	genesisContextData *data.ContextData
 	rewarder           reward.Rewarder
-
-	manager          *message.Manager
-	processBlockLock sync.Mutex
-	closeLock        sync.RWMutex
-	eventHandlers    []EventHandler
-	isClose          bool
+	eventHandlers      []EventHandler
+	processBlockLock   sync.Mutex
+	closeLock          sync.RWMutex
+	isClose            bool
 }
 
 // NewKernel returns a Kernel
@@ -58,10 +53,8 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		rewarder:           rewarder,
 		consensus:          consensus.NewConsensus(Config.ObserverKeyMap, FormulationAccountType),
 		txPool:             txpool.NewTransactionPool(),
-		manager:            message.NewManager(),
 		eventHandlers:      []EventHandler{},
 	}
-	kn.manager.SetCreator(message_def.TransactionMessageType, kn.messageCreator)
 
 	if bs := kn.store.CustomData("chaincoord"); bs != nil {
 		var coord common.Coordinate
@@ -616,18 +609,4 @@ func (kn *Kernel) validateBlockBody(b *block.Block) error {
 		return ErrInvalidLevelRootHash
 	}
 	return nil
-}
-
-func (kn *Kernel) messageCreator(r io.Reader, t message.Type) (message.Message, error) {
-	switch t {
-	case message_def.TransactionMessageType:
-		p := &message_def.TransactionMessage{}
-		p.Tran = kn.store.Transactor()
-		if _, err := p.ReadFrom(r); err != nil {
-			return nil, err
-		}
-		return p, nil
-	default:
-		return nil, message.ErrUnknownMessage
-	}
 }
