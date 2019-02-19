@@ -132,6 +132,48 @@ func (ms *Mesh) RemovePeer(p *Peer) {
 	ms.handler.OnDisconnected(p)
 }
 
+// SendTo sends a message to the target peer
+func (ms *Mesh) SendTo(id string, m message.Message) error {
+	ms.Lock()
+	p, has := ms.peerHash[id]
+	ms.Unlock()
+	if !has {
+		return ErrUnknownPeer
+	}
+
+	if err := p.Send(m); err != nil {
+		ms.RemovePeer(p)
+		return err
+	}
+	return nil
+}
+
+// BroadcastMessage sends a message to the peers
+func (ms *Mesh) BroadcastMessage(m message.Message) error {
+	var buffer bytes.Buffer
+	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
+		return err
+	}
+	if _, err := m.WriteTo(&buffer); err != nil {
+		return err
+	}
+	data := buffer.Bytes()
+
+	peers := []*Peer{}
+	ms.Lock()
+	for _, p := range ms.peerHash {
+		peers = append(peers, p)
+	}
+	ms.Unlock()
+	for _, p := range peers {
+		if err := p.SendRaw(data); err != nil {
+			log.Println(err)
+			ms.RemovePeer(p)
+		}
+	}
+	return nil
+}
+
 func (ms *Mesh) client(Address string, TargetPubHash common.PublicHash) error {
 	conn, err := net.DialTimeout("tcp", Address, 10*time.Second)
 	if err != nil {
@@ -161,13 +203,10 @@ func (ms *Mesh) client(Address string, TargetPubHash common.PublicHash) error {
 	old, has := ms.peerHash[pubhash.String()]
 	ms.peerHash[pubhash.String()] = p
 	ms.Unlock()
-
-	defer ms.RemovePeer(p)
-
 	if has {
-		old.conn.Close()
-		ms.handler.OnDisconnected(old)
+		ms.RemovePeer(old)
 	}
+	defer ms.RemovePeer(p)
 
 	if err := ms.handleConnection(p); err != nil {
 		return err
@@ -241,46 +280,4 @@ func (ms *Mesh) sendHandshake(conn net.Conn) (common.PublicHash, error) {
 	}
 	pubhash := common.NewPublicHash(pubkey)
 	return pubhash, nil
-}
-
-// SendTo sends a message to the target peer
-func (ms *Mesh) SendTo(id string, m message.Message) error {
-	ms.Lock()
-	p, has := ms.peerHash[id]
-	ms.Unlock()
-	if !has {
-		return ErrUnknownPeer
-	}
-
-	if err := p.Send(m); err != nil {
-		ms.RemovePeer(p)
-		return err
-	}
-	return nil
-}
-
-// BroadcastMessage sends a message to the peers
-func (ms *Mesh) BroadcastMessage(m message.Message) error {
-	var buffer bytes.Buffer
-	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
-		return err
-	}
-	if _, err := m.WriteTo(&buffer); err != nil {
-		return err
-	}
-	data := buffer.Bytes()
-
-	peers := []*Peer{}
-	ms.Lock()
-	for _, p := range ms.peerHash {
-		peers = append(peers, p)
-	}
-	ms.Unlock()
-	for _, p := range peers {
-		if err := p.SendRaw(data); err != nil {
-			log.Println(err)
-			ms.RemovePeer(p)
-		}
-	}
-	return nil
 }

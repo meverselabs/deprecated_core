@@ -9,15 +9,15 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-type ObserverPeer struct {
+type Peer struct {
 	id      string
 	netAddr string
 	conn    net.Conn
 	pubhash common.PublicHash
 }
 
-func NewObserverPeer(conn net.Conn, pubhash common.PublicHash) *ObserverPeer {
-	p := &ObserverPeer{
+func NewPeer(conn net.Conn, pubhash common.PublicHash) *Peer {
+	p := &Peer{
 		id:      pubhash.String(),
 		netAddr: conn.RemoteAddr().String(),
 		conn:    conn,
@@ -26,15 +26,15 @@ func NewObserverPeer(conn net.Conn, pubhash common.PublicHash) *ObserverPeer {
 	return p
 }
 
-func (p *ObserverPeer) ID() string {
+func (p *Peer) ID() string {
 	return p.id
 }
 
-func (p *ObserverPeer) NetAddr() string {
+func (p *Peer) NetAddr() string {
 	return p.netAddr
 }
 
-func (p *ObserverPeer) Send(m message.Message) error {
+func (p *Peer) Send(m message.Message) error {
 	var buffer bytes.Buffer
 	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
 		return err
@@ -48,7 +48,7 @@ func (p *ObserverPeer) Send(m message.Message) error {
 	return nil
 }
 
-func (p *ObserverPeer) SendRaw(bs []byte) error {
+func (p *Peer) SendRaw(bs []byte) error {
 	if _, err := p.conn.Write(bs); err != nil {
 		return err
 	}

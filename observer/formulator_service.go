@@ -19,30 +19,31 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
-// FormulatorServiceDeligator deligates unhandled messages of the formulator mesh
-type FormulatorServiceDeligator interface {
+// FormulatorServiceEventHandler handles events that are ocurred from the formulator service
+type FormulatorServiceEventHandler interface {
 	OnFormulatorConnected(p *FormulatorPeer)
+	OnFormulatorDisconnected(p *FormulatorPeer)
 	OnRecv(p mesh.Peer, r io.Reader, t message.Type) error
 }
 
 // FormulatorService provides connectivity with formulators
 type FormulatorService struct {
 	sync.Mutex
-	Key       key.Key
-	peerHash  map[common.Address]*FormulatorPeer
-	deligator FormulatorServiceDeligator
-	kn        *kernel.Kernel
-	manager   *message.Manager
+	Key      key.Key
+	peerHash map[common.Address]*FormulatorPeer
+	handler  FormulatorServiceEventHandler
+	kn       *kernel.Kernel
+	manager  *message.Manager
 }
 
 // NewFormulatorService returns a FormulatorService
-func NewFormulatorService(Key key.Key, kn *kernel.Kernel, Deligator FormulatorServiceDeligator) *FormulatorService {
+func NewFormulatorService(Key key.Key, kn *kernel.Kernel, handler FormulatorServiceEventHandler) *FormulatorService {
 	ms := &FormulatorService{
-		Key:       Key,
-		kn:        kn,
-		peerHash:  map[common.Address]*FormulatorPeer{},
-		deligator: Deligator,
-		manager:   message.NewManager(),
+		Key:      Key,
+		kn:       kn,
+		peerHash: map[common.Address]*FormulatorPeer{},
+		handler:  handler,
+		manager:  message.NewManager(),
 	}
 	return ms
 }
@@ -57,9 +58,65 @@ func (ms *FormulatorService) Run(BindAddress string) error {
 	}
 }
 
-func (ms *FormulatorService) removePeer(p *FormulatorPeer) {
+// PeerCount returns a number of the peer
+func (ms *FormulatorService) PeerCount() int {
+	ms.Lock()
+	defer ms.Unlock()
+
+	return len(ms.peerHash)
+}
+
+// RemovePeer removes peers from the mesh
+func (ms *FormulatorService) RemovePeer(p *FormulatorPeer) {
+	ms.Lock()
 	delete(ms.peerHash, p.address)
+	ms.Unlock()
+
 	p.conn.Close()
+	ms.handler.OnFormulatorDisconnected(p)
+}
+
+// SendTo sends a message to the formulator
+func (ms *FormulatorService) SendTo(Formulator common.Address, m message.Message) error {
+	ms.Lock()
+	p, has := ms.peerHash[Formulator]
+	ms.Unlock()
+	if !has {
+		return ErrUnknownFormulator
+	}
+
+	if err := p.Send(m); err != nil {
+		log.Println(err)
+		ms.RemovePeer(p)
+	}
+	return nil
+}
+
+// BroadcastMessage sends a message to all peers
+func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
+	var buffer bytes.Buffer
+	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
+		return err
+	}
+	if _, err := m.WriteTo(&buffer); err != nil {
+		return err
+	}
+	data := buffer.Bytes()
+
+	peers := []*FormulatorPeer{}
+	ms.Lock()
+	for _, p := range ms.peerHash {
+		peers = append(peers, p)
+	}
+	ms.Unlock()
+
+	for _, p := range peers {
+		if err := p.SendRaw(data); err != nil {
+			log.Println(err)
+			ms.RemovePeer(p)
+		}
+	}
+	return nil
 }
 
 func (ms *FormulatorService) server(BindAddress string) error {
@@ -94,17 +151,13 @@ func (ms *FormulatorService) server(BindAddress string) error {
 
 			p := NewFormulatorPeer(conn, pubhash, Formulator)
 			ms.Lock()
-			if old, has := ms.peerHash[Formulator]; has {
-				ms.removePeer(old)
-			}
+			old, has := ms.peerHash[Formulator]
 			ms.peerHash[Formulator] = p
 			ms.Unlock()
-
-			defer func() {
-				ms.Lock()
-				ms.removePeer(p)
-				ms.Unlock()
-			}()
+			if has {
+				ms.RemovePeer(old)
+			}
+			defer ms.RemovePeer(p)
 
 			if err := ms.handleConnection(p); err != nil {
 				log.Println("[handleConnection]", err)
@@ -116,7 +169,7 @@ func (ms *FormulatorService) server(BindAddress string) error {
 func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 	log.Println("Observer", common.NewPublicHash(ms.Key.PublicKey()).String(), "Fromulator Connected", p.address.String())
 
-	ms.deligator.OnFormulatorConnected(p)
+	ms.handler.OnFormulatorConnected(p)
 
 	for {
 		var t message.Type
@@ -126,7 +179,7 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 			t = message.Type(v)
 		}
 
-		if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
+		if err := ms.handler.OnRecv(p, p.conn, t); err != nil {
 			return err
 		}
 	}
@@ -192,51 +245,4 @@ func (ms *FormulatorService) FormulatorMap() map[common.Address]bool {
 		FormulatorMap[p.address] = true
 	}
 	return FormulatorMap
-}
-
-// SendTo sends a message to the formulator
-func (ms *FormulatorService) SendTo(Formulator common.Address, m message.Message) error {
-	ms.Lock()
-	p, has := ms.peerHash[Formulator]
-	ms.Unlock()
-	if !has {
-		return ErrUnknownFormulator
-	}
-
-	if err := p.Send(m); err != nil {
-		log.Println(err)
-		ms.Lock()
-		ms.removePeer(p)
-		ms.Unlock()
-	}
-	return nil
-}
-
-// BroadcastMessage sends a message to all peers
-func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
-	var buffer bytes.Buffer
-	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
-		return err
-	}
-	if _, err := m.WriteTo(&buffer); err != nil {
-		return err
-	}
-	data := buffer.Bytes()
-
-	peers := []*FormulatorPeer{}
-	ms.Lock()
-	for _, p := range ms.peerHash {
-		peers = append(peers, p)
-	}
-	ms.Unlock()
-
-	for _, p := range peers {
-		if err := p.SendRaw(data); err != nil {
-			log.Println(err)
-			ms.Lock()
-			ms.removePeer(p)
-			ms.Unlock()
-		}
-	}
-	return nil
 }

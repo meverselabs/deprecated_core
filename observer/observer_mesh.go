@@ -27,8 +27,8 @@ type ObserverMesh struct {
 	sync.Mutex
 	Key            key.Key
 	NetAddressMap  map[common.PublicHash]string
-	clientPeerHash map[common.PublicHash]*ObserverPeer
-	serverPeerHash map[common.PublicHash]*ObserverPeer
+	clientPeerHash map[common.PublicHash]*Peer
+	serverPeerHash map[common.PublicHash]*Peer
 	deligator      ObserverMeshDeligator
 	handler        mesh.EventHandler
 }
@@ -37,8 +37,8 @@ func NewObserverMesh(Key key.Key, NetAddressMap map[common.PublicHash]string, De
 	ms := &ObserverMesh{
 		Key:            Key,
 		NetAddressMap:  NetAddressMap,
-		clientPeerHash: map[common.PublicHash]*ObserverPeer{},
-		serverPeerHash: map[common.PublicHash]*ObserverPeer{},
+		clientPeerHash: map[common.PublicHash]*Peer{},
+		serverPeerHash: map[common.PublicHash]*Peer{},
 		deligator:      Deligator,
 		handler:        handler,
 	}
@@ -64,7 +64,7 @@ func (ms *ObserverMesh) Unban(netAddr string) {
 	log.Println("ObserverMesh", "Unban", netAddr)
 }
 func (ms *ObserverMesh) Peers() []mesh.Peer {
-	peerMap := map[common.PublicHash]*ObserverPeer{}
+	peerMap := map[common.PublicHash]*Peer{}
 	ms.Lock()
 	for _, p := range ms.clientPeerHash {
 		peerMap[p.pubhash] = p
@@ -109,9 +109,47 @@ func (ms *ObserverMesh) Run(BindAddress string) error {
 	}
 }
 
-func (ms *ObserverMesh) removePeer(p *ObserverPeer, peerHash map[common.PublicHash]*ObserverPeer) {
+// RemovePeer removes peers from the mesh
+func (ms *ObserverMesh) RemovePeer(p *Peer, peerHash map[common.PublicHash]*Peer) {
+	ms.Lock()
 	delete(peerHash, p.pubhash)
+	ms.Unlock()
+
 	p.conn.Close()
+	ms.handler.OnDisconnected(p)
+}
+
+// BroadcastMessage sends a message to all peers
+func (ms *ObserverMesh) BroadcastMessage(m message.Message) error {
+	var buffer bytes.Buffer
+	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
+		return err
+	}
+	if _, err := m.WriteTo(&buffer); err != nil {
+		return err
+	}
+	data := buffer.Bytes()
+
+	peerMap := map[common.PublicHash]*Peer{}
+	targetMap := map[common.PublicHash]map[common.PublicHash]*Peer{}
+	ms.Lock()
+	for _, p := range ms.clientPeerHash {
+		peerMap[p.pubhash] = p
+		targetMap[p.pubhash] = ms.clientPeerHash
+	}
+	for _, p := range ms.serverPeerHash {
+		peerMap[p.pubhash] = p
+		targetMap[p.pubhash] = ms.serverPeerHash
+	}
+	ms.Unlock()
+
+	for pubhash, p := range peerMap {
+		if err := p.SendRaw(data); err != nil {
+			log.Println(err)
+			ms.RemovePeer(p, targetMap[pubhash])
+		}
+	}
+	return nil
 }
 
 func (ms *ObserverMesh) client(Address string, TargetPubHash common.PublicHash) error {
@@ -137,19 +175,15 @@ func (ms *ObserverMesh) client(Address string, TargetPubHash common.PublicHash) 
 		return ErrNotAllowedPublicHash
 	}
 
-	p := NewObserverPeer(conn, pubhash)
+	p := NewPeer(conn, pubhash)
 	ms.Lock()
-	if old, has := ms.clientPeerHash[pubhash]; has {
-		ms.removePeer(old, ms.clientPeerHash)
-	}
+	old, has := ms.clientPeerHash[pubhash]
 	ms.clientPeerHash[pubhash] = p
 	ms.Unlock()
-
-	defer func() {
-		ms.Lock()
-		ms.removePeer(p, ms.clientPeerHash)
-		ms.Unlock()
-	}()
+	if has {
+		ms.RemovePeer(old, ms.clientPeerHash)
+	}
+	defer ms.RemovePeer(p, ms.clientPeerHash)
 
 	if err := ms.handleConnection(p); err != nil {
 		log.Println("[handleConnection]", err)
@@ -185,19 +219,15 @@ func (ms *ObserverMesh) server(BindAddress string) error {
 				return
 			}
 
-			p := NewObserverPeer(conn, pubhash)
+			p := NewPeer(conn, pubhash)
 			ms.Lock()
-			if old, has := ms.serverPeerHash[pubhash]; has {
-				ms.removePeer(old, ms.serverPeerHash)
-			}
+			old, has := ms.serverPeerHash[pubhash]
 			ms.serverPeerHash[pubhash] = p
 			ms.Unlock()
-
-			defer func() {
-				ms.Lock()
-				ms.removePeer(p, ms.serverPeerHash)
-				ms.Unlock()
-			}()
+			if has {
+				ms.RemovePeer(old, ms.serverPeerHash)
+			}
+			defer ms.RemovePeer(p, ms.serverPeerHash)
 
 			if err := ms.handleConnection(p); err != nil {
 				log.Println("[handleConnection]", err)
@@ -206,13 +236,10 @@ func (ms *ObserverMesh) server(BindAddress string) error {
 	}
 }
 
-func (ms *ObserverMesh) handleConnection(p *ObserverPeer) error {
+func (ms *ObserverMesh) handleConnection(p *Peer) error {
 	log.Println(common.NewPublicHash(ms.Key.PublicKey()).String(), "Connected", p.pubhash.String())
 
-	defer func() {
-		ms.handler.OnClosed(p)
-	}()
-	ms.handler.AfterConnect(p)
+	ms.handler.OnConnected(p)
 
 	for {
 		var t message.Type
@@ -274,39 +301,4 @@ func (ms *ObserverMesh) sendHandshake(conn net.Conn) (common.PublicHash, error) 
 	}
 	pubhash := common.NewPublicHash(pubkey)
 	return pubhash, nil
-}
-
-// BroadcastMessage sends a message to all peers
-func (ms *ObserverMesh) BroadcastMessage(m message.Message) error {
-	var buffer bytes.Buffer
-	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
-		return err
-	}
-	if _, err := m.WriteTo(&buffer); err != nil {
-		return err
-	}
-	data := buffer.Bytes()
-
-	peerMap := map[common.PublicHash]*ObserverPeer{}
-	targetMap := map[common.PublicHash]map[common.PublicHash]*ObserverPeer{}
-	ms.Lock()
-	for _, p := range ms.clientPeerHash {
-		peerMap[p.pubhash] = p
-		targetMap[p.pubhash] = ms.clientPeerHash
-	}
-	for _, p := range ms.serverPeerHash {
-		peerMap[p.pubhash] = p
-		targetMap[p.pubhash] = ms.serverPeerHash
-	}
-	ms.Unlock()
-
-	for pubhash, p := range peerMap {
-		if err := p.SendRaw(data); err != nil {
-			log.Println(err)
-			ms.Lock()
-			ms.removePeer(p, targetMap[pubhash])
-			ms.Unlock()
-		}
-	}
-	return nil
 }
