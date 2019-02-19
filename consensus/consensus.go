@@ -89,7 +89,7 @@ func (cs *Consensus) ApplyGenesis(ctd *data.ContextData) ([]byte, error) {
 	cs.Lock()
 	defer cs.Unlock()
 
-	phase := cs.candidates[len(cs.candidates)-1].phase + 1
+	phase := cs.largestPhase() + 1
 	for _, a := range ctd.CreatedAccountMap {
 		if a.Type() == cs.FormulationAccountType {
 			acc := a.(*FormulationAccount)
@@ -119,7 +119,7 @@ func (cs *Consensus) ProcessContext(ctd *data.ContextData, HeaderHash hash.Hash2
 	if err := cs.forwardCandidates(int(bh.TimeoutCount), HeaderHash); err != nil {
 		return nil, err
 	}
-	phase := cs.candidates[len(cs.candidates)-1].phase + 1
+	phase := cs.largestPhase() + 1
 	for _, a := range ctd.CreatedAccountMap {
 		if a.Type() == cs.FormulationAccountType {
 			acc := a.(*FormulationAccount)
@@ -211,6 +211,13 @@ func (cs *Consensus) LoadFromSaveData(SaveData []byte) error {
 	}
 	cs.ObserverKeyMap = ObserverKeyMap
 	return nil
+}
+
+func (cs *Consensus) largestPhase() uint32 {
+	if len(cs.candidates) == 0 {
+		return 0
+	}
+	return cs.candidates[len(cs.candidates)-1].phase
 }
 
 func (cs *Consensus) addRank(s *Rank) error {
