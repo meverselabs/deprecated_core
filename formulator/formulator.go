@@ -287,6 +287,8 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			return err
 		}
 
+		fr.requestTimer.Remove(msg.Data.Header.Height())
+
 		fr.Lock()
 		if status, has := fr.statusMap[p.ID()]; has {
 			if status.Height < msg.Data.Header.Height() {
