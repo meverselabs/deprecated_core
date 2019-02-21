@@ -41,6 +41,9 @@ type Observer struct {
 	failTimer        *time.Timer
 	isRunning        bool
 	isProcessing     bool
+	closeLock        sync.RWMutex
+	runEnd           chan struct{}
+	isClose          bool
 }
 
 // NewObserver returns a Observer
@@ -53,6 +56,7 @@ func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 		cm:           chain.NewManager(kn),
 		kn:           kn,
 		mm:           message.NewManager(),
+		runEnd:       make(chan struct{}, 1),
 	}
 	ob.mm.SetCreator(RoundVoteMessageType, ob.messageCreator)
 	ob.mm.SetCreator(RoundVoteAckMessageType, ob.messageCreator)
@@ -65,6 +69,16 @@ func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 	ob.ms = NewObserverMesh(Config.Key, Config.ObserverKeyMap, ob, ob.cm)
 	ob.cm.Mesh = ob.ms
 	return ob, nil
+}
+
+// Close terminates the observer
+func (ob *Observer) Close() {
+	ob.closeLock.Lock()
+	defer ob.closeLock.Unlock()
+
+	ob.isClose = true
+	ob.kn.Close()
+	ob.runEnd <- struct{}{}
 }
 
 // Run operates servers and a round voting
@@ -83,7 +97,7 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 
 	voteTimer := time.NewTimer(time.Millisecond)
 	ob.failTimer = time.NewTimer(5 * time.Second)
-	for {
+	for !ob.isClose {
 		select {
 		case <-voteTimer.C:
 			ob.fs.Lock()
@@ -116,6 +130,8 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 			}
 			ob.Unlock()
 			ob.failTimer.Reset(5 * time.Second)
+		case <-ob.runEnd:
+			return
 		}
 	}
 }
@@ -637,6 +653,9 @@ func (ob *Observer) OnCreateContext(kn *kernel.Kernel, ctx *data.Context) error 
 // OnProcessBlock called when processing block to the chain (error prevent processing block)
 func (ob *Observer) OnProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
 	if !ob.isProcessing {
+		ob.Lock()
+		defer ob.Unlock()
+
 		if ob.round != nil {
 			if len(ob.roundVoteMap) > 0 {
 				var AnyRoundVote *RoundVote

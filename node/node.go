@@ -5,6 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"git.fleta.io/fleta/core/transaction"
+
+	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/queue"
 
 	"git.fleta.io/fleta/framework/router"
@@ -30,6 +33,7 @@ type Node struct {
 	txCastMap map[string]bool
 	isRunning bool
 	closeLock sync.RWMutex
+	runEnd    chan struct{}
 	isClose   bool
 }
 
@@ -56,6 +60,7 @@ func NewNode(Config *Config, kn *kernel.Kernel) (*Node, error) {
 		manager:   message.NewManager(),
 		txQueue:   queue.NewQueue(),
 		txCastMap: map[string]bool{},
+		runEnd:    make(chan struct{}, 1),
 	}
 	nd.manager.SetCreator(message_def.TransactionMessageType, nd.messageCreator)
 	nd.cm.Mesh = pm
@@ -70,6 +75,7 @@ func (nd *Node) Close() {
 
 	nd.isClose = true
 	nd.kn.Close()
+	nd.runEnd <- struct{}{}
 }
 
 // Run runs the node
@@ -86,7 +92,7 @@ func (nd *Node) Run() {
 	nd.pm.EnforceConnect()
 	go nd.cm.Run()
 
-	timer := time.NewTimer(time.Minute)
+	timer := time.NewTimer(10 * time.Second)
 	for !nd.isClose {
 		select {
 		case <-timer.C:
@@ -113,6 +119,8 @@ func (nd *Node) Run() {
 					}
 				}
 			}
+		case <-nd.runEnd:
+			return
 		}
 	}
 }
@@ -126,6 +134,24 @@ func (nd *Node) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 	if err := nd.handleMessage(p, m); err != nil {
 		return err
 	}
+	return nil
+}
+
+// CommitTransaction adds and broadcasts transaction
+func (nd *Node) CommitTransaction(tx transaction.Transaction, sigs []common.Signature) error {
+	nd.Lock()
+	defer nd.Unlock()
+
+	if err := nd.kn.AddTransaction(tx, sigs); err != nil {
+		return err
+	}
+	msg := &message_def.TransactionMessage{
+		Tx:   tx,
+		Sigs: sigs,
+		Tran: nd.kn.Transactor(),
+	}
+	nd.pm.BroadCast(msg)
+	nd.txQueue.Push(msg)
 	return nil
 }
 

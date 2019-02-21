@@ -44,6 +44,7 @@ type Formulator struct {
 	isProcessing   bool
 	isRunning      bool
 	closeLock      sync.RWMutex
+	runEnd         chan struct{}
 	isClose        bool
 }
 
@@ -72,6 +73,7 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 		txCastMap:    map[string]bool{},
 		statusMap:    map[string]*chain.Status{},
 		requestTimer: chain.NewRequestTimer(nil),
+		runEnd:       make(chan struct{}, 1),
 	}
 	fr.mm.SetCreator(message_def.BlockReqMessageType, fr.messageCreator)
 	fr.mm.SetCreator(message_def.BlockObSignMessageType, fr.messageCreator)
@@ -91,8 +93,8 @@ func (fr *Formulator) Close() {
 	defer fr.closeLock.Unlock()
 
 	fr.isClose = true
-	fr.ms.Close()
 	fr.kn.Close()
+	fr.runEnd <- struct{}{}
 }
 
 // Run runs the formulator
@@ -139,6 +141,7 @@ func (fr *Formulator) Run() {
 				}
 			}
 			timer.Reset(time.Minute)
+		case <-fr.runEnd:
 		}
 	}
 }
