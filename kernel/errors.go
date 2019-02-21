@@ -8,6 +8,7 @@ var (
 	ErrInvalidChainCoord         = errors.New("invalid chain coord")
 	ErrInvalidSignatureCount     = errors.New("invalid signature count")
 	ErrKernelClosed              = errors.New("kernel closed")
+	ErrStoreClosed               = errors.New("store closed")
 	ErrDirtyContext              = errors.New("dirty context")
 	ErrNotExistChainCoordinate   = errors.New("not exist chain coordinate")
 	ErrInvalidChainCoordinate    = errors.New("invalid chain coordinate")

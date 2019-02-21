@@ -22,6 +22,7 @@ import (
 // Store saves the target chain state
 // All updates are executed in one transaction with FileSync option
 type Store struct {
+	sync.Mutex
 	db         *badger.DB
 	version    uint16
 	accounter  *data.Accounter
@@ -30,6 +31,8 @@ type Store struct {
 	SeqMap     map[common.Address]uint64
 	cache      storeCache
 	ticker     *time.Ticker
+	closeLock  sync.RWMutex
+	isClose    bool
 }
 
 type storeCache struct {
@@ -40,7 +43,7 @@ type storeCache struct {
 }
 
 // NewStore returns a Store
-func NewStore(path string, version uint16, act *data.Accounter, tran *data.Transactor) (*Store, error) {
+func NewStore(path string, version uint16, act *data.Accounter, tran *data.Transactor, bRecover bool) (*Store, error) {
 	if !act.ChainCoord().Equal(tran.ChainCoord()) {
 		return nil, ErrInvalidChainCoord
 	}
@@ -48,7 +51,7 @@ func NewStore(path string, version uint16, act *data.Accounter, tran *data.Trans
 	opts := badger.DefaultOptions
 	opts.Dir = path
 	opts.ValueDir = path
-	//opts.Truncate = true
+	opts.Truncate = bRecover
 	opts.SyncWrites = true
 	lockfilePath := filepath.Join(opts.Dir, "LOCK")
 	os.MkdirAll(path, os.ModeDir)
@@ -91,6 +94,10 @@ func NewStore(path string, version uint16, act *data.Accounter, tran *data.Trans
 
 // Close terminate and clean store
 func (st *Store) Close() {
+	st.closeLock.Lock()
+	defer st.closeLock.Unlock()
+
+	st.isClose = true
 	st.db.Close()
 	st.ticker.Stop()
 	st.db = nil
@@ -146,6 +153,12 @@ func (st *Store) PrevHash() hash.Hash256 {
 
 // Hash returns the hash of the data by height
 func (st *Store) Hash(height uint32) (hash.Hash256, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return hash.Hash256{}, ErrStoreClosed
+	}
+
 	if st.cache.cached {
 		if st.cache.height == height {
 			return st.cache.heightHash, nil
@@ -178,6 +191,12 @@ func (st *Store) Hash(height uint32) (hash.Hash256, error) {
 
 // Header returns the header of the data by height
 func (st *Store) Header(height uint32) (chain.Header, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
 	if height < 1 {
 		return nil, db.ErrNotExistKey
 	}
@@ -214,6 +233,12 @@ func (st *Store) Header(height uint32) (chain.Header, error) {
 
 // Data returns the data by height
 func (st *Store) Data(height uint32) (*chain.Data, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
 	if height < 1 {
 		return nil, db.ErrNotExistKey
 	}
@@ -253,6 +278,12 @@ func (st *Store) Data(height uint32) (*chain.Data, error) {
 
 // Height returns the current height of the target chain
 func (st *Store) Height() uint32 {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return 0
+	}
+
 	if st.cache.cached {
 		return st.cache.height
 	}
@@ -279,6 +310,12 @@ func (st *Store) Height() uint32 {
 
 // Accounts returns all accounts in the store
 func (st *Store) Accounts() ([]account.Account, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
 	list := []account.Account{}
 	if err := st.db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
@@ -307,6 +344,12 @@ func (st *Store) Accounts() ([]account.Account, error) {
 
 // Seq returns the sequence of the transaction
 func (st *Store) Seq(addr common.Address) uint64 {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return 0
+	}
+
 	st.SeqMapLock.Lock()
 	defer st.SeqMapLock.Unlock()
 
@@ -335,6 +378,12 @@ func (st *Store) Seq(addr common.Address) uint64 {
 
 // Account returns the account instance of the address from the store
 func (st *Store) Account(addr common.Address) (account.Account, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
 	var acc account.Account
 	if err := st.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(toAccountKey(addr))
@@ -369,6 +418,12 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 
 // IsExistAccount checks that the account of the address is exist or not
 func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return false, ErrStoreClosed
+	}
+
 	var isExist bool
 	if err := st.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(toAccountKey(addr))
@@ -393,6 +448,12 @@ func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
 
 // AccountBalance returns the account balance
 func (st *Store) AccountBalance(addr common.Address) (*account.Balance, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
 	var bc *account.Balance
 	if err := st.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(toAccountBalanceKey(addr))
@@ -424,6 +485,12 @@ func (st *Store) AccountBalance(addr common.Address) (*account.Balance, error) {
 
 // AccountDataKeys returns all data keys of the account in the store
 func (st *Store) AccountDataKeys(addr common.Address) ([][]byte, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
 	list := [][]byte{}
 	if err := st.db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
@@ -442,6 +509,12 @@ func (st *Store) AccountDataKeys(addr common.Address) ([][]byte, error) {
 
 // AccountData returns the account data from the store
 func (st *Store) AccountData(addr common.Address, name []byte) []byte {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil
+	}
+
 	key := string(addr[:]) + string(name)
 	var data []byte
 	if err := st.db.View(func(txn *badger.Txn) error {
@@ -463,6 +536,12 @@ func (st *Store) AccountData(addr common.Address, name []byte) []byte {
 
 // UTXOs returns all UTXOs in the store
 func (st *Store) UTXOs() ([]*transaction.UTXO, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
 	list := []*transaction.UTXO{}
 	if err := st.db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
@@ -491,6 +570,12 @@ func (st *Store) UTXOs() ([]*transaction.UTXO, error) {
 
 // UTXO returns the UTXO from the top store
 func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
 	var utxo *transaction.UTXO
 	if err := st.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(toUTXOKey(id))
@@ -521,6 +606,12 @@ func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
 
 // CustomData returns the custom data by the key from the store
 func (st *Store) CustomData(key string) []byte {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil
+	}
+
 	var bs []byte
 	st.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(toCustomData(key))
@@ -543,6 +634,12 @@ func (st *Store) CustomData(key string) []byte {
 
 // SetCustomData updates the custom data
 func (st *Store) SetCustomData(key string, value []byte) error {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return ErrStoreClosed
+	}
+
 	return st.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Set(toCustomData(key), value); err != nil {
 			return err
@@ -553,6 +650,12 @@ func (st *Store) SetCustomData(key string, value []byte) error {
 
 // DeleteCustomData deletes the custom data
 func (st *Store) DeleteCustomData(key string) error {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return ErrStoreClosed
+	}
+
 	return st.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Delete(toCustomData(key)); err != nil {
 			return err
@@ -563,6 +666,12 @@ func (st *Store) DeleteCustomData(key string) error {
 
 // StoreGenesis stores the genesis data
 func (st *Store) StoreGenesis(genHash hash.Hash256, ctd *data.ContextData, customHash map[string][]byte) error {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return ErrStoreClosed
+	}
+
 	if st.Height() > 0 {
 		return chain.ErrAlreadyGenesised
 	}
@@ -600,6 +709,12 @@ func (st *Store) StoreGenesis(genHash hash.Hash256, ctd *data.ContextData, custo
 
 // StoreData stores the data
 func (st *Store) StoreData(cd *chain.Data, ctd *data.ContextData, customHash map[string][]byte) error {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return ErrStoreClosed
+	}
+
 	DataHash := cd.Header.Hash()
 	if err := st.db.Update(func(txn *badger.Txn) error {
 		{
