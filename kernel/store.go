@@ -145,8 +145,11 @@ func (st *Store) TargetHeight() uint32 {
 func (st *Store) PrevHash() hash.Hash256 {
 	h, err := st.Hash(st.Height())
 	if err != nil {
-		// should have not reach
-		panic(err)
+		if err != ErrStoreClosed {
+			// should have not reach
+			panic(err)
+		}
+		return hash.Hash256{}
 	}
 	return h
 }
