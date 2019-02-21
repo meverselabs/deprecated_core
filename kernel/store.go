@@ -48,7 +48,7 @@ func NewStore(path string, version uint16, act *data.Accounter, tran *data.Trans
 	opts := badger.DefaultOptions
 	opts.Dir = path
 	opts.ValueDir = path
-	opts.Truncate = true
+	//opts.Truncate = true
 	opts.SyncWrites = true
 	lockfilePath := filepath.Join(opts.Dir, "LOCK")
 	os.MkdirAll(path, os.ModeDir)
