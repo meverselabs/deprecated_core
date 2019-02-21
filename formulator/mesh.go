@@ -25,8 +25,6 @@ type Mesh struct {
 	NetAddressMap map[common.PublicHash]string
 	handler       mesh.EventHandler
 	peerHash      map[string]*Peer
-	closeLock     sync.RWMutex
-	isClose       bool
 }
 
 // NewMesh returns a Mesh
@@ -39,22 +37,6 @@ func NewMesh(Key key.Key, Formulator common.Address, NetAddressMap map[common.Pu
 		peerHash:      map[string]*Peer{},
 	}
 	return ms
-}
-
-// Close terminates the mesh
-func (ms *Mesh) Close() {
-	ms.closeLock.Lock()
-	defer ms.closeLock.Unlock()
-
-	ms.Lock()
-	defer ms.Unlock()
-
-	ms.isClose = true
-	for _, p := range ms.peerHash {
-		p.conn.Close()
-		ms.handler.OnDisconnected(p)
-	}
-	ms.peerHash = map[string]*Peer{}
 }
 
 // Add is not implemented and not used
@@ -104,7 +86,7 @@ func (ms *Mesh) Run() error {
 				defer wg.Done()
 
 				time.Sleep(1 * time.Second)
-				for !ms.isClose {
+				for {
 					ms.Lock()
 					_, has := ms.peerHash[pubhash.String()]
 					ms.Unlock()
