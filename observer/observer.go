@@ -181,6 +181,15 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 		if err != message.ErrUnknownMessage {
 			return err
 		} else {
+	m, err := ob.mm.ParseMessage(r, t)
+	if err != nil {
+		return err
+	}
+
+	if err := ob.cm.OnRecv(p, r, t); err != nil {
+		if err != message.ErrUnknownMessage {
+			return err
+		} else {
 			m, err := ob.mm.ParseMessage(r, t)
 			if err != nil {
 				return err
@@ -507,11 +516,13 @@ func (ob *Observer) handleMessage(m message.Message) error {
 				Signatures: append([]common.Signature{ob.round.BlockGenMessage.GeneratorSignature}, sigs...),
 			}
 
-			ob.isProcessing = true
-			if err := ob.cm.Process(cd, ob.round.Context); err != nil {
+			if err := ob.cm.ProcessWithCallback(cd, ob.round.Context, func() {
+				ob.isProcessing = true
+			}, func() {
+				ob.isProcessing = false
+			}); err != nil {
 				return err
 			}
-			ob.isProcessing = false
 			ob.cm.BroadcastHeader(cd.Header)
 
 			nm := &message_def.BlockObSignMessage{
