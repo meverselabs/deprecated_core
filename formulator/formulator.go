@@ -266,11 +266,13 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			Body:       fr.lastGenMessage.Block.Body,
 			Signatures: append([]common.Signature{msg.ObserverSigned.GeneratorSignature}, msg.ObserverSigned.ObserverSignatures...),
 		}
-		fr.isProcessing = true
-		if err := fr.cm.Process(cd, fr.lastContext); err != nil {
+		if err := fr.cm.ProcessWithCallback(cd, fr.lastContext, func() {
+			fr.isProcessing = true
+		}, func() {
+			fr.isProcessing = false
+		}); err != nil {
 			return err
 		}
-		fr.isProcessing = false
 		fr.cm.BroadcastHeader(cd.Header)
 
 		if status, has := fr.statusMap[p.ID()]; has {
