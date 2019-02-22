@@ -41,7 +41,6 @@ type Formulator struct {
 	statusMap      map[string]*chain.Status
 	requestTimer   *chain.RequestTimer
 	requestLock    sync.RWMutex
-	isProcessing   bool
 	isRunning      bool
 	closeLock      sync.RWMutex
 	runEnd         chan struct{}
@@ -266,11 +265,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			Body:       fr.lastGenMessage.Block.Body,
 			Signatures: append([]common.Signature{msg.ObserverSigned.GeneratorSignature}, msg.ObserverSigned.ObserverSignatures...),
 		}
-		if err := fr.cm.ProcessWithCallback(cd, fr.lastContext, func() {
-			fr.isProcessing = true
-		}, func() {
-			fr.isProcessing = false
-		}); err != nil {
+		if err := fr.cm.Process(cd, fr.lastContext); err != nil {
 			return err
 		}
 		fr.cm.BroadcastHeader(cd.Header)
