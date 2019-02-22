@@ -387,6 +387,9 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	for _, eh := range kn.eventHandlers {
 		eh.AfterProcessBlock(kn, b, s, ctx)
 	}
+	for _, tx := range b.Body.Transactions {
+		kn.txPool.Remove(tx)
+	}
 	log.Println("Block Connected :", kn.store.Height(), HeaderHash.String(), b.Header.Formulator.String(), len(b.Body.Transactions))
 	return nil
 }
@@ -505,7 +508,8 @@ func (kn *Kernel) GenerateBlock(TimeoutCount uint32, Formulator common.Address) 
 	}
 
 	timer := time.NewTimer(kn.Config.GenTimeThreshold)
-	TxHashes := make([]hash.Hash256, 0, 65535)
+	TxHashes := make([]hash.Hash256, 0, 65536)
+	TxHashes = append(TxHashes, b.Header.PrevHash())
 
 	kn.txPool.Lock() // Prevent delaying from TxPool.Push
 TxLoop:
@@ -563,7 +567,8 @@ func (kn *Kernel) validateBlockBody(b *block.Block) error {
 		cpuCnt = 1
 	}
 	txCnt := len(b.Body.Transactions) / cpuCnt
-	TxHashes := make([]hash.Hash256, len(b.Body.Transactions))
+	TxHashes := make([]hash.Hash256, 0, len(b.Body.Transactions)+1)
+	TxHashes = append(TxHashes, b.Header.PrevHash())
 	if len(b.Body.Transactions)%cpuCnt != 0 {
 		txCnt++
 	}

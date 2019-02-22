@@ -70,15 +70,15 @@ func buildLevel(hashes []hash.Hash256) ([]hash.Hash256, error) {
 }
 
 // BuildLevelRoot returns the level root hash
-func BuildLevelRoot(txHashes []hash.Hash256) (hash.Hash256, error) {
-	if len(txHashes) > 65535 {
+func BuildLevelRoot(hashes []hash.Hash256) (hash.Hash256, error) {
+	if len(hashes) > 65536 {
 		return hash.Hash256{}, ErrExceedHashCount
 	}
-	if len(txHashes) == 0 {
-		return hash.Hash256{}, nil
+	if len(hashes) == 0 {
+		return hash.Hash256{}, ErrInvalidHashCount
 	}
 
-	lv3, err := buildLevel(txHashes)
+	lv3, err := buildLevel(hashes)
 	if err != nil {
 		return hash.Hash256{}, err
 	}
