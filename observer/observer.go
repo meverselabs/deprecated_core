@@ -181,15 +181,6 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 		if err != message.ErrUnknownMessage {
 			return err
 		} else {
-	m, err := ob.mm.ParseMessage(r, t)
-	if err != nil {
-		return err
-	}
-
-	if err := ob.cm.OnRecv(p, r, t); err != nil {
-		if err != message.ErrUnknownMessage {
-			return err
-		} else {
 			m, err := ob.mm.ParseMessage(r, t)
 			if err != nil {
 				return err
@@ -199,7 +190,7 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 				if !is {
 					if Top, _, err := ob.kn.TopRankInMap(ob.adjustFormulatorMap()); err != nil {
 						if err != consensus.ErrInsufficientCandidateCount {
-							return err
+							return nil
 						}
 					} else {
 						is = p.ID() == Top.String()
