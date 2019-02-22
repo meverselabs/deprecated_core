@@ -1,6 +1,7 @@
 package block
 
 import (
+	"encoding/json"
 	"io"
 
 	"git.fleta.io/fleta/common"
@@ -17,13 +18,13 @@ type Body struct {
 }
 
 // WriteTo is a serialization function
-func (b *Body) WriteTo(w io.Writer) (int64, error) {
+func (bb *Body) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := util.WriteUint16(w, uint16(len(b.Transactions))); err != nil {
+	if n, err := util.WriteUint16(w, uint16(len(bb.Transactions))); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
-		for _, tx := range b.Transactions {
+		for _, tx := range bb.Transactions {
 			if n, err := util.WriteUint8(w, uint8(tx.Type())); err != nil {
 				return wrote, err
 			} else {
@@ -35,7 +36,7 @@ func (b *Body) WriteTo(w io.Writer) (int64, error) {
 				}
 			}
 		}
-		for _, sigs := range b.TransactionSignatures {
+		for _, sigs := range bb.TransactionSignatures {
 			wrote += n
 			if n, err := util.WriteUint8(w, uint8(len(sigs))); err != nil {
 				return wrote, err
@@ -55,31 +56,31 @@ func (b *Body) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom is a deserialization function
-func (b *Body) ReadFrom(r io.Reader) (int64, error) {
+func (bb *Body) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if Len, n, err := util.ReadUint16(r); err != nil {
 		return read, err
 	} else {
 		read += n
-		b.Transactions = make([]transaction.Transaction, 0, Len)
+		bb.Transactions = make([]transaction.Transaction, 0, Len)
 		for i := 0; i < int(Len); i++ {
 			if t, n, err := util.ReadUint8(r); err != nil {
 				return read, err
 			} else {
 				read += n
-				if tx, err := b.Tran.NewByType(transaction.Type(t)); err != nil {
+				if tx, err := bb.Tran.NewByType(transaction.Type(t)); err != nil {
 					return read, err
 				} else {
 					if n, err := tx.ReadFrom(r); err != nil {
 						return read, err
 					} else {
 						read += n
-						b.Transactions = append(b.Transactions, tx)
+						bb.Transactions = append(bb.Transactions, tx)
 					}
 				}
 			}
 		}
-		b.TransactionSignatures = make([][]common.Signature, 0, Len)
+		bb.TransactionSignatures = make([][]common.Signature, 0, Len)
 		for i := 0; i < int(Len); i++ {
 			if SLen, n, err := util.ReadUint8(r); err != nil {
 				return read, err
@@ -95,9 +96,19 @@ func (b *Body) ReadFrom(r io.Reader) (int64, error) {
 						sigs = append(sigs, sig)
 					}
 				}
-				b.TransactionSignatures = append(b.TransactionSignatures, sigs)
+				bb.TransactionSignatures = append(bb.TransactionSignatures, sigs)
 			}
 		}
 	}
 	return read, nil
+}
+
+// UnmarshalJSON is a unmarshaler function
+func (bb *Body) UnmarshalJSON(bs []byte) error {
+	return json.Unmarshal(bs, &bb)
+}
+
+// MarshalJSON is a marshaler function
+func (bb *Body) MarshalJSON() ([]byte, error) {
+	return json.Marshal(bb)
 }

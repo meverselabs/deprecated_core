@@ -1,6 +1,7 @@
 package block
 
 import (
+	"encoding/json"
 	"io"
 
 	"git.fleta.io/fleta/common"
@@ -12,11 +13,11 @@ import (
 // Header is validation informations
 type Header struct {
 	chain.Base
-	ChainCoord    common.Coordinate
-	LevelRootHash hash.Hash256
-	ContextHash   hash.Hash256
-	Formulator    common.Address
-	TimeoutCount  uint32
+	ChainCoord    common.Coordinate `json:"chain_coord"`
+	LevelRootHash hash.Hash256      `json:"level_root_hash"`
+	ContextHash   hash.Hash256      `json:"context_hash"`
+	Formulator    common.Address    `json:"formulator"`
+	TimeoutCount  uint32            `json:"timeout_count"`
 }
 
 // Hash returns the hash value of it
@@ -95,4 +96,14 @@ func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 		read += n
 	}
 	return read, nil
+}
+
+// UnmarshalJSON is a unmarshaler function
+func (bh *Header) UnmarshalJSON(bs []byte) error {
+	return json.Unmarshal(bs, &bh)
+}
+
+// MarshalJSON is a marshaler function
+func (bh *Header) MarshalJSON() ([]byte, error) {
+	return json.Marshal(bh)
 }

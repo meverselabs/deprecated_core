@@ -82,6 +82,21 @@ func (am *Amount) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
+// UnmarshalJSON is a unmarshaler function
+func (am *Amount) UnmarshalJSON(bs []byte) error {
+	v, err := ParseAmount(string(bs))
+	if err != nil {
+		return err
+	}
+	am.Int = v.Int
+	return nil
+}
+
+// MarshalJSON is a marshaler function
+func (am *Amount) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + am.String() + `"`), nil
+}
+
 // Clone returns the clonend value of it
 func (am *Amount) Clone() *Amount {
 	c := newAmount(0)
@@ -158,20 +173,20 @@ func ParseAmount(str string) (*Amount, error) {
 	case 1:
 		pi, err := strconv.ParseUint(ls[0], 10, 64)
 		if err != nil {
-			return nil, ErrInvalidFormat
+			return nil, ErrInvalidAmountFormat
 		}
 		return NewCoinAmount(pi, 0), nil
 	case 2:
 		pi, err := strconv.ParseUint(ls[0], 10, 64)
 		if err != nil {
-			return nil, ErrInvalidFormat
+			return nil, ErrInvalidAmountFormat
 		}
 		pf, err := strconv.ParseUint(padFractional(ls[1]), 10, 64)
 		if err != nil {
-			return nil, ErrInvalidFormat
+			return nil, ErrInvalidAmountFormat
 		}
 		return NewCoinAmount(pi, pf), nil
 	default:
-		return nil, ErrInvalidFormat
+		return nil, ErrInvalidAmountFormat
 	}
 }

@@ -1,11 +1,14 @@
 package block
 
-import "io"
+import (
+	"encoding/json"
+	"io"
+)
 
 // Block includes a block header and a block body
 type Block struct {
-	Header *Header
-	Body   *Body
+	Header *Header `json:"header"`
+	Body   *Body   `json:"body"`
 }
 
 // WriteTo is a serialization function
@@ -38,4 +41,14 @@ func (b *Block) ReadFrom(r io.Reader) (int64, error) {
 		read += n
 	}
 	return read, nil
+}
+
+// UnmarshalJSON is a unmarshaler function
+func (b *Block) UnmarshalJSON(bs []byte) error {
+	return json.Unmarshal(bs, &b)
+}
+
+// MarshalJSON is a marshaler function
+func (b *Block) MarshalJSON() ([]byte, error) {
+	return json.Marshal(b)
 }
