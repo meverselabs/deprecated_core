@@ -82,6 +82,11 @@ func (am *Amount) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
+// MarshalJSON is a marshaler function
+func (am *Amount) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + am.String() + `"`), nil
+}
+
 // UnmarshalJSON is a unmarshaler function
 func (am *Amount) UnmarshalJSON(bs []byte) error {
 	v, err := ParseAmount(string(bs))
@@ -90,11 +95,6 @@ func (am *Amount) UnmarshalJSON(bs []byte) error {
 	}
 	am.Int = v.Int
 	return nil
-}
-
-// MarshalJSON is a marshaler function
-func (am *Amount) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + am.String() + `"`), nil
 }
 
 // Clone returns the clonend value of it

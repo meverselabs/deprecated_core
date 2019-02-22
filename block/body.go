@@ -1,7 +1,7 @@
 package block
 
 import (
-	"encoding/json"
+	"bytes"
 	"io"
 
 	"git.fleta.io/fleta/common"
@@ -103,12 +103,44 @@ func (bb *Body) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// UnmarshalJSON is a unmarshaler function
-func (bb *Body) UnmarshalJSON(bs []byte) error {
-	return json.Unmarshal(bs, &bb)
-}
-
 // MarshalJSON is a marshaler function
 func (bb *Body) MarshalJSON() ([]byte, error) {
-	return json.Marshal(bb)
+	var buffer bytes.Buffer
+	buffer.WriteString(`{`)
+	buffer.WriteString(`"transactions":`)
+	buffer.WriteString(`[`)
+	buffer.WriteString(`"TODO"`)
+	/*
+		for _, tx := range bb.Transactions {
+			if bs, err := tx.MarshalJSON(); err != nil {
+				return nil, err
+			} else {
+				buffer.Write(bs)
+			}
+		}
+	*/
+	buffer.WriteString(`]`)
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"signatures":`)
+	buffer.WriteString(`[`)
+	for i, sigs := range bb.TransactionSignatures {
+		if i > 0 {
+			buffer.WriteString(`,`)
+		}
+		buffer.WriteString(`[`)
+		for j, sig := range sigs {
+			if j > 0 {
+				buffer.WriteString(`,`)
+			}
+			if bs, err := sig.MarshalJSON(); err != nil {
+				return nil, err
+			} else {
+				buffer.Write(bs)
+			}
+		}
+		buffer.WriteString(`]`)
+	}
+	buffer.WriteString(`]`)
+	buffer.WriteString(`}`)
+	return buffer.Bytes(), nil
 }

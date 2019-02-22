@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 
@@ -13,11 +14,11 @@ import (
 // Header is validation informations
 type Header struct {
 	chain.Base
-	ChainCoord    common.Coordinate `json:"chain_coord"`
-	LevelRootHash hash.Hash256      `json:"level_root_hash"`
-	ContextHash   hash.Hash256      `json:"context_hash"`
-	Formulator    common.Address    `json:"formulator"`
-	TimeoutCount  uint32            `json:"timeout_count"`
+	ChainCoord    common.Coordinate
+	LevelRootHash hash.Hash256
+	ContextHash   hash.Hash256
+	Formulator    common.Address
+	TimeoutCount  uint32
 }
 
 // Hash returns the hash value of it
@@ -98,12 +99,72 @@ func (bh *Header) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
-// UnmarshalJSON is a unmarshaler function
-func (bh *Header) UnmarshalJSON(bs []byte) error {
-	return json.Unmarshal(bs, &bh)
-}
-
 // MarshalJSON is a marshaler function
 func (bh *Header) MarshalJSON() ([]byte, error) {
-	return json.Marshal(bh)
+	var buffer bytes.Buffer
+	buffer.WriteString(`{`)
+	buffer.WriteString(`"version":`)
+	if bs, err := json.Marshal(bh.Version_); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"height":`)
+	if bs, err := json.Marshal(bh.Height_); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"prev_hash":`)
+	if bs, err := bh.PrevHash_.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"timestamp":`)
+	if bs, err := json.Marshal(bh.Timestamp_); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"chain_coord":`)
+	if bs, err := bh.ChainCoord.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"level_root_hash":`)
+	if bs, err := bh.LevelRootHash.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"context_hash":`)
+	if bs, err := bh.ContextHash.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"formulator":`)
+	if bs, err := bh.Formulator.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"timeout_count":`)
+	if bs, err := json.Marshal(bh.TimeoutCount); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`}`)
+	return buffer.Bytes(), nil
 }

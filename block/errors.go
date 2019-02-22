@@ -12,4 +12,5 @@ var (
 	ErrExceedTimeoutCount            = errors.New("exceed timeout count")
 	ErrExceedTableAppendMessageCount = errors.New("exceed table append message count")
 	ErrInvalidBlockFormat            = errors.New("invalid block format")
+	ErrInvalidBlockHeaderFormat      = errors.New("invalid block header format")
 )

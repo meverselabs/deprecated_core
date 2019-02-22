@@ -78,6 +78,15 @@ func (bc *Balance) ReadFrom(r io.Reader) (int64, error) {
 	return read, nil
 }
 
+// MarshalJSON is a marshaler function
+func (bc *Balance) MarshalJSON() ([]byte, error) {
+	hexMap := map[string]*amount.Amount{}
+	for id, am := range bc.amountMap {
+		hexMap[common.NewCoordinateByID(id).String()] = am
+	}
+	return json.Marshal(hexMap)
+}
+
 // UnmarshalJSON is a unmarshaler function
 func (bc *Balance) UnmarshalJSON(bs []byte) error {
 	hexMap := map[string]*amount.Amount{}
@@ -93,15 +102,6 @@ func (bc *Balance) UnmarshalJSON(bs []byte) error {
 		bc.amountMap[coord.ID()] = am
 	}
 	return nil
-}
-
-// MarshalJSON is a marshaler function
-func (bc *Balance) MarshalJSON() ([]byte, error) {
-	hexMap := map[string]*amount.Amount{}
-	for id, am := range bc.amountMap {
-		hexMap[common.NewCoordinateByID(id).String()] = am
-	}
-	return json.Marshal(hexMap)
 }
 
 // Clone returns the clonend value of it

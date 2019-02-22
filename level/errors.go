@@ -6,5 +6,6 @@ import (
 
 // level errors
 var (
-	ErrExceedHashCount = errors.New("exceed hash count")
+	ErrExceedHashCount  = errors.New("exceed hash count")
+	ErrInvalidHashCount = errors.New("invalid hash count")
 )
