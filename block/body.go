@@ -109,16 +109,16 @@ func (bb *Body) MarshalJSON() ([]byte, error) {
 	buffer.WriteString(`{`)
 	buffer.WriteString(`"transactions":`)
 	buffer.WriteString(`[`)
-	buffer.WriteString(`"TODO"`)
-	/*
-		for _, tx := range bb.Transactions {
-			if bs, err := tx.MarshalJSON(); err != nil {
-				return nil, err
-			} else {
-				buffer.Write(bs)
-			}
+	for i, tx := range bb.Transactions {
+		if i > 0 {
+			buffer.WriteString(`,`)
 		}
-	*/
+		if bs, err := tx.MarshalJSON(); err != nil {
+			return nil, err
+		} else {
+			buffer.Write(bs)
+		}
+	}
 	buffer.WriteString(`]`)
 	buffer.WriteString(`,`)
 	buffer.WriteString(`"signatures":`)

@@ -1,6 +1,7 @@
 package account
 
 import (
+	"encoding/json"
 	"io"
 
 	"git.fleta.io/fleta/common"
@@ -14,8 +15,7 @@ type Type uint8
 type Account interface {
 	io.WriterTo
 	io.ReaderFrom
-	//json.Marshaler
-	//json.Unmarshaler
+	json.Marshaler
 	Address() common.Address
 	SetType(t Type)
 	Type() Type

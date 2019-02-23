@@ -1,6 +1,7 @@
 package transaction
 
 import (
+	"encoding/json"
 	"io"
 
 	"git.fleta.io/fleta/common"
@@ -12,8 +13,7 @@ import (
 type Transaction interface {
 	io.WriterTo
 	io.ReaderFrom
-	//json.Marshaler
-	//json.Unmarshaler
+	json.Marshaler
 	ChainCoord() *common.Coordinate
 	Timestamp() uint64
 	SetType(t Type)

@@ -1,6 +1,8 @@
 package consensus
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 
 	"git.fleta.io/fleta/common"
@@ -153,4 +155,53 @@ func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
 		read += n
 	}
 	return read, nil
+}
+
+// MarshalJSON is a marshaler function
+func (tx *CreateFormulation) MarshalJSON() ([]byte, error) {
+	var buffer bytes.Buffer
+	buffer.WriteString(`{`)
+	buffer.WriteString(`"chain_coord":`)
+	if bs, err := tx.ChainCoord_.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"timestamp":`)
+	if bs, err := json.Marshal(tx.Timestamp_); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"type":`)
+	if bs, err := json.Marshal(tx.Type_); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"seq":`)
+	if bs, err := json.Marshal(tx.Seq_); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"from":`)
+	if bs, err := tx.From_.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"key_hash":`)
+	if bs, err := tx.KeyHash.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`}`)
+	return buffer.Bytes(), nil
 }
