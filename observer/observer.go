@@ -96,7 +96,7 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 	go ob.cm.Run()
 
 	voteTimer := time.NewTimer(time.Millisecond)
-	ob.failTimer = time.NewTimer(5 * time.Second)
+	ob.failTimer = time.NewTimer(3 * time.Second)
 	for !ob.isClose {
 		select {
 		case <-voteTimer.C:
@@ -119,10 +119,10 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 				if ob.round != nil && ob.round.MinRoundVoteAck != nil {
 					addr := ob.round.MinRoundVoteAck.Formulator
 					_, has := ob.ignoreMap[addr]
-					ob.ignoreMap[addr] = time.Now().UnixNano() + int64(30*time.Second)
 					if has {
 						ob.fs.RemovePeer(addr)
 					}
+					ob.ignoreMap[addr] = time.Now().UnixNano() + int64(30*time.Second)
 				}
 				ob.roundState = RoundVoteState
 				log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteState)
@@ -133,7 +133,7 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 				ob.sendRoundVote()
 			}
 			ob.Unlock()
-			ob.failTimer.Reset(5 * time.Second)
+			ob.failTimer.Reset(3 * time.Second)
 		case <-ob.runEnd:
 			return
 		}
@@ -158,7 +158,7 @@ func (ob *Observer) OnFormulatorConnected(p *FormulatorPeer) {
 	var msg message.Message
 	ob.Lock()
 	if ob.round != nil && ob.round.MinRoundVoteAck != nil {
-		if ob.round.MinRoundVoteAck.Formulator.Equal(p.address) {
+		if ob.round.MinRoundVoteAck.Formulator.Equal(p.Address()) {
 			msg = &message_def.BlockReqMessage{
 				RoundHash:            ob.round.RoundHash,
 				PrevHash:             cp.LastHash(),
@@ -188,26 +188,42 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 			}
 
 			if msg, is := m.(*chain.RequestMessage); is {
-				is := msg.Height >= ob.kn.Provider().Height()-10
-				if !is {
-					if Top, _, err := ob.kn.TopRankInMap(ob.adjustFormulatorMap()); err != nil {
-						if err != consensus.ErrInsufficientCandidateCount {
-							return nil
+				if fp, is := p.(*FormulatorPeer); is {
+					enable := false
+
+					ob.Lock()
+					defer ob.Unlock()
+
+					if fp.GuessHeight() < msg.Height {
+
+						CountMap := ob.fs.GuessHeightCountMap()
+						if CountMap[ob.kn.Provider().Height()] < 5 {
+							enable = true
+						} else {
+							ranks, err := ob.kn.RanksInMap(ob.adjustFormulatorMap(), 5)
+							if err != nil {
+								return err
+							}
+							rankMap := map[string]bool{}
+							for _, r := range ranks {
+								rankMap[r.Address.String()] = true
+							}
+							enable = rankMap[p.ID()]
 						}
-					} else {
-						is = p.ID() == Top.String()
-					}
-				}
-				if is {
-					cd, err := ob.kn.Provider().Data(msg.Height)
-					if err != nil {
-						return err
-					}
-					sm := &chain.DataMessage{
-						Data: cd,
-					}
-					if err := p.Send(sm); err != nil {
-						return err
+						if enable {
+							fp.UpdateGuessHeight(msg.Height)
+
+							cd, err := ob.kn.Provider().Data(msg.Height)
+							if err != nil {
+								return err
+							}
+							sm := &chain.DataMessage{
+								Data: cd,
+							}
+							if err := p.Send(sm); err != nil {
+								return err
+							}
+						}
 					}
 				}
 			} else {
@@ -532,6 +548,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 				},
 			}
 			ob.fs.SendTo(ob.round.MinRoundVoteAck.Formulator, nm)
+			ob.fs.UpdateGuessHeight(ob.round.MinRoundVoteAck.Formulator, nm.TargetHeight)
 
 			delete(ob.ignoreMap, ob.round.MinRoundVoteAck.Formulator)
 
@@ -732,7 +749,7 @@ func (ob *Observer) sendRoundVote() error {
 	}
 
 	//log.Println(ob.kn.Provider().Height(), "SendRoundVote", nm.RoundVote.Formulator, nm.RoundVote.RoundHash)
-	ob.failTimer.Reset(5 * time.Second)
+	ob.failTimer.Reset(3 * time.Second)
 
 	if sig, err := ob.Config.Key.Sign(nm.RoundVote.Hash()); err != nil {
 		return err
