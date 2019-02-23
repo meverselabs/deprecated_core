@@ -53,7 +53,7 @@ func (cs *Consensus) TopRank(TimeoutCount int) (*Rank, error) {
 	return cs.candidates[TimeoutCount].Clone(), nil
 }
 
-// TopRankInMap returns the top rank
+// TopRankInMap returns the top rank by the given timeout count in the given map
 func (cs *Consensus) TopRankInMap(FormulatorMap map[common.Address]bool) (*Rank, int, error) {
 	cs.Lock()
 	defer cs.Unlock()
@@ -67,6 +67,29 @@ func (cs *Consensus) TopRankInMap(FormulatorMap map[common.Address]bool) (*Rank,
 		}
 	}
 	return nil, 0, ErrInsufficientCandidateCount
+}
+
+// RanksInMap returns the ranks in the map
+func (cs *Consensus) RanksInMap(FormulatorMap map[common.Address]bool, Limit int) ([]*Rank, error) {
+	cs.Lock()
+	defer cs.Unlock()
+
+	if len(FormulatorMap) == 0 {
+		return nil, ErrInsufficientCandidateCount
+	}
+	if Limit < 1 {
+		Limit = 1
+	}
+	list := make([]*Rank, 0, Limit)
+	for _, r := range cs.candidates {
+		if FormulatorMap[r.Address] {
+			list = append(list, r)
+			if len(list) >= Limit {
+				break
+			}
+		}
+	}
+	return list, nil
 }
 
 // IsFormulator returns the given information is correct or not

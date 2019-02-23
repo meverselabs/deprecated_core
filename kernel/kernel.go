@@ -197,6 +197,11 @@ func (kn *Kernel) TopRankInMap(FormulatorMap map[common.Address]bool) (*consensu
 	return kn.consensus.TopRankInMap(FormulatorMap)
 }
 
+// RanksInMap returns the ranks in the map
+func (kn *Kernel) RanksInMap(FormulatorMap map[common.Address]bool, Limit int) ([]*consensus.Rank, error) {
+	return kn.consensus.RanksInMap(FormulatorMap, Limit)
+}
+
 // IsFormulator returns the given information is correct or not
 func (kn *Kernel) IsFormulator(Formulator common.Address, Publichash common.PublicHash) bool {
 	return kn.consensus.IsFormulator(Formulator, Publichash)
