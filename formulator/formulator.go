@@ -165,14 +165,14 @@ func (fr *Formulator) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 	if err != nil {
 		return err
 	}
-	if err := fr.handleMessage(p, m); err != nil {
+	if err := fr.handleMessage(p, m, 0); err != nil {
 		//log.Println(err)
 		return nil
 	}
 	return nil
 }
 
-func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
+func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount int) error {
 	switch msg := m.(type) {
 	case *message_def.BlockReqMessage:
 		fr.Lock()
@@ -180,7 +180,8 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 
 		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), msg.TargetHeight, "BlockReqMessage")
 		cp := fr.kn.Provider()
-		if msg.TargetHeight <= cp.Height() {
+		Height := cp.Height()
+		if msg.TargetHeight <= Height {
 			return nil
 		}
 		if fr.lastGenMessage != nil {
@@ -192,6 +193,14 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 				}
 				return nil
 			}
+		}
+		if msg.TargetHeight > Height+1 {
+			if RetryCount > 10 {
+				return nil
+			}
+			go fr.tryRequestNext()
+			time.Sleep(100 * time.Millisecond)
+			return fr.handleMessage(p, m, RetryCount+1)
 		}
 
 		nextRoundHash := fr.nextRoundHash()
@@ -215,7 +224,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 		if !msg.PrevHash.Equal(cp.LastHash()) {
 			return ErrInvalidRequest
 		}
-		if msg.TargetHeight != cp.Height()+1 {
+		if msg.TargetHeight != Height+1 {
 			return ErrInvalidRequest
 		}
 
