@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"git.fleta.io/fleta/common"
@@ -125,6 +126,27 @@ func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
 	return nil
 }
 
+// GuessHeightCountMap returns a number of the guess height from all peers
+func (ms *FormulatorService) GuessHeightCountMap() map[uint32]int {
+	CountMap := map[uint32]int{}
+	ms.Lock()
+	for _, p := range ms.peerHash {
+		CountMap[p.GuessHeight()]++
+	}
+	ms.Unlock()
+	return CountMap
+}
+
+// UpdateGuessHeight updates the guess height of the fomrulator
+func (ms *FormulatorService) UpdateGuessHeight(Formulator common.Address, height uint32) {
+	ms.Lock()
+	p, has := ms.peerHash[Formulator]
+	ms.Unlock()
+	if has {
+		p.UpdateGuessHeight(height)
+	}
+}
+
 func (ms *FormulatorService) server(BindAddress string) error {
 	lstn, err := net.Listen("tcp", BindAddress)
 	if err != nil {
@@ -177,19 +199,21 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 
 	ms.handler.OnFormulatorConnected(p)
 
+	var pingCount uint64
+	pingCountLimit := uint64(3)
 	pingTimer := time.NewTimer(10 * time.Second)
-	deadTimer := time.NewTimer(30 * time.Second)
 	go func() {
 		for {
 			select {
 			case <-pingTimer.C:
-				if err := p.Send(&message_def.PingMessage{Timestamp: uint64(time.Now().UnixNano())}); err != nil {
+				if err := p.Send(&message_def.PingMessage{}); err != nil {
 					p.conn.Close()
 					return
 				}
-			case <-deadTimer.C:
-				p.conn.Close()
-				return
+				if atomic.AddUint64(&pingCount, 1) > pingCountLimit {
+					p.conn.Close()
+					return
+				}
 			}
 		}
 	}()
@@ -200,8 +224,9 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 		} else {
 			t = message.Type(v)
 		}
-		deadTimer.Reset(30 * time.Second)
+		atomic.SwapUint64(&pingCount, 0)
 		if t == message_def.PingMessageType {
+			// Because a PingMessage is zero size, so do not need to consume the body
 			continue
 		}
 
