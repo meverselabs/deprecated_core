@@ -118,7 +118,11 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 				log.Println(ob.kn.Provider().Height(), "Fail State", ob.roundState, len(ob.adjustFormulatorMap()), len(ob.fs.peerHash))
 				if ob.round != nil && ob.round.MinRoundVoteAck != nil {
 					addr := ob.round.MinRoundVoteAck.Formulator
+					_, has := ob.ignoreMap[addr]
 					ob.ignoreMap[addr] = time.Now().UnixNano() + int64(30*time.Second)
+					if has {
+						ob.fs.RemovePeer(addr)
+					}
 				}
 				ob.roundState = RoundVoteState
 				log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteState)
@@ -148,7 +152,7 @@ func (ob *Observer) OnFormulatorConnected(p *FormulatorPeer) {
 	p.Send(&chain.StatusMessage{
 		Version:  cp.Version(),
 		Height:   cp.Height(),
-		PrevHash: cp.PrevHash(),
+		LastHash: cp.LastHash(),
 	})
 
 	var msg message.Message
@@ -157,7 +161,7 @@ func (ob *Observer) OnFormulatorConnected(p *FormulatorPeer) {
 		if ob.round.MinRoundVoteAck.Formulator.Equal(p.address) {
 			msg = &message_def.BlockReqMessage{
 				RoundHash:            ob.round.RoundHash,
-				PrevHash:             cp.PrevHash(),
+				PrevHash:             cp.LastHash(),
 				TargetHeight:         cp.Height() + 1,
 				TimeoutCount:         ob.round.MinRoundVoteAck.TimeoutCount,
 				Formulator:           ob.round.MinRoundVoteAck.Formulator,
@@ -174,9 +178,6 @@ func (ob *Observer) OnFormulatorConnected(p *FormulatorPeer) {
 
 // OnRecv is called when a message is received from the peer
 func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
-	ob.Lock()
-	defer ob.Unlock()
-
 	if err := ob.cm.OnRecv(p, r, t); err != nil {
 		if err != message.ErrUnknownMessage {
 			return err
@@ -185,6 +186,7 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 			if err != nil {
 				return err
 			}
+
 			if msg, is := m.(*chain.RequestMessage); is {
 				is := msg.Height >= ob.kn.Provider().Height()-10
 				if !is {
@@ -209,7 +211,10 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 					}
 				}
 			} else {
-				if err := ob.handleMessage(m); err != nil {
+				ob.Lock()
+				err := ob.handleMessage(m)
+				ob.Unlock()
+				if err != nil {
 					//log.Println(ob.kn.Provider().Height(), message.NameOfType(t), err)
 					return nil
 				}
@@ -239,7 +244,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			return ErrInvalidVote
 		}
 		cp := ob.kn.Provider()
-		if !msg.RoundVote.PrevHash.Equal(cp.PrevHash()) {
+		if !msg.RoundVote.LastHash.Equal(cp.LastHash()) {
 			return ErrInvalidVote
 		}
 		if msg.RoundVote.TargetHeight != cp.Height()+1 {
@@ -389,7 +394,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			cp := ob.kn.Provider()
 			nm := &message_def.BlockReqMessage{
 				RoundHash:            ob.round.RoundHash,
-				PrevHash:             cp.PrevHash(),
+				PrevHash:             cp.LastHash(),
 				TargetHeight:         cp.Height() + 1,
 				TimeoutCount:         ob.round.MinRoundVoteAck.TimeoutCount,
 				Formulator:           ob.round.MinRoundVoteAck.Formulator,
@@ -443,7 +448,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 		}
 
 		cp := ob.kn.Provider()
-		if !msg.BlockVote.Header.PrevHash().Equal(cp.PrevHash()) {
+		if !msg.BlockVote.Header.PrevHash().Equal(cp.LastHash()) {
 			return ErrInvalidVote
 		}
 		if msg.BlockVote.Header.Height() != cp.Height()+1 {
@@ -528,6 +533,8 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			}
 			ob.fs.SendTo(ob.round.MinRoundVoteAck.Formulator, nm)
 
+			delete(ob.ignoreMap, ob.round.MinRoundVoteAck.Formulator)
+
 			ob.roundState = RoundVoteState
 			log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteState)
 			ob.roundVoteMap = map[common.PublicHash]*RoundVote{}
@@ -541,7 +548,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 				ob.fs.SendTo(Top.Address, &chain.StatusMessage{
 					Version:  cp.Version(),
 					Height:   cp.Height(),
-					PrevHash: cp.PrevHash(),
+					LastHash: cp.LastHash(),
 				})
 			}
 
@@ -577,7 +584,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 		}
 
 		cp := ob.kn.Provider()
-		if !msg.Block.Header.PrevHash().Equal(cp.PrevHash()) {
+		if !msg.Block.Header.PrevHash().Equal(cp.LastHash()) {
 			return ErrInvalidVote
 		}
 		if msg.Block.Header.Height() != cp.Height()+1 {
@@ -636,8 +643,7 @@ func (ob *Observer) nextRoundHash() hash.Hash256 {
 		panic(err)
 	}
 	buffer.WriteString(",")
-	PrevHash := cp.PrevHash()
-	if _, err := PrevHash.WriteTo(&buffer); err != nil {
+	if _, err := cp.LastHash().WriteTo(&buffer); err != nil {
 		panic(err)
 	}
 	buffer.WriteString(",")
@@ -704,7 +710,7 @@ func (ob *Observer) sendRoundVote() error {
 		RoundVote: &RoundVote{
 			RoundHash:    ob.nextRoundHash(),
 			ChainCoord:   ob.kn.ChainCoord(),
-			PrevHash:     cp.PrevHash(),
+			LastHash:     cp.LastHash(),
 			TargetHeight: cp.Height() + 1,
 		},
 	}
@@ -721,7 +727,7 @@ func (ob *Observer) sendRoundVote() error {
 		ob.fs.SendTo(Top.Address, &chain.StatusMessage{
 			Version:  cp.Version(),
 			Height:   cp.Height(),
-			PrevHash: cp.PrevHash(),
+			LastHash: cp.LastHash(),
 		})
 	}
 
