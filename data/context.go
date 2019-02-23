@@ -16,7 +16,7 @@ import (
 type Context struct {
 	loader          Loader
 	genTargetHeight uint32
-	genPrevHash     hash.Hash256
+	genLastHash     hash.Hash256
 	cache           *cache
 	stack           []*ContextData
 	isLatestHash    bool
@@ -28,7 +28,7 @@ func NewContext(loader Loader) *Context {
 	ctx := &Context{
 		loader:          loader,
 		genTargetHeight: loader.TargetHeight(),
-		genPrevHash:     loader.PrevHash(),
+		genLastHash:     loader.LastHash(),
 		stack:           []*ContextData{NewContextData(loader, nil)},
 	}
 	ctx.cache = newCache(ctx)
@@ -64,9 +64,9 @@ func (ctx *Context) TargetHeight() uint32 {
 	return ctx.genTargetHeight
 }
 
-// PrevHash returns the recorded prev hash when context generation
-func (ctx *Context) PrevHash() hash.Hash256 {
-	return ctx.genPrevHash
+// LastHash returns the recorded prev hash when context generation
+func (ctx *Context) LastHash() hash.Hash256 {
+	return ctx.genLastHash
 }
 
 // Top returns the top snapshot

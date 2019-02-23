@@ -12,12 +12,14 @@ type Type uint8
 
 // Account is a interface that defines common account functions
 type Account interface {
+	io.WriterTo
+	io.ReaderFrom
+	//json.Marshaler
+	//json.Unmarshaler
 	Address() common.Address
 	SetType(t Type)
 	Type() Type
 	Clone() Account
-	io.WriterTo
-	io.ReaderFrom
 }
 
 // Base is the parts of account functions that are not changed by derived one

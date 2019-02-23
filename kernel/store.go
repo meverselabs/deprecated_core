@@ -141,8 +141,8 @@ func (st *Store) TargetHeight() uint32 {
 	return st.Height() + 1
 }
 
-// PrevHash returns the last hash of the chain
-func (st *Store) PrevHash() hash.Hash256 {
+// LastHash returns the last hash of the chain
+func (st *Store) LastHash() hash.Hash256 {
 	h, err := st.Hash(st.Height())
 	if err != nil {
 		if err != ErrStoreClosed {

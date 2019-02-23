@@ -212,7 +212,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			return ErrInvalidRequest
 		}
 
-		if !msg.PrevHash.Equal(cp.PrevHash()) {
+		if !msg.PrevHash.Equal(cp.LastHash()) {
 			return ErrInvalidRequest
 		}
 		if msg.TargetHeight != cp.Height()+1 {
@@ -306,7 +306,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message) error {
 			if status.Height < msg.Height {
 				status.Version = msg.Version
 				status.Height = msg.Height
-				status.PrevHash = msg.PrevHash
+				status.LastHash = msg.LastHash
 			}
 		}
 		fr.Unlock()
@@ -376,8 +376,7 @@ func (fr *Formulator) nextRoundHash() hash.Hash256 {
 		panic(err)
 	}
 	buffer.WriteString(",")
-	PrevHash := cp.PrevHash()
-	if _, err := PrevHash.WriteTo(&buffer); err != nil {
+	if _, err := cp.LastHash().WriteTo(&buffer); err != nil {
 		panic(err)
 	}
 	buffer.WriteString(",")

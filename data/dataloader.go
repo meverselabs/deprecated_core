@@ -13,7 +13,7 @@ type Loader interface {
 	Accounter() *Accounter
 	Transactor() *Transactor
 	TargetHeight() uint32
-	PrevHash() hash.Hash256
+	LastHash() hash.Hash256
 	Seq(addr common.Address) uint64
 	Account(addr common.Address) (account.Account, error)
 	IsExistAccount(addr common.Address) (bool, error)
@@ -57,8 +57,8 @@ func (st *emptyLoader) TargetHeight() uint32 {
 	return 0
 }
 
-// PrevHash returns hash.Hash256{}
-func (st *emptyLoader) PrevHash() hash.Hash256 {
+// LastHash returns hash.Hash256{}
+func (st *emptyLoader) LastHash() hash.Hash256 {
 	return hash.Hash256{}
 }
 

@@ -13,7 +13,7 @@ type RoundVote struct {
 	RoundHash            hash.Hash256
 	PrevRoundHash        hash.Hash256
 	ChainCoord           *common.Coordinate
-	PrevHash             hash.Hash256
+	LastHash             hash.Hash256
 	TargetHeight         uint32
 	TimeoutCount         uint32
 	Formulator           common.Address
@@ -43,7 +43,7 @@ func (vt *RoundVote) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := vt.PrevHash.WriteTo(w); err != nil {
+	if n, err := vt.LastHash.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -89,7 +89,7 @@ func (vt *RoundVote) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if n, err := vt.PrevHash.ReadFrom(r); err != nil {
+	if n, err := vt.LastHash.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

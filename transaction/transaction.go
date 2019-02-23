@@ -12,6 +12,8 @@ import (
 type Transaction interface {
 	io.WriterTo
 	io.ReaderFrom
+	//json.Marshaler
+	//json.Unmarshaler
 	ChainCoord() *common.Coordinate
 	Timestamp() uint64
 	SetType(t Type)

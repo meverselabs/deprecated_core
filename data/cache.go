@@ -48,9 +48,9 @@ func (cc *cache) TargetHeight() uint32 {
 	return cc.ctx.TargetHeight()
 }
 
-// PrevHash returns the recorded prev hash when context generation
-func (cc *cache) PrevHash() hash.Hash256 {
-	return cc.ctx.PrevHash()
+// LastHash returns the recorded prev hash when context generation
+func (cc *cache) LastHash() hash.Hash256 {
+	return cc.ctx.LastHash()
 }
 
 // Seq returns the sequence of the account

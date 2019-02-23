@@ -114,7 +114,7 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 	}
 	kn.genesisContextData = nil // to reduce memory usagse
 
-	log.Println("Kernel", "Loaded with height of", kn.Provider().Height(), kn.Provider().PrevHash())
+	log.Println("Kernel", "Loaded with height of", kn.Provider().Height(), kn.Provider().LastHash())
 
 	return kn, nil
 }
@@ -276,18 +276,18 @@ func (kn *Kernel) Validate(b *block.Block, GeneratorSignature common.Signature) 
 		if b.Header.Version() <= 0 {
 			return nil, chain.ErrInvalidVersion
 		}
-		if !b.Header.PrevHash().Equal(kn.store.PrevHash()) {
+		if !b.Header.PrevHash().Equal(kn.store.LastHash()) {
 			return nil, chain.ErrInvalidPrevHash
 		}
 	} else {
-		PrevHeader, err := kn.store.Header(height)
+		LastHeader, err := kn.store.Header(height)
 		if err != nil {
 			return nil, err
 		}
-		if b.Header.Version() < PrevHeader.Version() {
+		if b.Header.Version() < LastHeader.Version() {
 			return nil, chain.ErrInvalidVersion
 		}
-		if !b.Header.PrevHash().Equal(PrevHeader.Hash()) {
+		if !b.Header.PrevHash().Equal(LastHeader.Hash()) {
 			return nil, chain.ErrInvalidPrevHash
 		}
 	}
@@ -494,7 +494,7 @@ func (kn *Kernel) GenerateBlock(TimeoutCount uint32, Formulator common.Address) 
 			Base: chain.Base{
 				Version_:   kn.Provider().Version(),
 				Height_:    ctx.TargetHeight(),
-				PrevHash_:  ctx.PrevHash(),
+				PrevHash_:  ctx.LastHash(),
 				Timestamp_: uint64(time.Now().UnixNano()),
 			},
 			ChainCoord:   *ctx.ChainCoord(),
