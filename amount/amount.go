@@ -89,7 +89,13 @@ func (am *Amount) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON is a unmarshaler function
 func (am *Amount) UnmarshalJSON(bs []byte) error {
-	v, err := ParseAmount(string(bs))
+	if len(bs) < 3 {
+		return ErrInvalidAmountFormat
+	}
+	if bs[0] != '"' || bs[len(bs)-1] != '"' {
+		return ErrInvalidAmountFormat
+	}
+	v, err := ParseAmount(string(bs[1 : len(bs)-1]))
 	if err != nil {
 		return err
 	}
