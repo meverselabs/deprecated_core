@@ -3,37 +3,45 @@ package observer
 import (
 	"bytes"
 	"net"
+	"time"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/framework/message"
 )
 
+// Peer is a observer peer
 type Peer struct {
-	id      string
-	netAddr string
-	conn    net.Conn
-	pubhash common.PublicHash
+	id           string
+	netAddr      string
+	conn         net.Conn
+	pubhash      common.PublicHash
+	lastRecvTime int64
 }
 
+// NewPeer returns a Peer
 func NewPeer(conn net.Conn, pubhash common.PublicHash) *Peer {
 	p := &Peer{
-		id:      pubhash.String(),
-		netAddr: conn.RemoteAddr().String(),
-		conn:    conn,
-		pubhash: pubhash,
+		id:           pubhash.String(),
+		netAddr:      conn.RemoteAddr().String(),
+		conn:         conn,
+		pubhash:      pubhash,
+		lastRecvTime: time.Now().UnixNano(),
 	}
 	return p
 }
 
+// ID returns the id of the peer
 func (p *Peer) ID() string {
 	return p.id
 }
 
+// NetAddr returns the network address of the peer
 func (p *Peer) NetAddr() string {
 	return p.netAddr
 }
 
+// Send sends a message to the peer
 func (p *Peer) Send(m message.Message) error {
 	var buffer bytes.Buffer
 	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
@@ -48,6 +56,7 @@ func (p *Peer) Send(m message.Message) error {
 	return nil
 }
 
+// SendRaw sends bytes to the peer
 func (p *Peer) SendRaw(bs []byte) error {
 	if _, err := p.conn.Write(bs); err != nil {
 		return err

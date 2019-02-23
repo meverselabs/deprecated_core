@@ -9,6 +9,7 @@ import (
 	"git.fleta.io/fleta/framework/message"
 )
 
+// FormulatorPeer is a formulator peer
 type FormulatorPeer struct {
 	id      string
 	netAddr string
@@ -17,6 +18,7 @@ type FormulatorPeer struct {
 	address common.Address
 }
 
+// NewFormulatorPeer returns a ormulatorPeer
 func NewFormulatorPeer(conn net.Conn, pubhash common.PublicHash, address common.Address) *FormulatorPeer {
 	p := &FormulatorPeer{
 		id:      address.String(),
@@ -28,14 +30,17 @@ func NewFormulatorPeer(conn net.Conn, pubhash common.PublicHash, address common.
 	return p
 }
 
+// ID returns the id of the peer
 func (p *FormulatorPeer) ID() string {
 	return p.id
 }
 
+// NetAddr returns the network address of the peer
 func (p *FormulatorPeer) NetAddr() string {
 	return p.netAddr
 }
 
+// Send sends a message to the peer
 func (p *FormulatorPeer) Send(m message.Message) error {
 	var buffer bytes.Buffer
 	if _, err := util.WriteUint64(&buffer, uint64(m.Type())); err != nil {
@@ -50,6 +55,7 @@ func (p *FormulatorPeer) Send(m message.Message) error {
 	return nil
 }
 
+// SendRaw sends bytes to the peer
 func (p *FormulatorPeer) SendRaw(bs []byte) error {
 	if _, err := p.conn.Write(bs); err != nil {
 		return err
