@@ -15,6 +15,7 @@ import (
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/kernel"
 	"git.fleta.io/fleta/core/key"
+	"git.fleta.io/fleta/core/message_def"
 	"git.fleta.io/fleta/framework/chain/mesh"
 	"git.fleta.io/fleta/framework/message"
 )
@@ -67,13 +68,18 @@ func (ms *FormulatorService) PeerCount() int {
 }
 
 // RemovePeer removes peers from the mesh
-func (ms *FormulatorService) RemovePeer(p *FormulatorPeer) {
+func (ms *FormulatorService) RemovePeer(addr common.Address) {
 	ms.Lock()
-	delete(ms.peerHash, p.address)
+	p, has := ms.peerHash[addr]
+	if has {
+		delete(ms.peerHash, addr)
+	}
 	ms.Unlock()
 
-	p.conn.Close()
-	ms.handler.OnFormulatorDisconnected(p)
+	if has {
+		p.conn.Close()
+		ms.handler.OnFormulatorDisconnected(p)
+	}
 }
 
 // SendTo sends a message to the formulator
@@ -87,7 +93,7 @@ func (ms *FormulatorService) SendTo(Formulator common.Address, m message.Message
 
 	if err := p.Send(m); err != nil {
 		log.Println(err)
-		ms.RemovePeer(p)
+		ms.RemovePeer(p.address)
 	}
 	return nil
 }
@@ -113,7 +119,7 @@ func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
 	for _, p := range peers {
 		if err := p.SendRaw(data); err != nil {
 			log.Println(err)
-			ms.RemovePeer(p)
+			ms.RemovePeer(p.address)
 		}
 	}
 	return nil
@@ -155,9 +161,9 @@ func (ms *FormulatorService) server(BindAddress string) error {
 			ms.peerHash[Formulator] = p
 			ms.Unlock()
 			if has {
-				ms.RemovePeer(old)
+				ms.RemovePeer(old.address)
 			}
-			defer ms.RemovePeer(p)
+			defer ms.RemovePeer(p.address)
 
 			if err := ms.handleConnection(p); err != nil {
 				log.Println("[handleConnection]", err)
@@ -171,12 +177,32 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 
 	ms.handler.OnFormulatorConnected(p)
 
+	pingTimer := time.NewTimer(10 * time.Second)
+	deadTimer := time.NewTimer(30 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-pingTimer.C:
+				if err := p.Send(&message_def.PingMessage{Timestamp: uint64(time.Now().UnixNano())}); err != nil {
+					p.conn.Close()
+					return
+				}
+			case <-deadTimer.C:
+				p.conn.Close()
+				return
+			}
+		}
+	}()
 	for {
 		var t message.Type
 		if v, _, err := util.ReadUint64(p.conn); err != nil {
 			return err
 		} else {
 			t = message.Type(v)
+		}
+		deadTimer.Reset(30 * time.Second)
+		if t == message_def.PingMessageType {
+			continue
 		}
 
 		if err := ms.handler.OnRecv(p, p.conn, t); err != nil {

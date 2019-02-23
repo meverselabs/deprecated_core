@@ -14,6 +14,7 @@ import (
 	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/key"
+	"git.fleta.io/fleta/core/message_def"
 	"git.fleta.io/fleta/framework/chain/mesh"
 	"git.fleta.io/fleta/framework/message"
 )
@@ -89,9 +90,10 @@ func (ms *ObserverMesh) Run(BindAddress string) error {
 				time.Sleep(1 * time.Second)
 				for {
 					ms.Lock()
-					_, has := ms.clientPeerHash[pubhash]
+					_, hasC := ms.clientPeerHash[pubhash]
+					_, hasS := ms.serverPeerHash[pubhash]
 					ms.Unlock()
-					if !has {
+					if !hasC && !hasS {
 						if err := ms.client(NetAddr, pubhash); err != nil {
 							log.Println("[client]", err, NetAddr)
 						}
@@ -241,12 +243,32 @@ func (ms *ObserverMesh) handleConnection(p *Peer) error {
 
 	ms.handler.OnConnected(p)
 
+	pingTimer := time.NewTimer(10 * time.Second)
+	deadTimer := time.NewTimer(30 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-pingTimer.C:
+				if err := p.Send(&message_def.PingMessage{Timestamp: uint64(time.Now().UnixNano())}); err != nil {
+					p.conn.Close()
+					return
+				}
+			case <-deadTimer.C:
+				p.conn.Close()
+				return
+			}
+		}
+	}()
 	for {
 		var t message.Type
 		if v, _, err := util.ReadUint64(p.conn); err != nil {
 			return err
 		} else {
 			t = message.Type(v)
+		}
+		deadTimer.Reset(30 * time.Second)
+		if t == message_def.PingMessageType {
+			continue
 		}
 
 		if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {

@@ -8,4 +8,5 @@ var (
 	BlockObSignMessageType = message.DefineType("fleta.BlockObSign")
 	BlockReqMessageType    = message.DefineType("fleta.BlockReq")
 	TransactionMessageType = message.DefineType("fleta.Transaction")
+	PingMessageType        = message.DefineType("fleta.Ping")
 )
