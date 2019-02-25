@@ -133,15 +133,12 @@ func (nd *Node) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 func (nd *Node) handleMessage(p mesh.Peer, m message.Message) error {
 	switch msg := m.(type) {
 	case *message_def.TransactionMessage:
-		nd.kn.DebugLog("AddTransaction", "Get")
 		if err := nd.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
-			nd.kn.DebugLog("AddTransaction", "Fail", err.Error())
 			if err != kernel.ErrPastSeq {
 				return err
 			}
 			return nil
 		}
-		nd.kn.DebugLog("AddTransaction", "Success")
 		nd.pm.ExceptCast(p.ID(), msg)
 		return nil
 	default:

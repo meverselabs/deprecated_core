@@ -332,15 +332,12 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		}
 		return nil
 	case *message_def.TransactionMessage:
-		fr.kn.DebugLog("AddTransaction", "Get")
 		if err := fr.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
-			fr.kn.DebugLog("AddTransaction", "Fail", err.Error())
 			if err != kernel.ErrPastSeq {
 				return err
 			}
 			return nil
 		}
-		fr.kn.DebugLog("AddTransaction", "Success")
 		fr.pm.ExceptCast(p.ID(), msg)
 		return nil
 	default:
