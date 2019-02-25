@@ -588,7 +588,7 @@ func (kn *Kernel) validateBlockBody(b *block.Block) error {
 		cpuCnt = 1
 	}
 	txCnt := len(b.Body.Transactions) / cpuCnt
-	TxHashes := make([]hash.Hash256, 0, len(b.Body.Transactions)+1)
+	TxHashes := make([]hash.Hash256, len(b.Body.Transactions)+1)
 	TxHashes = append(TxHashes, b.Header.PrevHash())
 	if len(b.Body.Transactions)%cpuCnt != 0 {
 		txCnt++
@@ -606,7 +606,7 @@ func (kn *Kernel) validateBlockBody(b *block.Block) error {
 			for q, tx := range txs {
 				sigs := b.Body.TransactionSignatures[sidx+q]
 				TxHash := tx.Hash()
-				TxHashes[sidx+q] = TxHash
+				TxHashes[sidx+q+1] = TxHash
 
 				signers := make([]common.PublicHash, 0, len(sigs))
 				for _, sig := range sigs {
