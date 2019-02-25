@@ -4,6 +4,7 @@ import (
 	"bytes"
 	crand "crypto/rand"
 	"encoding/binary"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -18,6 +19,13 @@ import (
 	"git.fleta.io/fleta/framework/chain/mesh"
 	"git.fleta.io/fleta/framework/message"
 )
+
+// EventHandler is a event handler of the mesh
+type EventHandler interface {
+	OnObserverConnected(p *Peer)
+	OnObserverDisconnected(p *Peer)
+	OnRecv(p mesh.Peer, r io.Reader, t message.Type) error
+}
 
 // Mesh is a connection mesh of the formulator
 type Mesh struct {

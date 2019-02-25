@@ -431,8 +431,11 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 		return txpool.ErrExistTransaction
 	}
 	if atx, is := tx.(txpool.AccountTransaction); is {
-		if atx.Seq() <= loader.Seq(atx.From()) {
+		seq := loader.Seq(atx.From())
+		if atx.Seq() <= seq {
 			return ErrPastSeq
+		} else if atx.Seq() > seq+100 {
+			return ErrTooFarSeq
 		}
 	}
 	signers := make([]common.PublicHash, 0, len(sigs))
@@ -525,7 +528,7 @@ func (kn *Kernel) GenerateBlock(TimeoutCount uint32, Formulator common.Address) 
 		},
 	}
 
-	timer := time.NewTimer(kn.Config.GenTimeThreshold)
+	timer := time.NewTimer(200 * time.Millisecond)
 	TxHashes := make([]hash.Hash256, 0, 65536)
 	TxHashes = append(TxHashes, b.Header.PrevHash())
 

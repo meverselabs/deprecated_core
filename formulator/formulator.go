@@ -84,6 +84,7 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 	fr.ms = NewMesh(Config.Key, Config.Formulator, Config.ObserverKeyMap, fr)
 	fr.cm.Mesh = pm
 	fr.pm.RegisterEventHandler(fr.cm)
+	fr.pm.RegisterEventHandler(fr)
 	return fr, nil
 }
 
@@ -134,13 +135,21 @@ func (fr *Formulator) CommitTransaction(tx transaction.Transaction, sigs []commo
 
 // OnConnected is called after a new peer is connected
 func (fr *Formulator) OnConnected(p mesh.Peer) {
+}
+
+// OnDisconnected is called when the peer is disconnected
+func (fr *Formulator) OnDisconnected(p mesh.Peer) {
+}
+
+// OnObserverConnected is called after a new observer peer is connected
+func (fr *Formulator) OnObserverConnected(p *Peer) {
 	fr.Lock()
 	fr.statusMap[p.ID()] = &chain.Status{}
 	fr.Unlock()
 }
 
-// OnDisconnected is called when the peer is disconnected
-func (fr *Formulator) OnDisconnected(p mesh.Peer) {
+// OnObserverDisconnected is called when the observer peer is disconnected
+func (fr *Formulator) OnObserverDisconnected(p *Peer) {
 	fr.Lock()
 	delete(fr.statusMap, p.ID())
 	fr.Unlock()
