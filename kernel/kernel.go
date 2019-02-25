@@ -277,13 +277,8 @@ func (kn *Kernel) Validate(b *block.Block, GeneratorSignature common.Signature) 
 		return nil, ErrKernelClosed
 	}
 
-	kn.DebugLog("TryLock", "kn.Validate")
-
 	kn.Lock()
 	defer kn.Unlock()
-
-	kn.DebugLog("Lock", "kn.Validate")
-	defer kn.DebugLog("Unlock", "kn.Validate")
 
 	////log.Println("Kernel", "Validate", ch, b)
 	height := kn.store.Height()
@@ -342,13 +337,8 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		return ErrKernelClosed
 	}
 
-	kn.DebugLog("TryLock", "kn.Process")
-
 	kn.Lock()
 	defer kn.Unlock()
-
-	kn.DebugLog("Lock", "kn.Process")
-	defer kn.DebugLog("Unlock", "kn.Process")
 
 	////log.Println("Kernel", "Process", cd, UserData)
 	b := &block.Block{
