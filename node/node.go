@@ -62,6 +62,7 @@ func NewNode(Config *Config, kn *kernel.Kernel) (*Node, error) {
 	nd.mm.SetCreator(message_def.TransactionMessageType, nd.messageCreator)
 	nd.cm.Mesh = pm
 	nd.pm.RegisterEventHandler(nd.cm)
+	nd.pm.RegisterEventHandler(nd)
 	return nd, nil
 }
 
@@ -107,6 +108,14 @@ func (nd *Node) CommitTransaction(tx transaction.Transaction, sigs []common.Sign
 	}
 	nd.pm.BroadCast(msg)
 	return nil
+}
+
+// OnConnected is called after a new peer is connected
+func (nd *Node) OnConnected(p mesh.Peer) {
+}
+
+// OnDisconnected is called when the peer is disconnected
+func (nd *Node) OnDisconnected(p mesh.Peer) {
 }
 
 // OnRecv is called when a message is received from the peer
