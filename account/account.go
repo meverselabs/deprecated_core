@@ -17,6 +17,7 @@ type Account interface {
 	io.ReaderFrom
 	json.Marshaler
 	Address() common.Address
+	Name() string
 	SetType(t Type)
 	Type() Type
 	Clone() Account
@@ -25,12 +26,18 @@ type Account interface {
 // Base is the parts of account functions that are not changed by derived one
 type Base struct {
 	Address_ common.Address
+	Name_    string
 	Type_    Type
 }
 
 // Address returns the account address
 func (acc *Base) Address() common.Address {
 	return acc.Address_
+}
+
+// Name returns the account name
+func (acc *Base) Name() string {
+	return acc.Name_
 }
 
 // SetType set the account type

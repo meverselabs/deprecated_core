@@ -96,6 +96,11 @@ func (ctx *Context) IsExistAccount(addr common.Address) (bool, error) {
 	return ctx.Top().IsExistAccount(addr)
 }
 
+// IsExistAccountName checks that the account of the name is exist or not
+func (ctx *Context) IsExistAccountName(Name string) (bool, error) {
+	return ctx.Top().IsExistAccountName(Name)
+}
+
 // CreateAccount inserts the account to the top snapshot
 func (ctx *Context) CreateAccount(acc account.Account) error {
 	ctx.isLatestHash = false
@@ -222,6 +227,9 @@ type ContextData struct {
 	AccountMap            map[common.Address]account.Account
 	CreatedAccountMap     map[common.Address]account.Account
 	DeletedAccountMap     map[common.Address]account.Account
+	AccountNameMap        map[string]common.Address
+	CreatedAccountNameMap map[string]common.Address
+	DeletedAccountNameMap map[string]common.Address
 	AccountBalanceMap     map[common.Address]*account.Balance
 	AccountDataMap        map[string][]byte
 	DeletedAccountDataMap map[string]bool
@@ -240,6 +248,9 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 		AccountMap:            map[common.Address]account.Account{},
 		CreatedAccountMap:     map[common.Address]account.Account{},
 		DeletedAccountMap:     map[common.Address]account.Account{},
+		AccountNameMap:        map[string]common.Address{},
+		CreatedAccountNameMap: map[string]common.Address{},
+		DeletedAccountNameMap: map[string]common.Address{},
 		AccountBalanceMap:     map[common.Address]*account.Balance{},
 		AccountDataMap:        map[string][]byte{},
 		DeletedAccountDataMap: map[string]bool{},
@@ -320,6 +331,53 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
 			if _, err := k.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("AccountNameMap")
+	if len(ctd.AccountNameMap) > 0 {
+		keys := []string{}
+		for k := range ctd.AccountNameMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := ctd.AccountNameMap[k]
+			if _, err := buffer.WriteString(k); err != nil {
+				panic(err)
+			}
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("CreatedAccountNameMap")
+	if len(ctd.CreatedAccountNameMap) > 0 {
+		keys := []string{}
+		for k := range ctd.CreatedAccountNameMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := ctd.CreatedAccountNameMap[k]
+			if _, err := buffer.WriteString(k); err != nil {
+				panic(err)
+			}
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("DeletedAccountNameMap")
+	if len(ctd.DeletedAccountNameMap) > 0 {
+		keys := []string{}
+		for k := range ctd.DeletedAccountNameMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if _, err := buffer.WriteString(k); err != nil {
 				panic(err)
 			}
 		}
@@ -481,6 +539,42 @@ func (ctd *ContextData) Account(addr common.Address) (account.Account, error) {
 	}
 }
 
+// AddressByName returns the account address of the name
+func (ctd *ContextData) AddressByName(Name string) (common.Address, error) {
+	if _, has := ctd.DeletedAccountNameMap[Name]; has {
+		return common.Address{}, ErrNotExistAccount
+	}
+	if addr, has := ctd.AccountNameMap[Name]; has {
+		return addr, nil
+	} else if addr, has := ctd.CreatedAccountNameMap[Name]; has {
+		return addr, nil
+	} else if ctd.Parent != nil {
+		if addr, err := ctd.Parent.AddressByName(Name); err != nil {
+			return common.Address{}, err
+		} else {
+			if ctd.isTop {
+				naddr := addr.Clone()
+				ctd.AccountNameMap[Name] = naddr
+				return naddr, nil
+			} else {
+				return addr, nil
+			}
+		}
+	} else {
+		if addr, err := ctd.loader.AddressByName(Name); err != nil {
+			return common.Address{}, err
+		} else {
+			if ctd.isTop {
+				naddr := addr.Clone()
+				ctd.AccountNameMap[Name] = naddr
+				return naddr, nil
+			} else {
+				return addr, nil
+			}
+		}
+	}
+}
+
 // IsExistAccount checks that the account of the address is exist or not
 func (ctd *ContextData) IsExistAccount(addr common.Address) (bool, error) {
 	if _, has := ctd.DeletedAccountMap[addr]; has {
@@ -497,6 +591,22 @@ func (ctd *ContextData) IsExistAccount(addr common.Address) (bool, error) {
 	}
 }
 
+// IsExistAccountName checks that the account of the address is exist or not
+func (ctd *ContextData) IsExistAccountName(Name string) (bool, error) {
+	if _, has := ctd.DeletedAccountNameMap[Name]; has {
+		return false, nil
+	}
+	if _, has := ctd.AccountNameMap[Name]; has {
+		return true, nil
+	} else if _, has := ctd.CreatedAccountNameMap[Name]; has {
+		return true, nil
+	} else if ctd.Parent != nil {
+		return ctd.Parent.IsExistAccountName(Name)
+	} else {
+		return ctd.loader.IsExistAccountName(Name)
+	}
+}
+
 // CreateAccount inserts the account
 func (ctd *ContextData) CreateAccount(acc account.Account) error {
 	if _, err := ctd.Account(acc.Address()); err != nil {
@@ -506,7 +616,15 @@ func (ctd *ContextData) CreateAccount(acc account.Account) error {
 	} else {
 		return ErrExistAccount
 	}
+	if _, err := ctd.AddressByName(acc.Name()); err != nil {
+		if err != ErrNotExistAccount {
+			return err
+		}
+	} else {
+		return ErrExistAccount
+	}
 	ctd.CreatedAccountMap[acc.Address()] = acc
+	ctd.CreatedAccountNameMap[acc.Name()] = acc.Address()
 	return nil
 }
 
@@ -516,7 +634,9 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 		return err
 	}
 	ctd.DeletedAccountMap[acc.Address()] = acc
+	ctd.DeletedAccountNameMap[acc.Name()] = acc.Address()
 	delete(ctd.AccountMap, acc.Address())
+	delete(ctd.AccountNameMap, acc.Name())
 	return nil
 }
 
@@ -661,7 +781,6 @@ func (ctd *ContextData) DeleteUTXO(id uint64) error {
 	return nil
 }
 
-// Hash returns the hash value of it
 func (ctd *ContextData) Dump() string {
 	var buffer bytes.Buffer
 	buffer.WriteString("SeqMap\n")
@@ -729,6 +848,59 @@ func (ctd *ContextData) Dump() string {
 		sort.Sort(addressSlice(keys))
 		for _, k := range keys {
 			buffer.WriteString(k.String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("AccountNameMap\n")
+	{
+		keys := []string{}
+		for k := range ctd.AccountNameMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := ctd.AccountNameMap[k]
+			buffer.WriteString(k)
+			buffer.WriteString(": ")
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("CreatedAccountNameMap\n")
+	{
+		keys := []string{}
+		for k := range ctd.CreatedAccountNameMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := ctd.CreatedAccountNameMap[k]
+			buffer.WriteString(k)
+			buffer.WriteString(": ")
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("DeletedAccountNameMap\n")
+	{
+		keys := []string{}
+		for k := range ctd.DeletedAccountNameMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			buffer.WriteString(k)
 			buffer.WriteString("\n")
 		}
 	}

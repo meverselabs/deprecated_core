@@ -11,6 +11,7 @@ type cache struct {
 	ctx               *Context
 	SeqMap            map[common.Address]uint64
 	AccountMap        map[common.Address]account.Account
+	AccountNameMap    map[string]common.Address
 	AccountBalanceMap map[common.Address]*account.Balance
 	AccountDataMap    map[string][]byte
 	UTXOMap           map[uint64]*transaction.UTXO
@@ -22,6 +23,7 @@ func newCache(ctx *Context) *cache {
 		ctx:               ctx,
 		SeqMap:            map[common.Address]uint64{},
 		AccountMap:        map[common.Address]account.Account{},
+		AccountNameMap:    map[string]common.Address{},
 		AccountBalanceMap: map[common.Address]*account.Balance{},
 		AccountDataMap:    map[string][]byte{},
 		UTXOMap:           map[uint64]*transaction.UTXO{},
@@ -78,12 +80,35 @@ func (cc *cache) Account(addr common.Address) (account.Account, error) {
 	}
 }
 
+// AddressByName returns the account address of the name
+func (cc *cache) AddressByName(Name string) (common.Address, error) {
+	if addr, has := cc.AccountNameMap[Name]; has {
+		return addr, nil
+	} else {
+		if addr, err := cc.ctx.loader.AddressByName(Name); err != nil {
+			return common.Address{}, err
+		} else {
+			cc.AccountNameMap[Name] = addr
+			return addr, nil
+		}
+	}
+}
+
 // IsExistAccount checks that the account of the address is exist or not
 func (cc *cache) IsExistAccount(addr common.Address) (bool, error) {
 	if _, has := cc.AccountMap[addr]; has {
 		return true, nil
 	} else {
 		return cc.ctx.loader.IsExistAccount(addr)
+	}
+}
+
+// IsExistAccountName checks that the account of the name is exist or not
+func (cc *cache) IsExistAccountName(Name string) (bool, error) {
+	if _, has := cc.AccountNameMap[Name]; has {
+		return true, nil
+	} else {
+		return cc.ctx.loader.IsExistAccountName(Name)
 	}
 }
 

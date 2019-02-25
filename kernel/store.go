@@ -419,6 +419,42 @@ func (st *Store) Account(addr common.Address) (account.Account, error) {
 	return acc, nil
 }
 
+// AddressByName returns the account instance of the name from the store
+func (st *Store) AddressByName(Name string) (common.Address, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return common.Address{}, ErrStoreClosed
+	}
+
+	var addr common.Address
+	if err := st.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(toAccountNameKey(Name))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return db.ErrNotExistKey
+			} else {
+				return err
+			}
+		}
+		value, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		if _, err := addr.ReadFrom(bytes.NewReader(value)); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		if err == db.ErrNotExistKey {
+			return common.Address{}, data.ErrNotExistAccount
+		} else {
+			return common.Address{}, err
+		}
+	}
+	return addr, nil
+}
+
 // IsExistAccount checks that the account of the address is exist or not
 func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
 	st.closeLock.RLock()
@@ -430,6 +466,36 @@ func (st *Store) IsExistAccount(addr common.Address) (bool, error) {
 	var isExist bool
 	if err := st.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(toAccountKey(addr))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return db.ErrNotExistKey
+			} else {
+				return err
+			}
+		}
+		isExist = !item.IsDeletedOrExpired()
+		return nil
+	}); err != nil {
+		if err == db.ErrNotExistKey {
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+	return isExist, nil
+}
+
+// IsExistAccountName checks that the account of the name is exist or not
+func (st *Store) IsExistAccountName(Name string) (bool, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return false, ErrStoreClosed
+	}
+
+	var isExist bool
+	if err := st.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(toAccountNameKey(Name))
 		if err != nil {
 			if err == badger.ErrKeyNotFound {
 				return db.ErrNotExistKey

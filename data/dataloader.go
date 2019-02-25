@@ -16,7 +16,9 @@ type Loader interface {
 	LastHash() hash.Hash256
 	Seq(addr common.Address) uint64
 	Account(addr common.Address) (account.Account, error)
+	AddressByName(Name string) (common.Address, error)
 	IsExistAccount(addr common.Address) (bool, error)
+	IsExistAccountName(Name string) (bool, error)
 	AccountBalance(addr common.Address) (*account.Balance, error)
 	AccountData(addr common.Address, name []byte) []byte
 	UTXO(id uint64) (*transaction.UTXO, error)
@@ -72,8 +74,18 @@ func (st *emptyLoader) Account(addr common.Address) (account.Account, error) {
 	return nil, ErrNotExistAccount
 }
 
+// AddressByName returns ErrNotExistAccount
+func (st *emptyLoader) AddressByName(Name string) (common.Address, error) {
+	return common.Address{}, ErrNotExistAccount
+}
+
 // IsExistAccount returns false
 func (st *emptyLoader) IsExistAccount(addr common.Address) (bool, error) {
+	return false, nil
+}
+
+// IsExistAccountName returns false
+func (st *emptyLoader) IsExistAccountName(Name string) (bool, error) {
 	return false, nil
 }
 

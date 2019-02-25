@@ -13,9 +13,10 @@ var (
 	tagHeightData     = []byte{1, 3}
 	tagHashHeight     = []byte{1, 4}
 	tagAccount        = []byte{2, 0}
-	tagAccountSeq     = []byte{2, 1}
-	tagAccountBalance = []byte{2, 2}
-	tagAccountData    = []byte{2, 3}
+	tagAccountName    = []byte{2, 1}
+	tagAccountSeq     = []byte{2, 2}
+	tagAccountBalance = []byte{2, 3}
+	tagAccountData    = []byte{2, 4}
 	tagUTXO           = []byte{3, 0}
 	tagCustomData     = []byte{4, 0}
 )
@@ -52,6 +53,13 @@ func toAccountKey(addr common.Address) []byte {
 	bs := make([]byte, 2+common.AddressSize)
 	copy(bs, tagAccount)
 	copy(bs[2:], addr[:])
+	return bs
+}
+
+func toAccountNameKey(Name string) []byte {
+	bs := make([]byte, 2+len(Name))
+	copy(bs, tagAccountName)
+	copy(bs[2:], []byte(Name))
 	return bs
 }
 

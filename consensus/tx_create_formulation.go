@@ -23,6 +23,10 @@ func init() {
 		}
 	}, func(loader data.Loader, t transaction.Transaction, signers []common.PublicHash) error {
 		tx := t.(*CreateFormulation)
+		if len(tx.Name) < 8 || len(tx.Name) > 16 {
+			return ErrInvalidAccountName
+		}
+
 		if tx.Seq() <= loader.Seq(tx.From()) {
 			return ErrInvalidSequence
 		}
@@ -38,6 +42,10 @@ func init() {
 		return nil
 	}, func(ctx *data.Context, Fee *amount.Amount, t transaction.Transaction, coord *common.Coordinate) (ret interface{}, rerr error) {
 		tx := t.(*CreateFormulation)
+		if len(tx.Name) < 8 || len(tx.Name) > 16 {
+			return nil, ErrInvalidAccountName
+		}
+
 		sn := ctx.Snapshot()
 		defer ctx.Revert(sn)
 
@@ -60,6 +68,10 @@ func init() {
 			return nil, err
 		} else if is {
 			return nil, ErrExistAddress
+		} else if isn, err := ctx.IsExistAccountName(tx.Name); err != nil {
+			return nil, err
+		} else if isn {
+			return nil, ErrExistAccountName
 		} else {
 			a, err := ctx.Accounter().NewByTypeName("consensus.FormulationAccount")
 			if err != nil {
@@ -67,6 +79,7 @@ func init() {
 			}
 			acc := a.(*FormulationAccount)
 			acc.Address_ = addr
+			acc.Name_ = tx.Name
 			acc.KeyHash = tx.KeyHash
 			ctx.CreateAccount(acc)
 		}
@@ -81,6 +94,7 @@ type CreateFormulation struct {
 	transaction.Base
 	Seq_    uint64
 	From_   common.Address
+	Name    string
 	KeyHash common.PublicHash
 }
 
@@ -122,6 +136,11 @@ func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := util.WriteString(w, tx.Name); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := tx.KeyHash.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
@@ -148,6 +167,12 @@ func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
+	}
+	if v, n, err := util.ReadString(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.Name = v
 	}
 	if n, err := tx.KeyHash.ReadFrom(r); err != nil {
 		return read, err
