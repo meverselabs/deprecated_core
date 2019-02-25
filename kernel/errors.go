@@ -22,4 +22,5 @@ var (
 	ErrInvalidTopSignature       = errors.New("invalid top signature")
 	ErrNotFormulator             = errors.New("not formulator")
 	ErrPastSeq                   = errors.New("past seq")
+	ErrTxQueueOverflowed         = errors.New("tx queue overflowed")
 )

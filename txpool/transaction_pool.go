@@ -104,11 +104,10 @@ func (tp *TransactionPool) Push(t transaction.Transaction, sigs []common.Signatu
 
 // Remove deletes the target transaction from the queue
 // If it is an account model based transaction, it will be sorted by the sequence in the address
-func (tp *TransactionPool) Remove(t transaction.Transaction) {
+func (tp *TransactionPool) Remove(TxHash hash.Hash256, t transaction.Transaction) {
 	tp.Lock()
 	defer tp.Unlock()
 
-	TxHash := t.Hash()
 	if t.IsUTXO() {
 		if tp.utxoQ.Remove(TxHash) != nil {
 			tp.turnOutMap[true]++

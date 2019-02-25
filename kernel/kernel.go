@@ -8,10 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"git.fleta.io/fleta/core/message_def"
+
 	"git.fleta.io/fleta/core/reward"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
+	"git.fleta.io/fleta/common/queue"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/consensus"
 	"git.fleta.io/fleta/core/data"
@@ -31,6 +34,7 @@ type Kernel struct {
 	store              *Store
 	consensus          *consensus.Consensus
 	txPool             *txpool.TransactionPool
+	txQueue            *queue.ExpireQueue
 	genesisContextData *data.ContextData
 	rewarder           reward.Rewarder
 	eventHandlers      []EventHandler
@@ -53,8 +57,13 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		rewarder:           rewarder,
 		consensus:          consensus.NewConsensus(Config.ObserverKeyMap, FormulationAccountType),
 		txPool:             txpool.NewTransactionPool(),
+		txQueue:            queue.NewExpireQueue(),
 		eventHandlers:      []EventHandler{},
 	}
+	kn.txQueue.AddGroup(60 * time.Second)
+	kn.txQueue.AddGroup(600 * time.Second)
+	kn.txQueue.AddGroup(3600 * time.Second)
+	kn.txQueue.AddHandler(kn)
 
 	if bs := kn.store.CustomData("chaincoord"); bs != nil {
 		var coord common.Coordinate
@@ -268,8 +277,13 @@ func (kn *Kernel) Validate(b *block.Block, GeneratorSignature common.Signature) 
 		return nil, ErrKernelClosed
 	}
 
+	kn.DebugLog("TryLock", "kn.Validate")
+
 	kn.Lock()
 	defer kn.Unlock()
+
+	kn.DebugLog("Lock", "kn.Validate")
+	defer kn.DebugLog("Unlock", "kn.Validate")
 
 	////log.Println("Kernel", "Validate", ch, b)
 	height := kn.store.Height()
@@ -328,8 +342,13 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		return ErrKernelClosed
 	}
 
+	kn.DebugLog("TryLock", "kn.Process")
+
 	kn.Lock()
 	defer kn.Unlock()
+
+	kn.DebugLog("Lock", "kn.Process")
+	defer kn.DebugLog("Unlock", "kn.Process")
 
 	////log.Println("Kernel", "Process", cd, UserData)
 	b := &block.Block{
@@ -393,7 +412,9 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		eh.AfterProcessBlock(kn, b, s, ctx)
 	}
 	for _, tx := range b.Body.Transactions {
-		kn.txPool.Remove(tx)
+		h := tx.Hash()
+		kn.txPool.Remove(h, tx)
+		kn.txQueue.Remove(string(h[:]))
 	}
 	log.Println("Block Connected :", kn.store.Height(), HeaderHash.String(), b.Header.Formulator.String(), len(b.Body.Transactions))
 	return nil
@@ -405,6 +426,10 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
 		return ErrKernelClosed
+	}
+
+	if kn.txQueue.Size() > 65535 {
+		return ErrTxQueueOverflowed
 	}
 
 	loader := kn.store
@@ -439,6 +464,14 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	if err := kn.txPool.Push(tx, sigs); err != nil {
 		return err
 	}
+	kn.txQueue.Push(string(TxHash[:]), &message_def.TransactionMessage{
+		Tx:   tx,
+		Sigs: sigs,
+		Tran: kn.Transactor(),
+	})
+	for _, eh := range kn.eventHandlers {
+		eh.AfterPushTransaction(kn, tx, sigs)
+	}
 	return nil
 }
 
@@ -453,11 +486,6 @@ func (kn *Kernel) contextByBlock(b *block.Block) (*data.Context, error) {
 	}
 
 	ctx := data.NewContext(kn.store)
-	for _, eh := range kn.eventHandlers {
-		if err := eh.OnCreateContext(kn, ctx); err != nil {
-			return nil, err
-		}
-	}
 	if !b.Header.ChainCoord.Equal(ctx.ChainCoord()) {
 		return nil, ErrInvalidChainCoord
 	}
@@ -469,6 +497,7 @@ func (kn *Kernel) contextByBlock(b *block.Block) (*data.Context, error) {
 	if err := kn.rewarder.ProcessReward(b.Header.Formulator, ctx); err != nil {
 		return nil, err
 	}
+
 	if ctx.StackSize() > 1 {
 		return nil, ErrDirtyContext
 	}
@@ -488,12 +517,6 @@ func (kn *Kernel) GenerateBlock(TimeoutCount uint32, Formulator common.Address) 
 	}
 
 	ctx := data.NewContext(kn.Loader())
-	for _, eh := range kn.eventHandlers {
-		if err := eh.OnCreateContext(kn, ctx); err != nil {
-			return nil, nil, err
-		}
-	}
-
 	b := &block.Block{
 		Header: &block.Header{
 			Base: chain.Base{
@@ -619,4 +642,19 @@ func (kn *Kernel) validateBlockBody(b *block.Block) error {
 		return ErrInvalidLevelRootHash
 	}
 	return nil
+}
+
+// OnItemExpired is called when the item is expired
+func (kn *Kernel) OnItemExpired(Interval time.Duration, Key string, Item interface{}) {
+	for _, eh := range kn.eventHandlers {
+		eh.DoTransactionBroadcast(kn, Item.(*message_def.TransactionMessage))
+	}
+}
+
+// DebugLog TEMP
+func (kn *Kernel) DebugLog(args ...interface{}) {
+	log.Println(args...)
+	for _, eh := range kn.eventHandlers {
+		eh.DebugLog(kn, args...)
+	}
 }

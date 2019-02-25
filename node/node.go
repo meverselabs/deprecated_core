@@ -3,12 +3,12 @@ package node
 import (
 	"io"
 	"sync"
-	"time"
 
+	"git.fleta.io/fleta/core/block"
+	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/transaction"
 
 	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/queue"
 
 	"git.fleta.io/fleta/framework/router"
 
@@ -29,7 +29,6 @@ type Node struct {
 	kn        *kernel.Kernel
 	pm        peer.Manager
 	manager   *message.Manager
-	txQueue   *queue.Queue
 	txCastMap map[string]bool
 	isRunning bool
 	closeLock sync.RWMutex
@@ -53,14 +52,12 @@ func NewNode(Config *Config, kn *kernel.Kernel) (*Node, error) {
 	}
 
 	nd := &Node{
-		Config:    Config,
-		cm:        chain.NewManager(kn),
-		pm:        pm,
-		kn:        kn,
-		manager:   message.NewManager(),
-		txQueue:   queue.NewQueue(),
-		txCastMap: map[string]bool{},
-		runEnd:    make(chan struct{}, 1),
+		Config:  Config,
+		cm:      chain.NewManager(kn),
+		pm:      pm,
+		kn:      kn,
+		manager: message.NewManager(),
+		runEnd:  make(chan struct{}),
 	}
 	nd.manager.SetCreator(message_def.TransactionMessageType, nd.messageCreator)
 	nd.cm.Mesh = pm
@@ -92,37 +89,21 @@ func (nd *Node) Run() {
 	nd.pm.EnforceConnect()
 	go nd.cm.Run()
 
-	timer := time.NewTimer(10 * time.Second)
-	for !nd.isClose {
-		select {
-		case <-timer.C:
-			txCastTargetMap := map[string]bool{}
-			nd.Lock()
-			for _, id := range nd.pm.ConnectedList() {
-				if !nd.txCastMap[id] {
-					txCastTargetMap[id] = true
-				}
-			}
-			nd.txCastMap = map[string]bool{}
-			nd.Unlock()
-			msgs := []*message_def.TransactionMessage{}
-			item := nd.txQueue.Pop()
-			for item != nil {
-				msgs = append(msgs, item.(*message_def.TransactionMessage))
-				item = nd.txQueue.Pop()
-			}
+	<-nd.runEnd
+}
 
-			for _, msg := range msgs {
-				if nd.kn.HasTransaction(msg.Tx.Hash()) {
-					for id := range txCastTargetMap {
-						nd.pm.TargetCast(id, msg)
-					}
-				}
-			}
-		case <-nd.runEnd:
-			return
-		}
+// CommitTransaction adds and broadcasts transaction
+func (nd *Node) CommitTransaction(tx transaction.Transaction, sigs []common.Signature) error {
+	if err := nd.kn.AddTransaction(tx, sigs); err != nil {
+		return err
 	}
+	msg := &message_def.TransactionMessage{
+		Tx:   tx,
+		Sigs: sigs,
+		Tran: nd.kn.Transactor(),
+	}
+	nd.pm.BroadCast(msg)
+	return nil
 }
 
 // OnRecv is called when a message is received from the peer
@@ -137,28 +118,7 @@ func (nd *Node) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 	return nil
 }
 
-// CommitTransaction adds and broadcasts transaction
-func (nd *Node) CommitTransaction(tx transaction.Transaction, sigs []common.Signature) error {
-	nd.Lock()
-	defer nd.Unlock()
-
-	if err := nd.kn.AddTransaction(tx, sigs); err != nil {
-		return err
-	}
-	msg := &message_def.TransactionMessage{
-		Tx:   tx,
-		Sigs: sigs,
-		Tran: nd.kn.Transactor(),
-	}
-	nd.pm.BroadCast(msg)
-	nd.txQueue.Push(msg)
-	return nil
-}
-
 func (nd *Node) handleMessage(p mesh.Peer, m message.Message) error {
-	nd.Lock()
-	defer nd.Unlock()
-
 	switch msg := m.(type) {
 	case *message_def.TransactionMessage:
 		if err := nd.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
@@ -168,12 +128,6 @@ func (nd *Node) handleMessage(p mesh.Peer, m message.Message) error {
 			return nil
 		}
 		nd.pm.ExceptCast(p.ID(), msg)
-		nd.Lock()
-		for _, id := range nd.pm.ConnectedList() {
-			nd.txCastMap[id] = true
-		}
-		nd.Unlock()
-		nd.txQueue.Push(msg)
 		return nil
 	default:
 		return message.ErrUnhandledMessage
@@ -193,4 +147,31 @@ func (nd *Node) messageCreator(r io.Reader, t message.Type) (message.Message, er
 	default:
 		return nil, message.ErrUnknownMessage
 	}
+}
+
+// OnProcessBlock called when processing block to the chain (error prevent processing block)
+func (nd *Node) OnProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
+	return nil
+}
+
+// AfterProcessBlock called when processed block to the chain
+func (nd *Node) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) {
+}
+
+// OnPushTransaction called when pushing a transaction to the transaction pool (error prevent push transaction)
+func (nd *Node) OnPushTransaction(kn *kernel.Kernel, tx transaction.Transaction, sigs []common.Signature) error {
+	return nil
+}
+
+// AfterPushTransaction called when pushed a transaction to the transaction pool
+func (nd *Node) AfterPushTransaction(kn *kernel.Kernel, tx transaction.Transaction, sigs []common.Signature) {
+}
+
+// DoTransactionBroadcast called when a transaction need to be broadcast
+func (nd *Node) DoTransactionBroadcast(kn *kernel.Kernel, msg *message_def.TransactionMessage) {
+	nd.pm.BroadCast(msg)
+}
+
+// DebugLog TEMP
+func (nd *Node) DebugLog(kn *kernel.Kernel, args ...interface{}) {
 }
