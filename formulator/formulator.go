@@ -92,6 +92,9 @@ func (fr *Formulator) Close() {
 	fr.closeLock.Lock()
 	defer fr.closeLock.Unlock()
 
+	fr.Lock()
+	defer fr.Unlock()
+
 	fr.isClose = true
 	fr.kn.Close()
 	fr.runEnd <- struct{}{}
@@ -129,17 +132,17 @@ func (fr *Formulator) CommitTransaction(tx transaction.Transaction, sigs []commo
 	return nil
 }
 
-// OnDisconnected is called when the peer is disconnected
-func (fr *Formulator) OnDisconnected(p mesh.Peer) {
-	fr.Lock()
-	delete(fr.statusMap, p.ID())
-	fr.Unlock()
-}
-
 // OnConnected is called after a new peer is connected
 func (fr *Formulator) OnConnected(p mesh.Peer) {
 	fr.Lock()
 	fr.statusMap[p.ID()] = &chain.Status{}
+	fr.Unlock()
+}
+
+// OnDisconnected is called when the peer is disconnected
+func (fr *Formulator) OnDisconnected(p mesh.Peer) {
+	fr.Lock()
+	delete(fr.statusMap, p.ID())
 	fr.Unlock()
 }
 
@@ -179,12 +182,13 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 			}
 		}
 		if msg.TargetHeight > Height+1 {
-			if RetryCount > 10 {
+			if RetryCount >= 10 {
 				return nil
 			}
 			go fr.tryRequestNext()
 			time.Sleep(100 * time.Millisecond)
-			return fr.handleMessage(p, m, RetryCount+1)
+			go fr.handleMessage(p, m, RetryCount+1)
+			return nil
 		}
 
 		nextRoundHash := fr.nextRoundHash()
@@ -319,12 +323,15 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		}
 		return nil
 	case *message_def.TransactionMessage:
+		fr.kn.DebugLog("AddTransaction", "Get")
 		if err := fr.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
+			fr.kn.DebugLog("AddTransaction", "Fail", err.Error())
 			if err != kernel.ErrPastSeq {
 				return err
 			}
 			return nil
 		}
+		fr.kn.DebugLog("AddTransaction", "Success")
 		fr.pm.ExceptCast(p.ID(), msg)
 		return nil
 	default:

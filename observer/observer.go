@@ -77,6 +77,9 @@ func (ob *Observer) Close() {
 	ob.closeLock.Lock()
 	defer ob.closeLock.Unlock()
 
+	ob.Lock()
+	defer ob.Unlock()
+
 	ob.isClose = true
 	ob.kn.Close()
 	ob.runEnd <- struct{}{}

@@ -28,7 +28,7 @@ type Node struct {
 	cm        *chain.Manager
 	kn        *kernel.Kernel
 	pm        peer.Manager
-	manager   *message.Manager
+	mm        *message.Manager
 	txCastMap map[string]bool
 	isRunning bool
 	closeLock sync.RWMutex
@@ -52,14 +52,14 @@ func NewNode(Config *Config, kn *kernel.Kernel) (*Node, error) {
 	}
 
 	nd := &Node{
-		Config:  Config,
-		cm:      chain.NewManager(kn),
-		pm:      pm,
-		kn:      kn,
-		manager: message.NewManager(),
-		runEnd:  make(chan struct{}),
+		Config: Config,
+		cm:     chain.NewManager(kn),
+		pm:     pm,
+		kn:     kn,
+		mm:     message.NewManager(),
+		runEnd: make(chan struct{}),
 	}
-	nd.manager.SetCreator(message_def.TransactionMessageType, nd.messageCreator)
+	nd.mm.SetCreator(message_def.TransactionMessageType, nd.messageCreator)
 	nd.cm.Mesh = pm
 	nd.pm.RegisterEventHandler(nd.cm)
 	return nd, nil
@@ -69,6 +69,9 @@ func NewNode(Config *Config, kn *kernel.Kernel) (*Node, error) {
 func (nd *Node) Close() {
 	nd.closeLock.Lock()
 	defer nd.closeLock.Unlock()
+
+	nd.Lock()
+	defer nd.Unlock()
 
 	nd.isClose = true
 	nd.kn.Close()
@@ -108,7 +111,7 @@ func (nd *Node) CommitTransaction(tx transaction.Transaction, sigs []common.Sign
 
 // OnRecv is called when a message is received from the peer
 func (nd *Node) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
-	m, err := nd.manager.ParseMessage(r, t)
+	m, err := nd.mm.ParseMessage(r, t)
 	if err != nil {
 		return err
 	}
@@ -121,12 +124,15 @@ func (nd *Node) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 func (nd *Node) handleMessage(p mesh.Peer, m message.Message) error {
 	switch msg := m.(type) {
 	case *message_def.TransactionMessage:
+		nd.kn.DebugLog("AddTransaction", "Get")
 		if err := nd.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
+			nd.kn.DebugLog("AddTransaction", "Fail", err.Error())
 			if err != kernel.ErrPastSeq {
 				return err
 			}
 			return nil
 		}
+		nd.kn.DebugLog("AddTransaction", "Success")
 		nd.pm.ExceptCast(p.ID(), msg)
 		return nil
 	default:
