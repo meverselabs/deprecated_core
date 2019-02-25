@@ -83,7 +83,7 @@ func (ms *ObserverMesh) Peers() []mesh.Peer {
 	return peers
 }
 
-func (ms *ObserverMesh) Run(BindAddress string) error {
+func (ms *ObserverMesh) Run(BindAddress string) {
 	ObPubHash := common.NewPublicHash(ms.Key.PublicKey())
 	for PubHash, v := range ms.NetAddressMap {
 		if !PubHash.Equal(ObPubHash) {
@@ -104,11 +104,8 @@ func (ms *ObserverMesh) Run(BindAddress string) error {
 			}(PubHash, v)
 		}
 	}
-	for {
-		if err := ms.server(BindAddress); err != nil {
-			log.Println("[server]", err)
-		}
-		time.Sleep(1 * time.Second)
+	if err := ms.server(BindAddress); err != nil {
+		panic(err)
 	}
 }
 
@@ -246,11 +243,11 @@ func (ms *ObserverMesh) handleConnection(p *Peer) error {
 
 	var pingCount uint64
 	pingCountLimit := uint64(3)
-	pingTimer := time.NewTimer(10 * time.Second)
+	pingTicker := time.NewTicker(10 * time.Second)
 	go func() {
 		for {
 			select {
-			case <-pingTimer.C:
+			case <-pingTicker.C:
 				if err := p.Send(&message_def.PingMessage{}); err != nil {
 					p.conn.Close()
 					return

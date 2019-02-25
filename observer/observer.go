@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"git.fleta.io/fleta/core/consensus"
@@ -26,24 +27,24 @@ import (
 // Observer supports the chain validation
 type Observer struct {
 	sync.Mutex
-	Config           *Config
-	round            *VoteRound
-	roundState       int
-	roundVoteMap     map[common.PublicHash]*RoundVote
-	roundFirstTime   uint64
-	roundFirstHeight uint32
-	ignoreMap        map[common.Address]int64
-	ms               *ObserverMesh
-	cm               *chain.Manager
-	kn               *kernel.Kernel
-	fs               *FormulatorService
-	mm               *message.Manager
-	failTimer        *time.Timer
-	isRunning        bool
-	isProcessing     bool
-	closeLock        sync.RWMutex
-	runEnd           chan struct{}
-	isClose          bool
+	Config               *Config
+	round                *VoteRound
+	roundState           int
+	roundVoteMap         map[common.PublicHash]*RoundVote
+	roundFirstTime       uint64
+	roundFirstHeight     uint32
+	ignoreMap            map[common.Address]int64
+	ms                   *ObserverMesh
+	cm                   *chain.Manager
+	kn                   *kernel.Kernel
+	fs                   *FormulatorService
+	mm                   *message.Manager
+	failTimer            *time.Timer
+	isRunning            bool
+	lastestProcessHeight uint32
+	closeLock            sync.RWMutex
+	runEnd               chan struct{}
+	isClose              bool
 }
 
 // NewObserver returns a Observer
@@ -100,32 +101,52 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 	for !ob.isClose {
 		select {
 		case <-voteTimer.C:
-			ob.fs.Lock()
-			is := len(ob.fs.peerHash) > 0
-			ob.fs.Unlock()
-			log.Println(ob.kn.Provider().Height(), "Current State", ob.roundState, len(ob.adjustFormulatorMap()), len(ob.fs.peerHash), is)
-			if is {
+			ob.kn.DebugLog(ob.kn.Provider().Height(), "Current State", ob.roundState, len(ob.adjustFormulatorMap()), len(ob.fs.peerHash))
+			ob.Lock()
+			if ob.round != nil {
+				if len(ob.roundVoteMap) > 0 {
+					var AnyRoundVote *RoundVote
+					for _, vt := range ob.roundVoteMap {
+						AnyRoundVote = vt
+						break
+					}
+					if atomic.LoadUint32(&ob.lastestProcessHeight) >= AnyRoundVote.TargetHeight {
+						ob.roundState = RoundVoteState
+						log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteState)
+						ob.roundVoteMap = map[common.PublicHash]*RoundVote{}
+						ob.round = nil
+					}
+				}
+			}
+			ob.Unlock()
+
+			//if ob.fs.PeerCount() > 0 {
+			if true {
 				if ob.roundState == RoundVoteState {
 					ob.Lock()
 					ob.sendRoundVote()
 					ob.Unlock()
 				}
 			}
+
 			voteTimer.Reset(500 * time.Millisecond)
 		case <-ob.failTimer.C:
 			ob.Lock()
-			if len(ob.fs.peerHash) > 0 && ob.roundState != RoundVoteState {
-				log.Println(ob.kn.Provider().Height(), "Fail State", ob.roundState, len(ob.adjustFormulatorMap()), len(ob.fs.peerHash))
+			//if ob.fs.PeerCount() > 0 && ob.roundState != RoundVoteState {
+			if ob.roundState != RoundVoteState {
+				ob.kn.DebugLog(ob.kn.Provider().Height(), "Fail State", ob.roundState, len(ob.adjustFormulatorMap()), len(ob.fs.peerHash))
 				if ob.round != nil && ob.round.MinRoundVoteAck != nil {
 					addr := ob.round.MinRoundVoteAck.Formulator
 					_, has := ob.ignoreMap[addr]
 					if has {
 						ob.fs.RemovePeer(addr)
+						ob.ignoreMap[addr] = time.Now().UnixNano() + int64(120*time.Second)
+					} else {
+						ob.ignoreMap[addr] = time.Now().UnixNano() + int64(30*time.Second)
 					}
-					ob.ignoreMap[addr] = time.Now().UnixNano() + int64(30*time.Second)
 				}
 				ob.roundState = RoundVoteState
-				log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteState)
+				ob.kn.DebugLog(ob.kn.Provider().Height(), "Change State", RoundVoteState)
 				ob.roundVoteMap = map[common.PublicHash]*RoundVote{}
 				ob.round = nil
 				ob.roundFirstTime = 0
@@ -312,7 +333,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 			}
 			ob.roundState = RoundVoteAckState
 			ob.round = NewVoteRound(MinRoundVote.RoundHash)
-			log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteAckState)
+			ob.kn.DebugLog(ob.kn.Provider().Height(), "Change State", RoundVoteAckState)
 
 			if ob.roundFirstTime == 0 {
 				ob.roundFirstTime = uint64(time.Now().UnixNano())
@@ -528,11 +549,7 @@ func (ob *Observer) handleMessage(m message.Message) error {
 				Signatures: append([]common.Signature{ob.round.BlockGenMessage.GeneratorSignature}, sigs...),
 			}
 
-			if err := ob.cm.ProcessWithCallback(cd, ob.round.Context, func() {
-				ob.isProcessing = true
-			}, func() {
-				ob.isProcessing = false
-			}); err != nil {
+			if err := ob.cm.Process(cd, ob.round.Context); err != nil {
 				return err
 			}
 			ob.cm.BroadcastHeader(cd.Header)
@@ -670,35 +687,14 @@ func (ob *Observer) nextRoundHash() hash.Hash256 {
 	return hash.DoubleHash(buffer.Bytes())
 }
 
-// OnCreateContext called when a context creation (error prevent using context)
-func (ob *Observer) OnCreateContext(kn *kernel.Kernel, ctx *data.Context) error {
+// OnProcessBlock called when processing block to the chain (error prevent processing block)
+func (ob *Observer) OnProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
+	atomic.StoreUint32(&ob.lastestProcessHeight, b.Header.Height())
 	return nil
 }
 
-// OnProcessBlock called when processing block to the chain (error prevent processing block)
-func (ob *Observer) OnProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
-	if !ob.isProcessing {
-		ob.Lock()
-		defer ob.Unlock()
-
-		if ob.round != nil {
-			if len(ob.roundVoteMap) > 0 {
-				var AnyRoundVote *RoundVote
-				for _, vt := range ob.roundVoteMap {
-					AnyRoundVote = vt
-					break
-				}
-				if b.Header.Height() >= AnyRoundVote.TargetHeight {
-					ob.roundState = RoundVoteState
-					log.Println(ob.kn.Provider().Height(), "Change State", RoundVoteState)
-					ob.roundVoteMap = map[common.PublicHash]*RoundVote{}
-					ob.round = nil
-					ob.sendRoundVote()
-				}
-			}
-		}
-	}
-	return nil
+// AfterProcessBlock called when processed block to the chain
+func (ob *Observer) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) {
 }
 
 // OnPushTransaction called when pushing a transaction to the transaction pool (error prevent push transaction)
@@ -706,8 +702,16 @@ func (ob *Observer) OnPushTransaction(kn *kernel.Kernel, tx transaction.Transact
 	return nil
 }
 
-// AfterProcessBlock called when processed block to the chain
-func (ob *Observer) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) {
+// AfterPushTransaction called when pushed a transaction to the transaction pool
+func (ob *Observer) AfterPushTransaction(kn *kernel.Kernel, tx transaction.Transaction, sigs []common.Signature) {
+}
+
+// DoTransactionBroadcast called when a transaction need to be broadcast
+func (ob *Observer) DoTransactionBroadcast(kn *kernel.Kernel, msg *message_def.TransactionMessage) {
+}
+
+// DebugLog TEMP
+func (ob *Observer) DebugLog(kn *kernel.Kernel, args ...interface{}) {
 }
 
 func (ob *Observer) adjustFormulatorMap() map[common.Address]bool {

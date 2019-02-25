@@ -51,12 +51,9 @@ func NewFormulatorService(Key key.Key, kn *kernel.Kernel, handler FormulatorServ
 }
 
 // Run provides a server
-func (ms *FormulatorService) Run(BindAddress string) error {
-	for {
-		if err := ms.server(BindAddress); err != nil {
-			log.Println("[server]", err)
-		}
-		time.Sleep(1 * time.Second)
+func (ms *FormulatorService) Run(BindAddress string) {
+	if err := ms.server(BindAddress); err != nil {
+		panic(err)
 	}
 }
 

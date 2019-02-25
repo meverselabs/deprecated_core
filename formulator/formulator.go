@@ -12,6 +12,7 @@ import (
 
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/kernel"
+	"git.fleta.io/fleta/core/transaction"
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/hash"
@@ -72,7 +73,7 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 		txCastMap:    map[string]bool{},
 		statusMap:    map[string]*chain.Status{},
 		requestTimer: chain.NewRequestTimer(nil),
-		runEnd:       make(chan struct{}, 1),
+		runEnd:       make(chan struct{}),
 	}
 	fr.mm.SetCreator(message_def.BlockReqMessageType, fr.messageCreator)
 	fr.mm.SetCreator(message_def.BlockObSignMessageType, fr.messageCreator)
@@ -111,38 +112,21 @@ func (fr *Formulator) Run() {
 	go fr.cm.Run()
 	go fr.ms.Run()
 
-	timer := time.NewTimer(time.Minute)
-	for !fr.isClose {
-		select {
-		case <-timer.C:
-			txCastTargetMap := map[string]bool{}
-			fr.Lock()
-			for _, id := range fr.pm.ConnectedList() {
-				if !fr.txCastMap[id] {
-					txCastTargetMap[id] = true
-				}
-			}
-			fr.txCastMap = map[string]bool{}
-			fr.Unlock()
+	<-fr.runEnd
+}
 
-			msgs := []*message_def.TransactionMessage{}
-			item := fr.txQueue.Pop()
-			for item != nil {
-				msgs = append(msgs, item.(*message_def.TransactionMessage))
-				item = fr.txQueue.Pop()
-			}
-
-			for _, msg := range msgs {
-				if fr.kn.HasTransaction(msg.Tx.Hash()) {
-					for id := range txCastTargetMap {
-						fr.pm.TargetCast(id, msg)
-					}
-				}
-			}
-			timer.Reset(time.Minute)
-		case <-fr.runEnd:
-		}
+// CommitTransaction adds and broadcasts transaction
+func (fr *Formulator) CommitTransaction(tx transaction.Transaction, sigs []common.Signature) error {
+	if err := fr.kn.AddTransaction(tx, sigs); err != nil {
+		return err
 	}
+	msg := &message_def.TransactionMessage{
+		Tx:   tx,
+		Sigs: sigs,
+		Tran: fr.kn.Transactor(),
+	}
+	fr.pm.BroadCast(msg)
+	return nil
 }
 
 // OnDisconnected is called when the peer is disconnected
@@ -342,12 +326,6 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 			return nil
 		}
 		fr.pm.ExceptCast(p.ID(), msg)
-		fr.Lock()
-		for _, id := range fr.pm.ConnectedList() {
-			fr.txCastMap[id] = true
-		}
-		fr.Unlock()
-		fr.txQueue.Push(msg)
 		return nil
 	default:
 		return message.ErrUnhandledMessage
@@ -439,4 +417,31 @@ func (fr *Formulator) messageCreator(r io.Reader, t message.Type) (message.Messa
 	default:
 		return nil, message.ErrUnknownMessage
 	}
+}
+
+// OnProcessBlock called when processing block to the chain (error prevent processing block)
+func (fr *Formulator) OnProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) error {
+	return nil
+}
+
+// AfterProcessBlock called when processed block to the chain
+func (fr *Formulator) AfterProcessBlock(kn *kernel.Kernel, b *block.Block, s *block.ObserverSigned, ctx *data.Context) {
+}
+
+// OnPushTransaction called when pushing a transaction to the transaction pool (error prevent push transaction)
+func (fr *Formulator) OnPushTransaction(kn *kernel.Kernel, tx transaction.Transaction, sigs []common.Signature) error {
+	return nil
+}
+
+// AfterPushTransaction called when pushed a transaction to the transaction pool
+func (fr *Formulator) AfterPushTransaction(kn *kernel.Kernel, tx transaction.Transaction, sigs []common.Signature) {
+}
+
+// DoTransactionBroadcast called when a transaction need to be broadcast
+func (fr *Formulator) DoTransactionBroadcast(kn *kernel.Kernel, msg *message_def.TransactionMessage) {
+	fr.pm.BroadCast(msg)
+}
+
+// DebugLog TEMP
+func (fr *Formulator) DebugLog(kn *kernel.Kernel, args ...interface{}) {
 }
