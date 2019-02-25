@@ -589,7 +589,7 @@ func (kn *Kernel) validateBlockBody(b *block.Block) error {
 	}
 	txCnt := len(b.Body.Transactions) / cpuCnt
 	TxHashes := make([]hash.Hash256, len(b.Body.Transactions)+1)
-	TxHashes = append(TxHashes, b.Header.PrevHash())
+	TxHashes[0] = b.Header.PrevHash()
 	if len(b.Body.Transactions)%cpuCnt != 0 {
 		txCnt++
 	}
