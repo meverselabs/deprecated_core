@@ -184,8 +184,8 @@ func (ms *Mesh) client(Address string, TargetPubHash common.PublicHash) error {
 	p := NewPeer(conn, pubhash)
 
 	ms.Lock()
-	old, has := ms.peerHash[pubhash.String()]
-	ms.peerHash[pubhash.String()] = p
+	old, has := ms.peerHash[p.ID()]
+	ms.peerHash[p.ID()] = p
 	ms.Unlock()
 	if has {
 		ms.RemovePeer(old)
@@ -199,7 +199,7 @@ func (ms *Mesh) client(Address string, TargetPubHash common.PublicHash) error {
 }
 
 func (ms *Mesh) handleConnection(p *Peer) error {
-	log.Println(ms.Formulator.String(), "Recv Connection From", p.ID())
+	log.Println(ms.Formulator.String(), "Connected To", p.ID())
 
 	ms.handler.OnConnected(p)
 

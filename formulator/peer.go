@@ -69,6 +69,7 @@ func (p *Peer) SendRaw(bs []byte) error {
 	deadTimer := time.NewTimer(5 * time.Second)
 	select {
 	case <-deadTimer.C:
+		p.conn.Close()
 		return ErrPeerTimeout
 	case err := <-errCh:
 		return err
