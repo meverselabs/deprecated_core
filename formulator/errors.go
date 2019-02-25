@@ -8,4 +8,5 @@ var (
 	ErrNotAllowedPublicHash = errors.New("not allowed public hash")
 	ErrInvalidRequest       = errors.New("invalid request")
 	ErrUnknownPeer          = errors.New("unknown peer")
+	ErrPeerTimeout          = errors.New("peer timeout")
 )

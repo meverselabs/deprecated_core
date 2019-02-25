@@ -3,6 +3,7 @@ package observer
 import (
 	"bytes"
 	"net"
+	"sync"
 	"time"
 
 	"git.fleta.io/fleta/common"
@@ -50,16 +51,28 @@ func (p *Peer) Send(m message.Message) error {
 	if _, err := m.WriteTo(&buffer); err != nil {
 		return err
 	}
-	if _, err := p.conn.Write(buffer.Bytes()); err != nil {
-		return err
-	}
-	return nil
+	return p.SendRaw(buffer.Bytes())
 }
 
 // SendRaw sends bytes to the peer
 func (p *Peer) SendRaw(bs []byte) error {
-	if _, err := p.conn.Write(bs); err != nil {
+	errCh := make(chan error)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wg.Done()
+		_, err := p.conn.Write(bs)
+		if err != nil {
+			p.conn.Close()
+		}
+		errCh <- err
+	}()
+	wg.Wait()
+	deadTimer := time.NewTimer(5 * time.Second)
+	select {
+	case <-deadTimer.C:
+		return ErrPeerTimeout
+	case err := <-errCh:
 		return err
 	}
-	return nil
 }
