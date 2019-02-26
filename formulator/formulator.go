@@ -108,8 +108,8 @@ func (fr *Formulator) Run() {
 
 	fr.pm.StartManage()
 	go func() {
-		for _, v := range Config.SeedNodes {
-			pm.AddNode(v)
+		for _, v := range fr.Config.SeedNodes {
+			fr.pm.AddNode(v)
 		}
 		fr.pm.EnforceConnect()
 	}()
