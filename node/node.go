@@ -2,7 +2,9 @@ package node
 
 import (
 	"io"
+	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/data"
@@ -24,16 +26,17 @@ import (
 // Node validates and shares the block chain
 type Node struct {
 	sync.Mutex
-	Config    *Config
-	cm        *chain.Manager
-	kn        *kernel.Kernel
-	pm        peer.Manager
-	mm        *message.Manager
-	txCastMap map[string]bool
-	isRunning bool
-	closeLock sync.RWMutex
-	runEnd    chan struct{}
-	isClose   bool
+	Config     *Config
+	cm         *chain.Manager
+	kn         *kernel.Kernel
+	pm         peer.Manager
+	mm         *message.Manager
+	txMsgChans []*chan *txMsgItem
+	txMsgIdx   uint64
+	isRunning  bool
+	closeLock  sync.RWMutex
+	runEnd     chan struct{}
+	isClose    bool
 }
 
 // NewNode returns a Node
@@ -46,9 +49,6 @@ func NewNode(Config *Config, kn *kernel.Kernel) (*Node, error) {
 	pm, err := peer.NewManager(kn.ChainCoord(), r, &Config.Peer)
 	if err != nil {
 		return nil, err
-	}
-	for _, v := range Config.SeedNodes {
-		pm.AddNode(v)
 	}
 
 	nd := &Node{
@@ -90,24 +90,66 @@ func (nd *Node) Run() {
 	nd.Unlock()
 
 	nd.pm.StartManage()
-	nd.pm.EnforceConnect()
+	go func() {
+		for _, v := range nd.Config.SeedNodes {
+			nd.pm.AddNode(v)
+		}
+		nd.pm.EnforceConnect()
+	}()
 	go nd.cm.Run()
 
-	<-nd.runEnd
+	WorkerCount := runtime.NumCPU()
+	workerEnd := make([]*chan struct{}, WorkerCount)
+	nd.txMsgChans = make([]*chan *txMsgItem, WorkerCount)
+	for i := 0; i < WorkerCount; i++ {
+		mch := make(chan *txMsgItem)
+		nd.txMsgChans[i] = &mch
+		ch := make(chan struct{})
+		workerEnd[i] = &ch
+		go func(pMsgCh *chan *txMsgItem, pEndCh *chan struct{}) {
+			for {
+				select {
+				case item := <-(*pMsgCh):
+					if err := nd.kn.AddTransaction(item.Message.Tx, item.Message.Sigs); err != nil {
+						(*item.pErrCh) <- err
+						break
+					}
+					(*item.pErrCh) <- nil
+					if len(item.PeerID) > 0 {
+						nd.pm.ExceptCast(item.PeerID, item.Message)
+					} else {
+						nd.pm.BroadCast(item.Message)
+					}
+				case <-(*pEndCh):
+					return
+				}
+			}
+		}(&mch, &ch)
+	}
+
+	select {
+	case <-nd.runEnd:
+		for i := 0; i < WorkerCount; i++ {
+			(*workerEnd[i]) <- struct{}{}
+		}
+	}
 }
 
 // CommitTransaction adds and broadcasts transaction
 func (nd *Node) CommitTransaction(tx transaction.Transaction, sigs []common.Signature) error {
-	if err := nd.kn.AddTransaction(tx, sigs); err != nil {
-		return err
-	}
 	msg := &message_def.TransactionMessage{
 		Tx:   tx,
 		Sigs: sigs,
 		Tran: nd.kn.Transactor(),
 	}
-	nd.pm.BroadCast(msg)
-	return nil
+	errCh := make(chan error)
+	idx := atomic.AddUint64(&nd.txMsgIdx, 1) % uint64(len(nd.txMsgChans))
+	(*nd.txMsgChans[idx]) <- &txMsgItem{
+		Message: msg,
+		PeerID:  "",
+		pErrCh:  &errCh,
+	}
+	return <-errCh
 }
 
 // OnConnected is called after a new peer is connected
@@ -133,14 +175,14 @@ func (nd *Node) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 func (nd *Node) handleMessage(p mesh.Peer, m message.Message) error {
 	switch msg := m.(type) {
 	case *message_def.TransactionMessage:
-		if err := nd.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
-			if err != kernel.ErrPastSeq {
-				return err
-			}
-			return nil
+		errCh := make(chan error)
+		idx := atomic.AddUint64(&nd.txMsgIdx, 1) % uint64(len(nd.txMsgChans))
+		(*nd.txMsgChans[idx]) <- &txMsgItem{
+			Message: msg,
+			PeerID:  "",
+			pErrCh:  &errCh,
 		}
-		nd.pm.ExceptCast(p.ID(), msg)
-		return nil
+		return <-errCh
 	default:
 		return message.ErrUnhandledMessage
 	}
@@ -186,4 +228,10 @@ func (nd *Node) DoTransactionBroadcast(kn *kernel.Kernel, msg *message_def.Trans
 
 // DebugLog TEMP
 func (nd *Node) DebugLog(kn *kernel.Kernel, args ...interface{}) {
+}
+
+type txMsgItem struct {
+	Message *message_def.TransactionMessage
+	PeerID  string
+	pErrCh  *chan error
 }

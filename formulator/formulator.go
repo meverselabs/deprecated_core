@@ -3,10 +3,10 @@ package formulator
 import (
 	"bytes"
 	"io"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"git.fleta.io/fleta/common/queue"
 
 	"git.fleta.io/fleta/framework/router"
 
@@ -37,8 +37,8 @@ type Formulator struct {
 	lastGenMessage *message_def.BlockGenMessage
 	lastReqMessage *message_def.BlockReqMessage
 	lastContext    *data.Context
-	txQueue        *queue.Queue
-	txCastMap      map[string]bool
+	txMsgChans     []*chan *txMsgItem
+	txMsgIdx       uint64
 	statusMap      map[string]*chain.Status
 	requestTimer   *chain.RequestTimer
 	requestLock    sync.RWMutex
@@ -59,9 +59,6 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, v := range Config.SeedNodes {
-		pm.AddNode(v)
-	}
 
 	fr := &Formulator{
 		Config:       Config,
@@ -69,8 +66,6 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 		pm:           pm,
 		kn:           kn,
 		mm:           message.NewManager(),
-		txQueue:      queue.NewQueue(),
-		txCastMap:    map[string]bool{},
 		statusMap:    map[string]*chain.Status{},
 		requestTimer: chain.NewRequestTimer(nil),
 		runEnd:       make(chan struct{}),
@@ -112,25 +107,50 @@ func (fr *Formulator) Run() {
 	fr.Unlock()
 
 	fr.pm.StartManage()
-	fr.pm.EnforceConnect()
+	go func() {
+		for _, v := range Config.SeedNodes {
+			pm.AddNode(v)
+		}
+		fr.pm.EnforceConnect()
+	}()
 	go fr.cm.Run()
 	go fr.ms.Run()
 
-	<-fr.runEnd
-}
+	WorkerCount := runtime.NumCPU()
+	workerEnd := make([]*chan struct{}, WorkerCount)
+	fr.txMsgChans = make([]*chan *txMsgItem, WorkerCount)
+	for i := 0; i < WorkerCount; i++ {
+		mch := make(chan *txMsgItem)
+		fr.txMsgChans[i] = &mch
+		ch := make(chan struct{})
+		workerEnd[i] = &ch
+		go func(pMsgCh *chan *txMsgItem, pEndCh *chan struct{}) {
+			for {
+				select {
+				case item := <-(*pMsgCh):
+					if err := fr.kn.AddTransaction(item.Message.Tx, item.Message.Sigs); err != nil {
+						(*item.pErrCh) <- err
+						break
+					}
+					(*item.pErrCh) <- nil
+					if len(item.PeerID) > 0 {
+						fr.pm.ExceptCast(item.PeerID, item.Message)
+					} else {
+						fr.pm.BroadCast(item.Message)
+					}
+				case <-(*pEndCh):
+					return
+				}
+			}
+		}(&mch, &ch)
+	}
 
-// CommitTransaction adds and broadcasts transaction
-func (fr *Formulator) CommitTransaction(tx transaction.Transaction, sigs []common.Signature) error {
-	if err := fr.kn.AddTransaction(tx, sigs); err != nil {
-		return err
+	select {
+	case <-fr.runEnd:
+		for i := 0; i < WorkerCount; i++ {
+			(*workerEnd[i]) <- struct{}{}
+		}
 	}
-	msg := &message_def.TransactionMessage{
-		Tx:   tx,
-		Sigs: sigs,
-		Tran: fr.kn.Transactor(),
-	}
-	fr.pm.BroadCast(msg)
-	return nil
 }
 
 // OnConnected is called after a new peer is connected
@@ -332,14 +352,14 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		}
 		return nil
 	case *message_def.TransactionMessage:
-		if err := fr.kn.AddTransaction(msg.Tx, msg.Sigs); err != nil {
-			if err != kernel.ErrPastSeq {
-				return err
-			}
-			return nil
+		errCh := make(chan error)
+		idx := atomic.AddUint64(&fr.txMsgIdx, 1) % uint64(len(fr.txMsgChans))
+		(*fr.txMsgChans[idx]) <- &txMsgItem{
+			Message: msg,
+			PeerID:  "",
+			pErrCh:  &errCh,
 		}
-		fr.pm.ExceptCast(p.ID(), msg)
-		return nil
+		return <-errCh
 	default:
 		return message.ErrUnhandledMessage
 	}
@@ -457,4 +477,10 @@ func (fr *Formulator) DoTransactionBroadcast(kn *kernel.Kernel, msg *message_def
 
 // DebugLog TEMP
 func (fr *Formulator) DebugLog(kn *kernel.Kernel, args ...interface{}) {
+}
+
+type txMsgItem struct {
+	Message *message_def.TransactionMessage
+	PeerID  string
+	pErrCh  *chan error
 }
