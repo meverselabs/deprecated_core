@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"git.fleta.io/fleta/common"
@@ -20,16 +21,20 @@ type FormulatorPeer struct {
 	pubhash     common.PublicHash
 	address     common.Address
 	guessHeight uint32
+	startTime   uint64
+	readTotal   uint64
+	writeTotal  uint64
 }
 
 // NewFormulatorPeer returns a ormulatorPeer
 func NewFormulatorPeer(conn net.Conn, pubhash common.PublicHash, address common.Address) *FormulatorPeer {
 	p := &FormulatorPeer{
-		id:      address.String(),
-		netAddr: conn.RemoteAddr().String(),
-		conn:    conn,
-		pubhash: pubhash,
-		address: address,
+		id:        address.String(),
+		netAddr:   conn.RemoteAddr().String(),
+		conn:      conn,
+		pubhash:   pubhash,
+		address:   address,
+		startTime: uint64(time.Now().UnixNano()),
 	}
 	return p
 }
@@ -47,6 +52,13 @@ func (p *FormulatorPeer) NetAddr() string {
 // Address returns the formulator address of the peer
 func (p *FormulatorPeer) Address() common.Address {
 	return p.address
+}
+
+// Send sends a message to the peer
+func (p *FormulatorPeer) Read(bs []byte) (int, error) {
+	n, err := p.conn.Read(bs)
+	atomic.AddUint64(&p.readTotal, uint64(n))
+	return n, err
 }
 
 // Send sends a message to the peer
@@ -72,6 +84,7 @@ func (p *FormulatorPeer) SendRaw(bs []byte) error {
 		if err != nil {
 			p.conn.Close()
 		}
+		atomic.AddUint64(&p.writeTotal, uint64(len(bs)))
 		errCh <- err
 	}()
 	wg.Wait()
@@ -79,7 +92,7 @@ func (p *FormulatorPeer) SendRaw(bs []byte) error {
 	select {
 	case <-deadTimer.C:
 		p.conn.Close()
-		return ErrPeerTimeout
+		return <-errCh
 	case err := <-errCh:
 		return err
 	}

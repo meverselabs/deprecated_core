@@ -70,7 +70,7 @@ func (p *Peer) SendRaw(bs []byte) error {
 	select {
 	case <-deadTimer.C:
 		p.conn.Close()
-		return ErrPeerTimeout
+		return <-errCh
 	case err := <-errCh:
 		return err
 	}

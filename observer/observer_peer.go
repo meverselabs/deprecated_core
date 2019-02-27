@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"git.fleta.io/fleta/common"
@@ -13,21 +14,23 @@ import (
 
 // Peer is a observer peer
 type Peer struct {
-	id           string
-	netAddr      string
-	conn         net.Conn
-	pubhash      common.PublicHash
-	lastRecvTime int64
+	id         string
+	netAddr    string
+	conn       net.Conn
+	pubhash    common.PublicHash
+	startTime  uint64
+	readTotal  uint64
+	writeTotal uint64
 }
 
 // NewPeer returns a Peer
 func NewPeer(conn net.Conn, pubhash common.PublicHash) *Peer {
 	p := &Peer{
-		id:           pubhash.String(),
-		netAddr:      conn.RemoteAddr().String(),
-		conn:         conn,
-		pubhash:      pubhash,
-		lastRecvTime: time.Now().UnixNano(),
+		id:        pubhash.String(),
+		netAddr:   conn.RemoteAddr().String(),
+		conn:      conn,
+		pubhash:   pubhash,
+		startTime: uint64(time.Now().UnixNano()),
 	}
 	return p
 }
@@ -40,6 +43,13 @@ func (p *Peer) ID() string {
 // NetAddr returns the network address of the peer
 func (p *Peer) NetAddr() string {
 	return p.netAddr
+}
+
+// Send sends a message to the peer
+func (p *Peer) Read(bs []byte) (int, error) {
+	n, err := p.conn.Read(bs)
+	atomic.AddUint64(&p.readTotal, uint64(n))
+	return n, err
 }
 
 // Send sends a message to the peer
@@ -65,6 +75,7 @@ func (p *Peer) SendRaw(bs []byte) error {
 		if err != nil {
 			p.conn.Close()
 		}
+		atomic.AddUint64(&p.writeTotal, uint64(len(bs)))
 		errCh <- err
 	}()
 	wg.Wait()
@@ -72,7 +83,7 @@ func (p *Peer) SendRaw(bs []byte) error {
 	select {
 	case <-deadTimer.C:
 		p.conn.Close()
-		return ErrPeerTimeout
+		return <-errCh
 	case err := <-errCh:
 		return err
 	}
