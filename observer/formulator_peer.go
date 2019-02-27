@@ -94,6 +94,7 @@ func (p *FormulatorPeer) SendRaw(bs []byte) error {
 		p.conn.Close()
 		return <-errCh
 	case err := <-errCh:
+		deadTimer.Stop()
 		return err
 	}
 }
