@@ -20,5 +20,4 @@ var (
 	ErrDuplicatedAckAndTimeout    = errors.New("duplicated akc and timeout")
 	ErrNoFormulatorConnected      = errors.New("no formulator connected")
 	ErrAlreadyVoted               = errors.New("already voted")
-	ErrPeerTimeout                = errors.New("peer timeout")
 )
