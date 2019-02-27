@@ -31,21 +31,21 @@ type FormulatorServiceEventHandler interface {
 // FormulatorService provides connectivity with formulators
 type FormulatorService struct {
 	sync.Mutex
-	Key      key.Key
-	peerHash map[common.Address]*FormulatorPeer
-	handler  FormulatorServiceEventHandler
-	kn       *kernel.Kernel
-	manager  *message.Manager
+	Key     key.Key
+	peerMap map[common.Address]*FormulatorPeer
+	handler FormulatorServiceEventHandler
+	kn      *kernel.Kernel
+	manager *message.Manager
 }
 
 // NewFormulatorService returns a FormulatorService
 func NewFormulatorService(Key key.Key, kn *kernel.Kernel, handler FormulatorServiceEventHandler) *FormulatorService {
 	ms := &FormulatorService{
-		Key:      Key,
-		kn:       kn,
-		peerHash: map[common.Address]*FormulatorPeer{},
-		handler:  handler,
-		manager:  message.NewManager(),
+		Key:     Key,
+		kn:      kn,
+		peerMap: map[common.Address]*FormulatorPeer{},
+		handler: handler,
+		manager: message.NewManager(),
 	}
 	return ms
 }
@@ -62,15 +62,15 @@ func (ms *FormulatorService) PeerCount() int {
 	ms.Lock()
 	defer ms.Unlock()
 
-	return len(ms.peerHash)
+	return len(ms.peerMap)
 }
 
 // RemovePeer removes peers from the mesh
 func (ms *FormulatorService) RemovePeer(addr common.Address) {
 	ms.Lock()
-	p, has := ms.peerHash[addr]
+	p, has := ms.peerMap[addr]
 	if has {
-		delete(ms.peerHash, addr)
+		delete(ms.peerMap, addr)
 	}
 	ms.Unlock()
 
@@ -83,7 +83,7 @@ func (ms *FormulatorService) RemovePeer(addr common.Address) {
 // SendTo sends a message to the formulator
 func (ms *FormulatorService) SendTo(Formulator common.Address, m message.Message) error {
 	ms.Lock()
-	p, has := ms.peerHash[Formulator]
+	p, has := ms.peerMap[Formulator]
 	ms.Unlock()
 	if !has {
 		return ErrUnknownFormulator
@@ -109,7 +109,7 @@ func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
 
 	peers := []*FormulatorPeer{}
 	ms.Lock()
-	for _, p := range ms.peerHash {
+	for _, p := range ms.peerMap {
 		peers = append(peers, p)
 	}
 	ms.Unlock()
@@ -127,7 +127,7 @@ func (ms *FormulatorService) BroadcastMessage(m message.Message) error {
 func (ms *FormulatorService) GuessHeightCountMap() map[uint32]int {
 	CountMap := map[uint32]int{}
 	ms.Lock()
-	for _, p := range ms.peerHash {
+	for _, p := range ms.peerMap {
 		CountMap[p.GuessHeight()]++
 	}
 	ms.Unlock()
@@ -137,7 +137,7 @@ func (ms *FormulatorService) GuessHeightCountMap() map[uint32]int {
 // UpdateGuessHeight updates the guess height of the fomrulator
 func (ms *FormulatorService) UpdateGuessHeight(Formulator common.Address, height uint32) {
 	ms.Lock()
-	p, has := ms.peerHash[Formulator]
+	p, has := ms.peerMap[Formulator]
 	ms.Unlock()
 	if has {
 		p.UpdateGuessHeight(height)
@@ -176,8 +176,8 @@ func (ms *FormulatorService) server(BindAddress string) error {
 
 			p := NewFormulatorPeer(conn, pubhash, Formulator)
 			ms.Lock()
-			old, has := ms.peerHash[Formulator]
-			ms.peerHash[Formulator] = p
+			old, has := ms.peerMap[Formulator]
+			ms.peerMap[Formulator] = p
 			ms.Unlock()
 			if has {
 				ms.RemovePeer(old.address)
@@ -216,7 +216,8 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 	}()
 	for {
 		var t message.Type
-		if v, _, err := util.ReadUint64(p.conn); err != nil {
+		if v, _, err := util.ReadUint64(p); err != nil {
+			//if v, _, err := util.ReadUint64(p.conn); err != nil {
 			return err
 		} else {
 			t = message.Type(v)
@@ -227,7 +228,8 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 			continue
 		}
 
-		if err := ms.handler.OnRecv(p, p.conn, t); err != nil {
+		//if err := ms.handler.OnRecv(p, p.conn, t); err != nil {
+		if err := ms.handler.OnRecv(p, p, t); err != nil {
 			return err
 		}
 	}
@@ -289,7 +291,7 @@ func (ms *FormulatorService) FormulatorMap() map[common.Address]bool {
 	defer ms.Unlock()
 
 	FormulatorMap := map[common.Address]bool{}
-	for _, p := range ms.peerHash {
+	for _, p := range ms.peerMap {
 		FormulatorMap[p.address] = true
 	}
 	return FormulatorMap

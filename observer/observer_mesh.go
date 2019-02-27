@@ -27,22 +27,22 @@ type ObserverMeshDeligator interface {
 
 type ObserverMesh struct {
 	sync.Mutex
-	Key            key.Key
-	NetAddressMap  map[common.PublicHash]string
-	clientPeerHash map[common.PublicHash]*Peer
-	serverPeerHash map[common.PublicHash]*Peer
-	deligator      ObserverMeshDeligator
-	handler        mesh.EventHandler
+	Key           key.Key
+	NetAddressMap map[common.PublicHash]string
+	clientPeerMap map[common.PublicHash]*Peer
+	serverPeerMap map[common.PublicHash]*Peer
+	deligator     ObserverMeshDeligator
+	handler       mesh.EventHandler
 }
 
 func NewObserverMesh(Key key.Key, NetAddressMap map[common.PublicHash]string, Deligator ObserverMeshDeligator, handler mesh.EventHandler) *ObserverMesh {
 	ms := &ObserverMesh{
-		Key:            Key,
-		NetAddressMap:  NetAddressMap,
-		clientPeerHash: map[common.PublicHash]*Peer{},
-		serverPeerHash: map[common.PublicHash]*Peer{},
-		deligator:      Deligator,
-		handler:        handler,
+		Key:           Key,
+		NetAddressMap: NetAddressMap,
+		clientPeerMap: map[common.PublicHash]*Peer{},
+		serverPeerMap: map[common.PublicHash]*Peer{},
+		deligator:     Deligator,
+		handler:       handler,
 	}
 	return ms
 }
@@ -68,10 +68,10 @@ func (ms *ObserverMesh) Unban(netAddr string) {
 func (ms *ObserverMesh) Peers() []mesh.Peer {
 	peerMap := map[common.PublicHash]*Peer{}
 	ms.Lock()
-	for _, p := range ms.clientPeerHash {
+	for _, p := range ms.clientPeerMap {
 		peerMap[p.pubhash] = p
 	}
-	for _, p := range ms.serverPeerHash {
+	for _, p := range ms.serverPeerMap {
 		peerMap[p.pubhash] = p
 	}
 	ms.Unlock()
@@ -91,8 +91,8 @@ func (ms *ObserverMesh) Run(BindAddress string) {
 				time.Sleep(1 * time.Second)
 				for {
 					ms.Lock()
-					_, hasC := ms.clientPeerHash[pubhash]
-					_, hasS := ms.serverPeerHash[pubhash]
+					_, hasC := ms.clientPeerMap[pubhash]
+					_, hasS := ms.serverPeerMap[pubhash]
 					ms.Unlock()
 					if !hasC && !hasS {
 						if err := ms.client(NetAddr, pubhash); err != nil {
@@ -133,13 +133,13 @@ func (ms *ObserverMesh) BroadcastMessage(m message.Message) error {
 	peerMap := map[common.PublicHash]*Peer{}
 	targetMap := map[common.PublicHash]map[common.PublicHash]*Peer{}
 	ms.Lock()
-	for _, p := range ms.clientPeerHash {
+	for _, p := range ms.clientPeerMap {
 		peerMap[p.pubhash] = p
-		targetMap[p.pubhash] = ms.clientPeerHash
+		targetMap[p.pubhash] = ms.clientPeerMap
 	}
-	for _, p := range ms.serverPeerHash {
+	for _, p := range ms.serverPeerMap {
 		peerMap[p.pubhash] = p
-		targetMap[p.pubhash] = ms.serverPeerHash
+		targetMap[p.pubhash] = ms.serverPeerMap
 	}
 	ms.Unlock()
 
@@ -177,13 +177,13 @@ func (ms *ObserverMesh) client(Address string, TargetPubHash common.PublicHash) 
 
 	p := NewPeer(conn, pubhash)
 	ms.Lock()
-	old, has := ms.clientPeerHash[pubhash]
-	ms.clientPeerHash[pubhash] = p
+	old, has := ms.clientPeerMap[pubhash]
+	ms.clientPeerMap[pubhash] = p
 	ms.Unlock()
 	if has {
-		ms.RemovePeer(old, ms.clientPeerHash)
+		ms.RemovePeer(old, ms.clientPeerMap)
 	}
-	defer ms.RemovePeer(p, ms.clientPeerHash)
+	defer ms.RemovePeer(p, ms.clientPeerMap)
 
 	if err := ms.handleConnection(p); err != nil {
 		log.Println("[handleConnection]", err)
@@ -221,13 +221,13 @@ func (ms *ObserverMesh) server(BindAddress string) error {
 
 			p := NewPeer(conn, pubhash)
 			ms.Lock()
-			old, has := ms.serverPeerHash[pubhash]
-			ms.serverPeerHash[pubhash] = p
+			old, has := ms.serverPeerMap[pubhash]
+			ms.serverPeerMap[pubhash] = p
 			ms.Unlock()
 			if has {
-				ms.RemovePeer(old, ms.serverPeerHash)
+				ms.RemovePeer(old, ms.serverPeerMap)
 			}
-			defer ms.RemovePeer(p, ms.serverPeerHash)
+			defer ms.RemovePeer(p, ms.serverPeerMap)
 
 			if err := ms.handleConnection(p); err != nil {
 				log.Println("[handleConnection]", err)
@@ -261,7 +261,8 @@ func (ms *ObserverMesh) handleConnection(p *Peer) error {
 	}()
 	for {
 		var t message.Type
-		if v, _, err := util.ReadUint64(p.conn); err != nil {
+		if v, _, err := util.ReadUint64(p); err != nil {
+			//if v, _, err := util.ReadUint64(p.conn); err != nil {
 			return err
 		} else {
 			t = message.Type(v)
@@ -272,7 +273,8 @@ func (ms *ObserverMesh) handleConnection(p *Peer) error {
 			continue
 		}
 
-		if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
+		if err := ms.deligator.OnRecv(p, p, t); err != nil {
+			//if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
 			return err
 		}
 	}
