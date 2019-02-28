@@ -12,7 +12,6 @@ var (
 	RoundVoteMessageType    = message.DefineType("observer.RoundVote")
 	RoundVoteAckMessageType = message.DefineType("observer.RoundVoteAck")
 	BlockVoteMessageType    = message.DefineType("observer.BlockVote")
-	BatchRequestMessageType = message.DefineType("observer.BatchRequest")
 )
 
 // RoundVoteMessage is a message for a round vote
