@@ -35,6 +35,7 @@ type Kernel struct {
 	consensus          *consensus.Consensus
 	txPool             *txpool.TransactionPool
 	txQueue            *queue.ExpireQueue
+	txWorkingMap       map[hash.Hash256]bool
 	genesisContextData *data.ContextData
 	rewarder           reward.Rewarder
 	eventHandlers      []EventHandler
@@ -58,6 +59,7 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		consensus:          consensus.NewConsensus(Config.ObserverKeyMap, FormulationAccountType),
 		txPool:             txpool.NewTransactionPool(),
 		txQueue:            queue.NewExpireQueue(),
+		txWorkingMap:       map[hash.Hash256]bool{},
 		eventHandlers:      []EventHandler{},
 	}
 	kn.txQueue.AddGroup(60 * time.Second)
@@ -405,6 +407,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		h := tx.Hash()
 		kn.txPool.Remove(h, tx)
 		kn.txQueue.Remove(string(h[:]))
+		delete(kn.txWorkingMap, h)
 	}
 	log.Println("Block Connected :", kn.store.Height(), HeaderHash.String(), b.Header.Formulator.String(), len(b.Body.Transactions))
 	return nil
@@ -426,7 +429,18 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	if !tx.ChainCoord().Equal(loader.ChainCoord()) {
 		return ErrInvalidChainCoord
 	}
+
 	TxHash := tx.Hash()
+	kn.Lock()
+	_, has := kn.txWorkingMap[TxHash]
+	if !has {
+		kn.txWorkingMap[TxHash] = true
+	}
+	kn.Unlock()
+	if has {
+		return ErrProcessingTransaction
+	}
+
 	if kn.txPool.IsExist(TxHash) {
 		return txpool.ErrExistTransaction
 	}
@@ -436,6 +450,14 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 			return ErrPastSeq
 		} else if atx.Seq() > seq+100 {
 			return ErrTooFarSeq
+		}
+	} else if utx, is := tx.(txpool.UTXOTransaction); is {
+		for _, id := range utx.VinIDs() {
+			if is, err := loader.IsExistUTXO(id); err != nil {
+				return err
+			} else if !is {
+				return ErrInvalidUTXO
+			}
 		}
 	}
 	signers := make([]common.PublicHash, 0, len(sigs))
@@ -465,6 +487,11 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	for _, eh := range kn.eventHandlers {
 		eh.AfterPushTransaction(kn, tx, sigs)
 	}
+
+	kn.Lock()
+	delete(kn.txWorkingMap, TxHash)
+	kn.Unlock()
+
 	return nil
 }
 
@@ -646,7 +673,7 @@ func (kn *Kernel) OnItemExpired(Interval time.Duration, Key string, Item interfa
 
 // DebugLog TEMP
 func (kn *Kernel) DebugLog(args ...interface{}) {
-	log.Println(args...)
+	//log.Println(args...)
 	for _, eh := range kn.eventHandlers {
 		eh.DebugLog(kn, args...)
 	}

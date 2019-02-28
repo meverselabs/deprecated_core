@@ -15,6 +15,11 @@ type AccountTransaction interface {
 	From() common.Address
 }
 
+// UTXOTransaction is an interface that defines common functions of utxo model based transactions
+type UTXOTransaction interface {
+	VinIDs() []uint64
+}
+
 // TransactionPool provides a transaction queue
 // User can push transaction regardless of UTXO model based transactions or account model based transactions
 // If the sequence of the account model based transaction is not reached to the next of the last sequence, it doens't poped

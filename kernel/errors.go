@@ -20,6 +20,8 @@ var (
 	ErrInvalidAppendBlockHash    = errors.New("invalid append block hash")
 	ErrInvalidAppendContextHash  = errors.New("invalid append context hash")
 	ErrInvalidTopSignature       = errors.New("invalid top signature")
+	ErrInvalidUTXO               = errors.New("invalid utxo")
+	ErrProcessingTransaction     = errors.New("processing transaction")
 	ErrNotFormulator             = errors.New("not formulator")
 	ErrPastSeq                   = errors.New("past seq")
 	ErrTooFarSeq                 = errors.New("too far seq")
