@@ -138,6 +138,15 @@ func (cc *cache) AccountData(addr common.Address, name []byte) []byte {
 	}
 }
 
+// IsExistUTXO checks that the utxo of the id is exist or not
+func (cc *cache) IsExistUTXO(id uint64) (bool, error) {
+	if _, has := cc.UTXOMap[id]; has {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
+
 // UTXO returns the UTXO
 func (cc *cache) UTXO(id uint64) (*transaction.UTXO, error) {
 	if utxo, has := cc.UTXOMap[id]; has {

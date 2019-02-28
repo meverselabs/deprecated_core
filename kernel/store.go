@@ -637,6 +637,36 @@ func (st *Store) UTXOs() ([]*transaction.UTXO, error) {
 	return list, nil
 }
 
+// IsExistUTXO checks that the utxo of the id is exist or not
+func (st *Store) IsExistUTXO(id uint64) (bool, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return false, ErrStoreClosed
+	}
+
+	var isExist bool
+	if err := st.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(toUTXOKey(id))
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return db.ErrNotExistKey
+			} else {
+				return err
+			}
+		}
+		isExist = !item.IsDeletedOrExpired()
+		return nil
+	}); err != nil {
+		if err == db.ErrNotExistKey {
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+	return isExist, nil
+}
+
 // UTXO returns the UTXO from the top store
 func (st *Store) UTXO(id uint64) (*transaction.UTXO, error) {
 	st.closeLock.RLock()

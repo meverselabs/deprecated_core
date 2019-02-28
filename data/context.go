@@ -725,6 +725,22 @@ func (ctd *ContextData) SetAccountData(addr common.Address, name []byte, value [
 	}
 }
 
+// IsExistUTXO checks that the utxo of the id is exist or not
+func (ctd *ContextData) IsExistUTXO(id uint64) (bool, error) {
+	if _, has := ctd.DeletedUTXOMap[id]; has {
+		return false, nil
+	}
+	if _, has := ctd.UTXOMap[id]; has {
+		return true, nil
+	} else if _, has := ctd.CreatedUTXOMap[id]; has {
+		return true, nil
+	} else if ctd.Parent != nil {
+		return ctd.Parent.IsExistUTXO(id)
+	} else {
+		return ctd.loader.IsExistUTXO(id)
+	}
+}
+
 // UTXO returns the UTXO
 func (ctd *ContextData) UTXO(id uint64) (*transaction.UTXO, error) {
 	if ctd.DeletedUTXOMap[id] {
