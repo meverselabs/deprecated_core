@@ -51,7 +51,7 @@ func (acc *Base) Name() string {
 
 // Balance returns the balance of the account
 func (acc *Base) Balance() *amount.Amount {
-	return acc.Balance_
+	return acc.Balance_.Clone()
 }
 
 // AddBalance adds the balance to the account

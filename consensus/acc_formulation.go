@@ -50,8 +50,9 @@ type FormulationAccount struct {
 func (acc *FormulationAccount) Clone() account.Account {
 	return &FormulationAccount{
 		Base: account.Base{
-			Address_: acc.Address_,
 			Type_:    acc.Type_,
+			Address_: acc.Address_,
+			Balance_: acc.Balance(),
 		},
 		KeyHash: acc.KeyHash.Clone(),
 	}
