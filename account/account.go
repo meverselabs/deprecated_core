@@ -71,12 +71,22 @@ func (acc *Base) SubBalance(a *amount.Amount) error {
 // WriteTo is a serialization function
 func (acc *Base) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
+	if n, err := util.WriteUint8(w, uint8(acc.Type_)); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := acc.Address_.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
-	if n, err := util.WriteUint8(w, uint8(acc.Type_)); err != nil {
+	if n, err := util.WriteString(w, acc.Name_); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := acc.Balance_.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -87,16 +97,27 @@ func (acc *Base) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom is a deserialization function
 func (acc *Base) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if n, err := acc.Address_.ReadFrom(r); err != nil {
-		return read, err
-	} else {
-		read += n
-	}
 	if v, n, err := util.ReadUint8(r); err != nil {
 		return read, err
 	} else {
 		read += n
 		acc.Type_ = Type(v)
+	}
+	if n, err := acc.Address_.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if v, n, err := util.ReadString(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		acc.Name_ = v
+	}
+	if n, err := acc.Balance_.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
 	}
 	return read, nil
 }
