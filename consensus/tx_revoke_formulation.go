@@ -14,11 +14,10 @@ import (
 )
 
 func init() {
-	data.RegisterTransaction("consensus.RevokeFormulation", func(coord *common.Coordinate, t transaction.Type) transaction.Transaction {
+	data.RegisterTransaction("consensus.RevokeFormulation", func(t transaction.Type) transaction.Transaction {
 		return &RevokeFormulation{
 			Base: transaction.Base{
-				ChainCoord_: coord,
-				Type_:       t,
+				Type_: t,
 			},
 		}
 	}, func(loader data.Loader, t transaction.Transaction, signers []common.PublicHash) error {
@@ -26,7 +25,7 @@ func init() {
 		if tx.Seq() <= loader.Seq(tx.From()) {
 			return ErrInvalidSequence
 		}
-		if tx.To.Equal(tx.From()) {
+		if tx.Heritor.Equal(tx.From()) {
 			return ErrInvalidToAddress
 		}
 
@@ -54,23 +53,16 @@ func init() {
 			return nil, err
 		}
 
-		chainCoord := ctx.ChainCoord()
-		fromBalance, err := ctx.AccountBalance(tx.From())
-		if err != nil {
-			return nil, err
-		}
-		if err := fromBalance.SubBalance(chainCoord, Fee); err != nil {
+		if err := fromAcc.SubBalance(Fee); err != nil {
 			return nil, err
 		}
 
-		toBalance, err := ctx.AccountBalance(tx.To)
+		heritorAcc, err := ctx.Account(tx.Heritor)
 		if err != nil {
 			return nil, err
 		}
-		for _, TokenCoord := range fromBalance.TokenCoords() {
-			balance := fromBalance.ClearBalance(TokenCoord)
-			toBalance.AddBalance(TokenCoord, balance)
-		}
+
+		heritorAcc.AddBalance(fromAcc.Balance())
 		ctx.DeleteAccount(fromAcc)
 
 		ctx.Commit(sn)
@@ -82,9 +74,9 @@ func init() {
 // It is used to remove formulation account and get back staked coin
 type RevokeFormulation struct {
 	transaction.Base
-	Seq_  uint64
-	From_ common.Address
-	To    common.Address
+	Seq_    uint64
+	From_   common.Address
+	Heritor common.Address
 }
 
 // IsUTXO returns false
@@ -125,7 +117,7 @@ func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := tx.To.WriteTo(w); err != nil {
+	if n, err := tx.Heritor.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -152,7 +144,7 @@ func (tx *RevokeFormulation) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if n, err := tx.To.ReadFrom(r); err != nil {
+	if n, err := tx.Heritor.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -164,8 +156,8 @@ func (tx *RevokeFormulation) ReadFrom(r io.Reader) (int64, error) {
 func (tx *RevokeFormulation) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.WriteString(`{`)
-	buffer.WriteString(`"chain_coord":`)
-	if bs, err := tx.ChainCoord_.MarshalJSON(); err != nil {
+	buffer.WriteString(`"type":`)
+	if bs, err := json.Marshal(tx.Type_); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)
@@ -173,13 +165,6 @@ func (tx *RevokeFormulation) MarshalJSON() ([]byte, error) {
 	buffer.WriteString(`,`)
 	buffer.WriteString(`"timestamp":`)
 	if bs, err := json.Marshal(tx.Timestamp_); err != nil {
-		return nil, err
-	} else {
-		buffer.Write(bs)
-	}
-	buffer.WriteString(`,`)
-	buffer.WriteString(`"type":`)
-	if bs, err := json.Marshal(tx.Type_); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)
@@ -200,7 +185,7 @@ func (tx *RevokeFormulation) MarshalJSON() ([]byte, error) {
 	}
 	buffer.WriteString(`,`)
 	buffer.WriteString(`"to":`)
-	if bs, err := tx.To.MarshalJSON(); err != nil {
+	if bs, err := tx.Heritor.MarshalJSON(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)

@@ -19,7 +19,6 @@ type Loader interface {
 	AddressByName(Name string) (common.Address, error)
 	IsExistAccount(addr common.Address) (bool, error)
 	IsExistAccountName(Name string) (bool, error)
-	AccountBalance(addr common.Address) (*account.Balance, error)
 	AccountData(addr common.Address, name []byte) []byte
 	IsExistUTXO(id uint64) (bool, error)
 	UTXO(id uint64) (*transaction.UTXO, error)
@@ -88,11 +87,6 @@ func (st *emptyLoader) IsExistAccount(addr common.Address) (bool, error) {
 // IsExistAccountName returns false
 func (st *emptyLoader) IsExistAccountName(Name string) (bool, error) {
 	return false, nil
-}
-
-// AccountBalance returns ErrNotExistAccount
-func (st *emptyLoader) AccountBalance(addr common.Address) (*account.Balance, error) {
-	return nil, ErrNotExistAccount
 }
 
 // AccountData returns nil

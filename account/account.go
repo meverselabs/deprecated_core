@@ -6,6 +6,7 @@ import (
 
 	"git.fleta.io/fleta/common"
 	"git.fleta.io/fleta/common/util"
+	"git.fleta.io/fleta/core/amount"
 )
 
 // Type is using when serealization and deserialization account
@@ -16,18 +17,26 @@ type Account interface {
 	io.WriterTo
 	io.ReaderFrom
 	json.Marshaler
+	Type() Type
 	Address() common.Address
 	Name() string
-	SetType(t Type)
-	Type() Type
+	Balance() *amount.Amount
+	AddBalance(a *amount.Amount)
+	SubBalance(a *amount.Amount) error
 	Clone() Account
 }
 
 // Base is the parts of account functions that are not changed by derived one
 type Base struct {
+	Type_    Type
 	Address_ common.Address
 	Name_    string
-	Type_    Type
+	Balance_ *amount.Amount
+}
+
+// Type returns the account type
+func (acc *Base) Type() Type {
+	return acc.Type_
 }
 
 // Address returns the account address
@@ -40,14 +49,23 @@ func (acc *Base) Name() string {
 	return acc.Name_
 }
 
-// SetType set the account type
-func (acc *Base) SetType(t Type) {
-	acc.Type_ = t
+// Balance returns the balance of the account
+func (acc *Base) Balance() *amount.Amount {
+	return acc.Balance_
 }
 
-// Type returns the account type
-func (acc *Base) Type() Type {
-	return acc.Type_
+// AddBalance adds the balance to the account
+func (acc *Base) AddBalance(a *amount.Amount) {
+	acc.Balance_ = acc.Balance_.Add(a)
+}
+
+// SubBalance subs the balance from the account
+func (acc *Base) SubBalance(a *amount.Amount) error {
+	if acc.Balance_.Less(a) {
+		return ErrInsufficientBalance
+	}
+	acc.Balance_ = acc.Balance_.Sub(a)
+	return nil
 }
 
 // WriteTo is a serialization function

@@ -113,12 +113,6 @@ func (ctx *Context) DeleteAccount(acc account.Account) error {
 	return ctx.Top().DeleteAccount(acc)
 }
 
-// AccountBalance returns the account balance
-func (ctx *Context) AccountBalance(addr common.Address) (*account.Balance, error) {
-	ctx.isLatestHash = false
-	return ctx.Top().AccountBalance(addr)
-}
-
 // AccountData returns the account data from the top snapshot
 func (ctx *Context) AccountData(addr common.Address, name []byte) []byte {
 	return ctx.Top().AccountData(addr, name)
@@ -190,9 +184,6 @@ func (ctx *Context) Commit(sn int) {
 			delete(top.CreatedAccountMap, k)
 			top.DeletedAccountMap[k] = v
 		}
-		for k, v := range ctd.AccountBalanceMap {
-			top.AccountBalanceMap[k] = v
-		}
 		for k, v := range ctd.AccountDataMap {
 			top.AccountDataMap[k] = v
 		}
@@ -230,7 +221,6 @@ type ContextData struct {
 	AccountNameMap        map[string]common.Address
 	CreatedAccountNameMap map[string]common.Address
 	DeletedAccountNameMap map[string]common.Address
-	AccountBalanceMap     map[common.Address]*account.Balance
 	AccountDataMap        map[string][]byte
 	DeletedAccountDataMap map[string]bool
 	UTXOMap               map[uint64]*transaction.UTXO
@@ -251,7 +241,6 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 		AccountNameMap:        map[string]common.Address{},
 		CreatedAccountNameMap: map[string]common.Address{},
 		DeletedAccountNameMap: map[string]common.Address{},
-		AccountBalanceMap:     map[common.Address]*account.Balance{},
 		AccountDataMap:        map[string][]byte{},
 		DeletedAccountDataMap: map[string]bool{},
 		UTXOMap:               map[uint64]*transaction.UTXO{},
@@ -270,7 +259,6 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 	if _, err := ctd.loader.ChainCoord().WriteTo(&buffer); err != nil {
 		panic(err)
 	}
-
 	buffer.WriteString("SeqMap")
 	if len(ctd.SeqMap) > 0 {
 		keys := []common.Address{}
@@ -378,23 +366,6 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		sort.Strings(keys)
 		for _, k := range keys {
 			if _, err := buffer.WriteString(k); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("AccountBalanceMap")
-	if len(ctd.AccountBalanceMap) > 0 {
-		keys := []common.Address{}
-		for k := range ctd.AccountBalanceMap {
-			keys = append(keys, k)
-		}
-		sort.Sort(addressSlice(keys))
-		for _, k := range keys {
-			v := ctd.AccountBalanceMap[k]
-			if _, err := k.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-			if _, err := v.WriteTo(&buffer); err != nil {
 				panic(err)
 			}
 		}
@@ -640,40 +611,6 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 	return nil
 }
 
-// AccountBalance returns the account balance
-func (ctd *ContextData) AccountBalance(addr common.Address) (*account.Balance, error) {
-	if _, has := ctd.DeletedAccountMap[addr]; has {
-		return nil, ErrNotExistAccount
-	}
-	if bc, has := ctd.AccountBalanceMap[addr]; has {
-		return bc, nil
-	} else if ctd.Parent != nil {
-		if bc, err := ctd.Parent.AccountBalance(addr); err != nil {
-			return nil, err
-		} else {
-			if ctd.isTop {
-				nbc := bc.Clone()
-				ctd.AccountBalanceMap[addr] = nbc
-				return nbc, nil
-			} else {
-				return bc, nil
-			}
-		}
-	} else {
-		if bc, err := ctd.loader.AccountBalance(addr); err != nil {
-			return nil, err
-		} else {
-			if ctd.isTop {
-				nbc := bc.Clone()
-				ctd.AccountBalanceMap[addr] = nbc
-				return nbc, nil
-			} else {
-				return bc, nil
-			}
-		}
-	}
-}
-
 // AccountData returns the account data
 func (ctd *ContextData) AccountData(addr common.Address, name []byte) []byte {
 	key := string(addr[:]) + string(name)
@@ -917,26 +854,6 @@ func (ctd *ContextData) Dump() string {
 		sort.Strings(keys)
 		for _, k := range keys {
 			buffer.WriteString(k)
-			buffer.WriteString("\n")
-		}
-	}
-	buffer.WriteString("\n")
-	buffer.WriteString("AccountBalanceMap\n")
-	{
-		keys := []common.Address{}
-		for k := range ctd.AccountBalanceMap {
-			keys = append(keys, k)
-		}
-		sort.Sort(addressSlice(keys))
-		for _, k := range keys {
-			v := ctd.AccountBalanceMap[k]
-			buffer.WriteString(k.String())
-			buffer.WriteString(": ")
-			var hb bytes.Buffer
-			if _, err := v.WriteTo(&hb); err != nil {
-				panic(err)
-			}
-			buffer.WriteString(hash.Hash(hb.Bytes()).String())
 			buffer.WriteString("\n")
 		}
 	}

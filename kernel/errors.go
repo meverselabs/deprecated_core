@@ -10,8 +10,6 @@ var (
 	ErrKernelClosed              = errors.New("kernel closed")
 	ErrStoreClosed               = errors.New("store closed")
 	ErrDirtyContext              = errors.New("dirty context")
-	ErrNotExistChainCoordinate   = errors.New("not exist chain coordinate")
-	ErrInvalidChainCoordinate    = errors.New("invalid chain coordinate")
 	ErrInvalidLevelRootHash      = errors.New("invalid level root hash")
 	ErrNotExistConsensusSaveData = errors.New("invalid consensus save data")
 	ErrExpiredContextHeight      = errors.New("expired context height")

@@ -8,7 +8,7 @@ import (
 
 // Transactor provide transaction's handlers of the target chain
 type Transactor struct {
-	coord          *common.Coordinate
+	chainCoord     *common.Coordinate
 	handlerTypeMap map[transaction.Type]*transactionHandler
 	feeMap         map[transaction.Type]*amount.Amount
 	typeNameMap    map[string]transaction.Type
@@ -16,9 +16,9 @@ type Transactor struct {
 }
 
 // NewTransactor returns a Transactor
-func NewTransactor(coord *common.Coordinate) *Transactor {
+func NewTransactor(ChainCoord *common.Coordinate) *Transactor {
 	tran := &Transactor{
-		coord:          coord,
+		chainCoord:     ChainCoord,
 		handlerTypeMap: map[transaction.Type]*transactionHandler{},
 		feeMap:         map[transaction.Type]*amount.Amount{},
 		typeNameMap:    map[string]transaction.Type{},
@@ -29,15 +29,12 @@ func NewTransactor(coord *common.Coordinate) *Transactor {
 
 // ChainCoord returns the coordinate of the target chain
 func (tran *Transactor) ChainCoord() *common.Coordinate {
-	return tran.coord
+	return tran.chainCoord
 }
 
 // Validate supports the validation of the transaction with signers
 func (tran *Transactor) Validate(loader Loader, tx transaction.Transaction, signers []common.PublicHash) error {
-	if !tran.coord.Equal(loader.ChainCoord()) {
-		return ErrInvalidChainCoordinate
-	}
-	if !tran.coord.Equal(tx.ChainCoord()) {
+	if !tran.chainCoord.Equal(loader.ChainCoord()) {
 		return ErrInvalidChainCoordinate
 	}
 
@@ -54,10 +51,7 @@ func (tran *Transactor) Validate(loader Loader, tx transaction.Transaction, sign
 // Execute updates the context using the transaction and the coordinate of it
 func (tran *Transactor) Execute(ctx *Context, tx transaction.Transaction, coord *common.Coordinate) (interface{}, error) {
 	t := tx.Type()
-	if !tran.coord.Equal(ctx.ChainCoord()) {
-		return nil, ErrInvalidChainCoordinate
-	}
-	if !tran.coord.Equal(tx.ChainCoord()) {
+	if !tran.chainCoord.Equal(ctx.ChainCoord()) {
 		return nil, ErrInvalidChainCoordinate
 	}
 
@@ -92,8 +86,7 @@ func (tran *Transactor) RegisterType(Name string, t transaction.Type, Fee *amoun
 // NewByType generate an transaction instance by the type
 func (tran *Transactor) NewByType(t transaction.Type) (transaction.Transaction, error) {
 	if item, has := tran.typeMap[t]; has {
-		tx := item.Factory(tran.coord.Clone(), t)
-		tx.SetType(t)
+		tx := item.Factory(t)
 		return tx, nil
 	} else {
 		return nil, ErrUnknownTransactionType
@@ -162,7 +155,7 @@ type transactionTypeItem struct {
 }
 
 // TransactionFactory is a function type to generate an account instance by the type
-type TransactionFactory func(coord *common.Coordinate, t transaction.Type) transaction.Transaction
+type TransactionFactory func(t transaction.Type) transaction.Transaction
 
 // TransactionValidator is a function type to support the validation of the transaction with signers
 type TransactionValidator func(loader Loader, tx transaction.Transaction, signers []common.PublicHash) error

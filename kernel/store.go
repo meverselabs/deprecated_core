@@ -515,43 +515,6 @@ func (st *Store) IsExistAccountName(Name string) (bool, error) {
 	return isExist, nil
 }
 
-// AccountBalance returns the account balance
-func (st *Store) AccountBalance(addr common.Address) (*account.Balance, error) {
-	st.closeLock.RLock()
-	defer st.closeLock.RUnlock()
-	if st.isClose {
-		return nil, ErrStoreClosed
-	}
-
-	var bc *account.Balance
-	if err := st.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(toAccountBalanceKey(addr))
-		if err != nil {
-			if err == badger.ErrKeyNotFound {
-				return db.ErrNotExistKey
-			} else {
-				return err
-			}
-		}
-		value, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
-		bc = account.NewBalance()
-		if _, err := bc.ReadFrom(bytes.NewReader(value)); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		if err == db.ErrNotExistKey {
-			return nil, data.ErrNotExistAccount
-		} else {
-			return nil, err
-		}
-	}
-	return bc, nil
-}
-
 // AccountDataKeys returns all data keys of the account in the store
 func (st *Store) AccountDataKeys(addr common.Address) ([][]byte, error) {
 	st.closeLock.RLock()
@@ -895,9 +858,6 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 		if err := txn.Set(toAccountKey(k), buffer.Bytes()); err != nil {
 			return err
 		}
-		if _, has := ctd.AccountBalanceMap[k]; !has {
-			ctd.AccountBalanceMap[k] = account.NewBalance()
-		}
 	}
 	for k := range ctd.DeletedAccountMap {
 		if err := txn.Delete(toAccountKey(k)); err != nil {
@@ -914,15 +874,6 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 			if err := txn.Delete(item.Key()); err != nil {
 				return err
 			}
-		}
-	}
-	for k, v := range ctd.AccountBalanceMap {
-		var buffer bytes.Buffer
-		if _, err := v.WriteTo(&buffer); err != nil {
-			return err
-		}
-		if err := txn.Set(toAccountBalanceKey(k), buffer.Bytes()); err != nil {
-			return err
 		}
 	}
 	for k, v := range ctd.AccountDataMap {

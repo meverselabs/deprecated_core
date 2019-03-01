@@ -8,25 +8,23 @@ import (
 )
 
 type cache struct {
-	ctx               *Context
-	SeqMap            map[common.Address]uint64
-	AccountMap        map[common.Address]account.Account
-	AccountNameMap    map[string]common.Address
-	AccountBalanceMap map[common.Address]*account.Balance
-	AccountDataMap    map[string][]byte
-	UTXOMap           map[uint64]*transaction.UTXO
+	ctx            *Context
+	SeqMap         map[common.Address]uint64
+	AccountMap     map[common.Address]account.Account
+	AccountNameMap map[string]common.Address
+	AccountDataMap map[string][]byte
+	UTXOMap        map[uint64]*transaction.UTXO
 }
 
 // NewCache is used for generating genesis state
 func newCache(ctx *Context) *cache {
 	return &cache{
-		ctx:               ctx,
-		SeqMap:            map[common.Address]uint64{},
-		AccountMap:        map[common.Address]account.Account{},
-		AccountNameMap:    map[string]common.Address{},
-		AccountBalanceMap: map[common.Address]*account.Balance{},
-		AccountDataMap:    map[string][]byte{},
-		UTXOMap:           map[uint64]*transaction.UTXO{},
+		ctx:            ctx,
+		SeqMap:         map[common.Address]uint64{},
+		AccountMap:     map[common.Address]account.Account{},
+		AccountNameMap: map[string]common.Address{},
+		AccountDataMap: map[string][]byte{},
+		UTXOMap:        map[uint64]*transaction.UTXO{},
 	}
 }
 
@@ -109,20 +107,6 @@ func (cc *cache) IsExistAccountName(Name string) (bool, error) {
 		return true, nil
 	} else {
 		return cc.ctx.loader.IsExistAccountName(Name)
-	}
-}
-
-// AccountBalance returns the account balance
-func (cc *cache) AccountBalance(addr common.Address) (*account.Balance, error) {
-	if bc, has := cc.AccountBalanceMap[addr]; has {
-		return bc, nil
-	} else {
-		if bc, err := cc.ctx.loader.AccountBalance(addr); err != nil {
-			return nil, err
-		} else {
-			cc.AccountBalanceMap[addr] = bc
-			return bc, nil
-		}
 	}
 }
 

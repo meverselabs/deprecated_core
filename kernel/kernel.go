@@ -36,6 +36,7 @@ type Kernel struct {
 	txPool             *txpool.TransactionPool
 	txQueue            *queue.ExpireQueue
 	txWorkingMap       map[hash.Hash256]bool
+	txSignersMap       map[hash.Hash256][]common.PublicHash
 	genesisContextData *data.ContextData
 	rewarder           reward.Rewarder
 	eventHandlers      []EventHandler
@@ -60,6 +61,7 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		txPool:             txpool.NewTransactionPool(),
 		txQueue:            queue.NewExpireQueue(),
 		txWorkingMap:       map[hash.Hash256]bool{},
+		txSignersMap:       map[hash.Hash256][]common.PublicHash{},
 		eventHandlers:      []EventHandler{},
 	}
 	kn.txQueue.AddGroup(60 * time.Second)
@@ -408,6 +410,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		kn.txPool.Remove(h, tx)
 		kn.txQueue.Remove(string(h[:]))
 		delete(kn.txWorkingMap, h)
+		delete(kn.txSignersMap, h)
 	}
 	log.Println("Block Connected :", kn.store.Height(), HeaderHash.String(), b.Header.Formulator.String(), len(b.Body.Transactions))
 	return nil
@@ -426,10 +429,6 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	}
 
 	loader := kn.store
-	if !tx.ChainCoord().Equal(loader.ChainCoord()) {
-		return ErrInvalidChainCoord
-	}
-
 	TxHash := tx.Hash()
 	kn.Lock()
 	_, has := kn.txWorkingMap[TxHash]
@@ -489,6 +488,7 @@ func (kn *Kernel) AddTransaction(tx transaction.Transaction, sigs []common.Signa
 	}
 
 	kn.Lock()
+	kn.txSignersMap[TxHash] = signers
 	delete(kn.txWorkingMap, TxHash)
 	kn.Unlock()
 
@@ -583,7 +583,7 @@ TxLoop:
 
 			TxHashes = append(TxHashes, item.TxHash)
 
-			if len(TxHashes) >= 20000 {
+			if len(TxHashes) > 10000 {
 				break TxLoop
 			}
 		}
@@ -635,14 +635,17 @@ func (kn *Kernel) validateBlockBody(b *block.Block) error {
 				TxHash := tx.Hash()
 				TxHashes[sidx+q+1] = TxHash
 
-				signers := make([]common.PublicHash, 0, len(sigs))
-				for _, sig := range sigs {
-					pubkey, err := common.RecoverPubkey(TxHash, sig)
-					if err != nil {
-						errs <- err
-						return
+				signers, has := kn.txSignersMap[TxHash]
+				if !has {
+					signers = make([]common.PublicHash, 0, len(sigs))
+					for _, sig := range sigs {
+						pubkey, err := common.RecoverPubkey(TxHash, sig)
+						if err != nil {
+							errs <- err
+							return
+						}
+						signers = append(signers, common.NewPublicHash(pubkey))
 					}
-					signers = append(signers, common.NewPublicHash(pubkey))
 				}
 				if err := kn.store.Transactor().Validate(loader, tx, signers); err != nil {
 					errs <- err

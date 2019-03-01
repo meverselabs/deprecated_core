@@ -7,16 +7,16 @@ import (
 
 // Accounter provide account's handlers of the target chain
 type Accounter struct {
-	coord          *common.Coordinate
+	chainCoord     *common.Coordinate
 	handlerTypeMap map[account.Type]*accountHandler
 	typeNameMap    map[string]account.Type
 	typeMap        map[account.Type]*accountTypeItem
 }
 
 // NewAccounter returns a Accounter
-func NewAccounter(coord *common.Coordinate) *Accounter {
+func NewAccounter(ChainCoord *common.Coordinate) *Accounter {
 	act := &Accounter{
-		coord:          coord,
+		chainCoord:     ChainCoord,
 		handlerTypeMap: map[account.Type]*accountHandler{},
 		typeNameMap:    map[string]account.Type{},
 		typeMap:        map[account.Type]*accountTypeItem{},
@@ -26,7 +26,7 @@ func NewAccounter(coord *common.Coordinate) *Accounter {
 
 // ChainCoord returns the coordinate of the target chain
 func (act *Accounter) ChainCoord() *common.Coordinate {
-	return act.coord
+	return act.chainCoord
 }
 
 // Validate supports the validation of the account with signers
@@ -61,7 +61,6 @@ func (act *Accounter) RegisterType(Name string, t account.Type) error {
 func (act *Accounter) NewByType(t account.Type) (account.Account, error) {
 	if item, has := act.typeMap[t]; has {
 		acc := item.Factory(t)
-		acc.SetType(t)
 		return acc, nil
 	} else {
 		return nil, ErrUnknownAccountType
