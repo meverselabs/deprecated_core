@@ -9,7 +9,6 @@ import (
 
 // Config is a configuration of the formulator
 type Config struct {
-	ChainCoord     *common.Coordinate
 	SeedNodes      []string
 	ObserverKeyMap map[common.PublicHash]string
 	Key            key.Key
