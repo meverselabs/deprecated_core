@@ -170,7 +170,7 @@ func (ms *FormulatorService) server(BindAddress string) error {
 				return
 			}
 			if !ms.kn.IsFormulator(Formulator, pubhash) {
-				log.Println("[IsFormulator]")
+				log.Println("[IsFormulator]", Formulator.String(), pubhash.String())
 				return
 			}
 
@@ -215,21 +215,17 @@ func (ms *FormulatorService) handleConnection(p *FormulatorPeer) error {
 		}
 	}()
 	for {
-		var t message.Type
-		if v, _, err := util.ReadUint64(p); err != nil {
-			//if v, _, err := util.ReadUint64(p.conn); err != nil {
+		t, bs, err := p.ReadMessageData()
+		if err != nil {
 			return err
-		} else {
-			t = message.Type(v)
 		}
 		atomic.SwapUint64(&pingCount, 0)
-		if t == message_def.PingMessageType {
-			// Because a PingMessage is zero size, so do not need to consume the body
+		if bs == nil {
+			// Because a Message is zero size, so do not need to consume the body
 			continue
 		}
 
-		//if err := ms.handler.OnRecv(p, p.conn, t); err != nil {
-		if err := ms.handler.OnRecv(p, p, t); err != nil {
+		if err := ms.handler.OnRecv(p, bytes.NewReader(bs), t); err != nil {
 			return err
 		}
 	}

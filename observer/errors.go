@@ -16,6 +16,7 @@ var (
 	ErrInvalidBlockGen            = errors.New("invalid block gen")
 	ErrInitialTimeout             = errors.New("initial timeout")
 	ErrUnknownFormulator          = errors.New("unknown formulator")
+	ErrUnknownObserver            = errors.New("unknown observer")
 	ErrDuplicatedVote             = errors.New("duplicated vote")
 	ErrDuplicatedAckAndTimeout    = errors.New("duplicated akc and timeout")
 	ErrNoFormulatorConnected      = errors.New("no formulator connected")

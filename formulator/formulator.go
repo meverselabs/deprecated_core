@@ -1,7 +1,6 @@
 package formulator
 
 import (
-	"bytes"
 	"io"
 	"runtime"
 	"sync"
@@ -15,8 +14,6 @@ import (
 	"git.fleta.io/fleta/core/transaction"
 
 	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/message_def"
 	"git.fleta.io/fleta/framework/chain"
@@ -116,7 +113,10 @@ func (fr *Formulator) Run() {
 	go fr.cm.Run()
 	go fr.ms.Run()
 
-	WorkerCount := runtime.NumCPU()
+	WorkerCount := runtime.NumCPU() - 1
+	if WorkerCount < 1 {
+		WorkerCount = 1
+	}
 	workerEnd := make([]*chan struct{}, WorkerCount)
 	fr.txMsgChans = make([]*chan *txMsgItem, WorkerCount)
 	for i := 0; i < WorkerCount; i++ {
@@ -129,14 +129,20 @@ func (fr *Formulator) Run() {
 				select {
 				case item := <-(*pMsgCh):
 					if err := fr.kn.AddTransaction(item.Message.Tx, item.Message.Sigs); err != nil {
-						(*item.pErrCh) <- err
+						if err != kernel.ErrProcessingTransaction && err != kernel.ErrPastSeq {
+							(*item.pErrCh) <- err
+						} else {
+							(*item.pErrCh) <- nil
+						}
 						break
 					}
 					(*item.pErrCh) <- nil
 					if len(item.PeerID) > 0 {
-						fr.pm.ExceptCast(item.PeerID, item.Message)
+						//fr.pm.ExceptCast(item.PeerID, item.Message)
+						fr.pm.ExceptCastLimit(item.PeerID, item.Message, 7)
 					} else {
-						fr.pm.BroadCast(item.Message)
+						//fr.pm.BroadCast(item.Message)
+						fr.pm.BroadCastLimit(item.Message, 7)
 					}
 				case <-(*pEndCh):
 					return
@@ -194,36 +200,29 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		fr.Lock()
 		defer fr.Unlock()
 
+		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "BlockReqMessage", msg.TargetHeight, RetryCount)
 		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), msg.TargetHeight, "BlockReqMessage")
 		cp := fr.kn.Provider()
 		Height := cp.Height()
 		if msg.TargetHeight <= Height {
 			return nil
 		}
-		if fr.lastGenMessage != nil {
-			if fr.lastGenMessage.RoundHash.Equal(msg.RoundHash) {
-				if fr.lastGenMessage.Block.Header.TimeoutCount == msg.TimeoutCount {
-					if err := p.Send(fr.lastGenMessage); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
-		}
 		if msg.TargetHeight > Height+1 {
-			if RetryCount >= 10 {
+			if RetryCount >= 20 {
 				return nil
 			}
-			go fr.tryRequestNext()
-			time.Sleep(100 * time.Millisecond)
-			go fr.handleMessage(p, m, RetryCount+1)
+			go func() {
+				if msg.PrevData.Header.Height() == Height+1 {
+					fr.cm.AddData(msg.PrevData)
+				} else {
+					fr.tryRequestNext()
+					time.Sleep(50 * time.Millisecond)
+				}
+				fr.handleMessage(p, m, RetryCount+1)
+			}()
 			return nil
 		}
 
-		nextRoundHash := fr.nextRoundHash()
-		if !msg.RoundHash.Equal(nextRoundHash) {
-			return ErrInvalidRequest
-		}
 		Top, err := fr.kn.TopRank(int(msg.TimeoutCount))
 		if err != nil {
 			return err
@@ -251,9 +250,8 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		}
 
 		nm := &message_def.BlockGenMessage{
-			RoundHash: msg.RoundHash,
-			Block:     b,
-			Tran:      fr.kn.Transactor(),
+			Block: b,
+			Tran:  fr.kn.Transactor(),
 		}
 
 		if sig, err := fr.Config.Key.Sign(b.Header.Hash()); err != nil {
@@ -262,6 +260,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 			nm.GeneratorSignature = sig
 		}
 
+		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send BlockGenMessage", nm.Block.Header.Height())
 		if err := p.Send(nm); err != nil {
 			return err
 		}
@@ -275,12 +274,16 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		fr.Lock()
 		defer fr.Unlock()
 
+		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "BlockObSignMessage", msg.TargetHeight)
 		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "BlockObSignMessage")
 		if fr.lastGenMessage == nil {
 			return nil
 		}
 		if msg.TargetHeight <= fr.kn.Provider().Height() {
 			return nil
+		}
+		if msg.TargetHeight != fr.lastGenMessage.Block.Header.Height() {
+			return ErrInvalidRequest
 		}
 		if !msg.ObserverSigned.HeaderHash.Equal(fr.lastGenMessage.Block.Header.Hash()) {
 			return ErrInvalidRequest
@@ -294,6 +297,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		if err := fr.cm.Process(cd, fr.lastContext); err != nil {
 			return err
 		}
+		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send BroadcastHeader", cd.Header.Height())
 		fr.cm.BroadcastHeader(cd.Header)
 
 		if status, has := fr.statusMap[p.ID()]; has {
@@ -305,6 +309,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		go fr.tryRequestNext()
 		return nil
 	case *chain.DataMessage:
+		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "chain.DataMessage", msg.Data.Header.Height())
 		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.DataMessage")
 		if msg.Data.Header.Height() <= fr.kn.Provider().Height() {
 			return nil
@@ -326,6 +331,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		fr.tryRequestNext()
 		return nil
 	case *chain.StatusMessage:
+		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "chain.StatusMessage", msg.Height)
 		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.StatusMessage")
 		fr.Lock()
 		if status, has := fr.statusMap[p.ID()]; has {
@@ -343,6 +349,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 				sm := &chain.RequestMessage{
 					Height: TargetHeight,
 				}
+				fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send RequestMessage", sm.Height)
 				if err := p.Send(sm); err != nil {
 					return err
 				}
@@ -369,7 +376,7 @@ func (fr *Formulator) tryRequestNext() {
 	fr.requestLock.Lock()
 	defer fr.requestLock.Unlock()
 
-	TargetHeight := fr.kn.Provider().Height()
+	TargetHeight := fr.kn.Provider().Height() + 1
 	if !fr.requestTimer.Exist(TargetHeight) {
 		fr.Lock()
 		defer fr.Unlock()
@@ -389,27 +396,15 @@ func (fr *Formulator) tryRequestNext() {
 	}
 }
 
-func (fr *Formulator) nextRoundHash() hash.Hash256 {
-	cp := fr.kn.Provider()
-	var buffer bytes.Buffer
-	if _, err := fr.kn.ChainCoord().WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	buffer.WriteString(",")
-	if _, err := cp.LastHash().WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	buffer.WriteString(",")
-	if _, err := util.WriteUint32(&buffer, cp.Height()+1); err != nil {
-		panic(err)
-	}
-	return hash.DoubleHash(buffer.Bytes())
-}
-
 func (fr *Formulator) messageCreator(r io.Reader, t message.Type) (message.Message, error) {
 	switch t {
 	case message_def.BlockReqMessageType:
-		p := &message_def.BlockReqMessage{}
+		p := &message_def.BlockReqMessage{
+			PrevData: &chain.Data{
+				Header: fr.kn.Provider().CreateHeader(),
+				Body:   fr.kn.Provider().CreateBody(),
+			},
+		}
 		if _, err := p.ReadFrom(r); err != nil {
 			return nil, err
 		}

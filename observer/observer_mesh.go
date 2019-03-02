@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -119,6 +120,55 @@ func (ms *ObserverMesh) RemovePeer(p *Peer, peerHash map[common.PublicHash]*Peer
 	ms.handler.OnDisconnected(p)
 }
 
+// SendTo sends a message to the observer
+func (ms *ObserverMesh) SendTo(PublicHash common.PublicHash, m message.Message) error {
+	ms.Lock()
+	var p *Peer
+	targetMap := map[common.PublicHash]*Peer{}
+	if cp, has := ms.clientPeerMap[PublicHash]; has {
+		p = cp
+		targetMap = ms.clientPeerMap
+	} else if sp, has := ms.serverPeerMap[PublicHash]; has {
+		p = sp
+		targetMap = ms.serverPeerMap
+	}
+	ms.Unlock()
+	if p == nil {
+		return ErrUnknownObserver
+	}
+
+	if err := p.Send(m); err != nil {
+		log.Println(err)
+		ms.RemovePeer(p, targetMap)
+	}
+	return nil
+}
+
+// BroadcastRaw sends a message to all peers
+func (ms *ObserverMesh) BroadcastRaw(bs []byte) error {
+	peerMap := map[common.PublicHash]*Peer{}
+	targetMap := map[common.PublicHash]map[common.PublicHash]*Peer{}
+	ms.Lock()
+	for _, p := range ms.clientPeerMap {
+		peerMap[p.pubhash] = p
+		targetMap[p.pubhash] = ms.clientPeerMap
+	}
+	for _, p := range ms.serverPeerMap {
+		peerMap[p.pubhash] = p
+		targetMap[p.pubhash] = ms.serverPeerMap
+	}
+	ms.Unlock()
+
+	for pubhash, p := range peerMap {
+		if err := p.SendRaw(bs); err != nil {
+			log.Println(err)
+			ms.RemovePeer(p, targetMap[pubhash])
+		}
+	}
+	runtime.Gosched()
+	return nil
+}
+
 // BroadcastMessage sends a message to all peers
 func (ms *ObserverMesh) BroadcastMessage(m message.Message) error {
 	var buffer bytes.Buffer
@@ -149,6 +199,7 @@ func (ms *ObserverMesh) BroadcastMessage(m message.Message) error {
 			ms.RemovePeer(p, targetMap[pubhash])
 		}
 	}
+	runtime.Gosched()
 	return nil
 }
 
@@ -260,21 +311,17 @@ func (ms *ObserverMesh) handleConnection(p *Peer) error {
 		}
 	}()
 	for {
-		var t message.Type
-		if v, _, err := util.ReadUint64(p); err != nil {
-			//if v, _, err := util.ReadUint64(p.conn); err != nil {
+		t, bs, err := p.ReadMessageData()
+		if err != nil {
 			return err
-		} else {
-			t = message.Type(v)
 		}
 		atomic.SwapUint64(&pingCount, 0)
-		if t == message_def.PingMessageType {
-			// Because a PingMessage is zero size, so do not need to consume the body
+		if bs == nil {
+			// Because a Message is zero size, so do not need to consume the body
 			continue
 		}
 
-		if err := ms.deligator.OnRecv(p, p, t); err != nil {
-			//if err := ms.deligator.OnRecv(p, p.conn, t); err != nil {
+		if err := ms.deligator.OnRecv(p, bytes.NewReader(bs), t); err != nil {
 			return err
 		}
 	}

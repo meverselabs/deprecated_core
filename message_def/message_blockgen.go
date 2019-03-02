@@ -4,7 +4,7 @@ import (
 	"io"
 
 	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
+	"git.fleta.io/fleta/common/util"
 	"git.fleta.io/fleta/core/block"
 	"git.fleta.io/fleta/core/data"
 
@@ -13,9 +13,9 @@ import (
 
 // BlockGenMessage is a message for a block generation
 type BlockGenMessage struct {
-	RoundHash          hash.Hash256
 	Block              *block.Block
 	GeneratorSignature common.Signature
+	IsReply            bool
 	Tran               *data.Transactor
 }
 
@@ -27,11 +27,6 @@ func (b *BlockGenMessage) Type() message.Type {
 // WriteTo is a serialization function
 func (b *BlockGenMessage) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := b.RoundHash.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
 	if n, err := b.Block.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
@@ -42,17 +37,17 @@ func (b *BlockGenMessage) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := util.WriteBool(w, b.IsReply); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	return wrote, nil
 }
 
 // ReadFrom is a deserialization function
 func (b *BlockGenMessage) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if n, err := b.RoundHash.ReadFrom(r); err != nil {
-		return read, err
-	} else {
-		read += n
-	}
 	if n, err := b.Block.ReadFrom(r); err != nil {
 		return read, err
 	} else {
@@ -62,6 +57,12 @@ func (b *BlockGenMessage) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
+	}
+	if v, n, err := util.ReadBool(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		b.IsReply = v
 	}
 	return read, nil
 }

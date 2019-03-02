@@ -583,7 +583,7 @@ TxLoop:
 
 			TxHashes = append(TxHashes, item.TxHash)
 
-			if len(TxHashes) > 10000 {
+			if len(TxHashes) > 5000 {
 				break TxLoop
 			}
 		}
@@ -668,9 +668,13 @@ func (kn *Kernel) validateBlockBody(b *block.Block) error {
 }
 
 // OnItemExpired is called when the item is expired
-func (kn *Kernel) OnItemExpired(Interval time.Duration, Key string, Item interface{}) {
+func (kn *Kernel) OnItemExpired(Interval time.Duration, Key string, Item interface{}, IsLast bool) {
+	msg := Item.(*message_def.TransactionMessage)
 	for _, eh := range kn.eventHandlers {
-		eh.DoTransactionBroadcast(kn, Item.(*message_def.TransactionMessage))
+		eh.DoTransactionBroadcast(kn, msg)
+	}
+	if IsLast {
+		kn.txPool.Remove(msg.Tx.Hash(), msg.Tx)
 	}
 }
 

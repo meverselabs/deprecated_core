@@ -12,6 +12,7 @@ var (
 	RoundVoteMessageType    = message.DefineType("observer.RoundVote")
 	RoundVoteAckMessageType = message.DefineType("observer.RoundVoteAck")
 	BlockVoteMessageType    = message.DefineType("observer.BlockVote")
+	BlockVoteEndMessageType = message.DefineType("observer.BlockVoteEnd")
 )
 
 // RoundVoteMessage is a message for a round vote
@@ -131,6 +132,49 @@ func (msg *BlockVoteMessage) WriteTo(w io.Writer) (int64, error) {
 func (msg *BlockVoteMessage) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := msg.BlockVote.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if n, err := msg.Signature.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	return read, nil
+}
+
+// BlockVoteEndMessage is a message for a block vote end
+type BlockVoteEndMessage struct {
+	BlockVoteEnd *BlockVoteEnd
+	Signature    common.Signature
+}
+
+// Type returns a type of the message
+func (msg *BlockVoteEndMessage) Type() message.Type {
+	return BlockVoteEndMessageType
+}
+
+// WriteTo is a serialization function
+func (msg *BlockVoteEndMessage) WriteTo(w io.Writer) (int64, error) {
+	var wrote int64
+	if n, err := msg.BlockVoteEnd.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := msg.Signature.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	return wrote, nil
+}
+
+// ReadFrom is a deserialization function
+func (msg *BlockVoteEndMessage) ReadFrom(r io.Reader) (int64, error) {
+	var read int64
+	if n, err := msg.BlockVoteEnd.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n

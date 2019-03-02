@@ -2,6 +2,9 @@ package observer
 
 import (
 	"bytes"
+	"compress/gzip"
+	"encoding/binary"
+	"io/ioutil"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -21,6 +24,7 @@ type Peer struct {
 	startTime  uint64
 	readTotal  uint64
 	writeTotal uint64
+	writeChan  chan []byte
 }
 
 // NewPeer returns a Peer
@@ -31,7 +35,50 @@ func NewPeer(conn net.Conn, pubhash common.PublicHash) *Peer {
 		conn:      conn,
 		pubhash:   pubhash,
 		startTime: uint64(time.Now().UnixNano()),
+		writeChan: make(chan []byte, 10),
 	}
+	go func() {
+		for {
+			select {
+			case bs := <-p.writeChan:
+				errCh := make(chan error)
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					wg.Done()
+					var buffer bytes.Buffer
+					buffer.Write(bs[:8])          // message type
+					buffer.Write(make([]byte, 4)) //size of gzip
+					if len(bs) > 8 {
+						zw := gzip.NewWriter(&buffer)
+						zw.Write(bs[8:])
+						zw.Flush()
+						zw.Close()
+					}
+					wbs := buffer.Bytes()
+					binary.LittleEndian.PutUint32(wbs[8:], uint32(len(wbs)-12))
+					_, err := p.conn.Write(wbs)
+					if err != nil {
+						p.conn.Close()
+					}
+					atomic.AddUint64(&p.writeTotal, uint64(len(wbs)))
+					errCh <- err
+				}()
+				wg.Wait()
+				deadTimer := time.NewTimer(5 * time.Second)
+				select {
+				case <-deadTimer.C:
+					p.conn.Close()
+					return
+				case err := <-errCh:
+					deadTimer.Stop()
+					if err != nil {
+						return
+					}
+				}
+			}
+		}
+	}()
 	return p
 }
 
@@ -45,11 +92,36 @@ func (p *Peer) NetAddr() string {
 	return p.netAddr
 }
 
-// Send sends a message to the peer
-func (p *Peer) Read(bs []byte) (int, error) {
-	n, err := p.conn.Read(bs)
-	atomic.AddUint64(&p.readTotal, uint64(n))
-	return n, err
+// ReadMessageData returns a message data
+func (p *Peer) ReadMessageData() (message.Type, []byte, error) {
+	var t message.Type
+	if v, _, err := util.ReadUint64(p.conn); err != nil {
+		return 0, nil, err
+	} else {
+		t = message.Type(v)
+	}
+
+	if Len, _, err := util.ReadUint32(p.conn); err != nil {
+		return 0, nil, err
+	} else if Len == 0 {
+		return t, nil, nil
+	} else {
+		zbs := make([]byte, Len)
+		if _, err := util.FillBytes(p.conn, zbs); err != nil {
+			return 0, nil, err
+		}
+		zr, err := gzip.NewReader(bytes.NewReader(zbs))
+		if err != nil {
+			return 0, nil, err
+		}
+		defer zr.Close()
+
+		bs, err := ioutil.ReadAll(zr)
+		if err != nil {
+			return 0, nil, err
+		}
+		return t, bs, nil
+	}
 }
 
 // Send sends a message to the peer
@@ -66,26 +138,6 @@ func (p *Peer) Send(m message.Message) error {
 
 // SendRaw sends bytes to the peer
 func (p *Peer) SendRaw(bs []byte) error {
-	errCh := make(chan error)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		wg.Done()
-		_, err := p.conn.Write(bs)
-		if err != nil {
-			p.conn.Close()
-		}
-		atomic.AddUint64(&p.writeTotal, uint64(len(bs)))
-		errCh <- err
-	}()
-	wg.Wait()
-	deadTimer := time.NewTimer(5 * time.Second)
-	select {
-	case <-deadTimer.C:
-		p.conn.Close()
-		return <-errCh
-	case err := <-errCh:
-		deadTimer.Stop()
-		return err
-	}
+	p.writeChan <- bs
+	return nil
 }

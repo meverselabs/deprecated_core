@@ -98,7 +98,10 @@ func (nd *Node) Run() {
 	}()
 	go nd.cm.Run()
 
-	WorkerCount := runtime.NumCPU()
+	WorkerCount := runtime.NumCPU() - 1
+	if WorkerCount < 1 {
+		WorkerCount = 1
+	}
 	workerEnd := make([]*chan struct{}, WorkerCount)
 	nd.txMsgChans = make([]*chan *txMsgItem, WorkerCount)
 	for i := 0; i < WorkerCount; i++ {
@@ -111,14 +114,20 @@ func (nd *Node) Run() {
 				select {
 				case item := <-(*pMsgCh):
 					if err := nd.kn.AddTransaction(item.Message.Tx, item.Message.Sigs); err != nil {
-						(*item.pErrCh) <- err
+						if err != kernel.ErrProcessingTransaction && err != kernel.ErrPastSeq {
+							(*item.pErrCh) <- err
+						} else {
+							(*item.pErrCh) <- nil
+						}
 						break
 					}
 					(*item.pErrCh) <- nil
 					if len(item.PeerID) > 0 {
-						nd.pm.ExceptCast(item.PeerID, item.Message)
+						//nd.pm.ExceptCast(item.PeerID, item.Message)
+						nd.pm.ExceptCastLimit(item.PeerID, item.Message, 7)
 					} else {
-						nd.pm.BroadCast(item.Message)
+						//nd.pm.BroadCast(item.Message)
+						nd.pm.BroadCastLimit(item.Message, 7)
 					}
 				case <-(*pEndCh):
 					return

@@ -2,7 +2,6 @@ package observer
 
 import (
 	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
 	"git.fleta.io/fleta/core/data"
 	"git.fleta.io/fleta/core/message_def"
 )
@@ -17,26 +16,54 @@ const (
 
 // VoteRound is data for the voting round
 type VoteRound struct {
-	RoundHash                  hash.Hash256
+	TargetHeight               uint32
+	PublicHash                 common.PublicHash
 	RoundVoteAckMap            map[common.PublicHash]*RoundVoteAck
 	MinRoundVoteAck            *RoundVoteAck
 	BlockVoteMap               map[common.PublicHash]*BlockVote
 	BlockGenMessage            *message_def.BlockGenMessage
 	Context                    *data.Context
-	RoundVoteAckMessageWaitMap map[hash.Hash256]*RoundVoteAckMessage
-	BlockVoteMessageWaitMap    map[hash.Hash256]*BlockVoteMessage
-	BlockGenMessageWaitMap     map[hash.Hash256]*message_def.BlockGenMessage
+	RoundVoteAckMessageWaitMap map[common.PublicHash]*RoundVoteAckMessage
+	BlockVoteWaitMap           map[common.PublicHash]*BlockVote
+	BlockVoteMessageWaitMap    map[common.PublicHash]*BlockVoteMessage
+	BlockGenMessageWait        *message_def.BlockGenMessage
 }
 
 // NewVoteRound returns a VoteRound
-func NewVoteRound(RoundHash hash.Hash256) *VoteRound {
+func NewVoteRound(TargetHeight uint32, PublicHash common.PublicHash) *VoteRound {
 	vr := &VoteRound{
-		RoundHash:                  RoundHash,
+		TargetHeight:               TargetHeight,
+		PublicHash:                 PublicHash,
 		RoundVoteAckMap:            map[common.PublicHash]*RoundVoteAck{},
 		BlockVoteMap:               map[common.PublicHash]*BlockVote{},
-		RoundVoteAckMessageWaitMap: map[hash.Hash256]*RoundVoteAckMessage{},
-		BlockVoteMessageWaitMap:    map[hash.Hash256]*BlockVoteMessage{},
-		BlockGenMessageWaitMap:     map[hash.Hash256]*message_def.BlockGenMessage{},
+		RoundVoteAckMessageWaitMap: map[common.PublicHash]*RoundVoteAckMessage{},
+		BlockVoteWaitMap:           map[common.PublicHash]*BlockVote{},
+		BlockVoteMessageWaitMap:    map[common.PublicHash]*BlockVoteMessage{},
 	}
 	return vr
+}
+
+type voteSortItem struct {
+	PublicHash common.PublicHash
+	Priority   uint64
+}
+
+type voteSorter []*voteSortItem
+
+func (s voteSorter) Len() int {
+	return len(s)
+}
+
+func (s voteSorter) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s voteSorter) Less(i, j int) bool {
+	a := s[i]
+	b := s[j]
+	if a.Priority == b.Priority {
+		return a.PublicHash.Less(b.PublicHash)
+	} else {
+		return a.Priority < b.Priority
+	}
 }
