@@ -16,29 +16,71 @@ const (
 
 // VoteRound is data for the voting round
 type VoteRound struct {
-	TargetHeight               uint32
+	VoteTargetHeight           uint32
 	PublicHash                 common.PublicHash
-	RoundVoteAckMap            map[common.PublicHash]*RoundVoteAck
+	RoundVoteAckMessageMap     map[common.PublicHash]*RoundVoteAckMessage
 	MinRoundVoteAck            *RoundVoteAck
-	BlockVoteMap               map[common.PublicHash]*BlockVote
-	BlockGenMessage            *message_def.BlockGenMessage
-	Context                    *data.Context
 	RoundVoteAckMessageWaitMap map[common.PublicHash]*RoundVoteAckMessage
-	BlockVoteWaitMap           map[common.PublicHash]*BlockVote
-	BlockVoteMessageWaitMap    map[common.PublicHash]*BlockVoteMessage
-	BlockGenMessageWait        *message_def.BlockGenMessage
+	BlockRounds                []*BlockRound
+	ClosedBlockRounds          []*BlockRound
 }
 
 // NewVoteRound returns a VoteRound
-func NewVoteRound(TargetHeight uint32, PublicHash common.PublicHash) *VoteRound {
+func NewVoteRound(TargetHeight uint32, PublicHash common.PublicHash, MaxBlocksPerFormulator uint32) *VoteRound {
 	vr := &VoteRound{
-		TargetHeight:               TargetHeight,
+		VoteTargetHeight:           TargetHeight,
 		PublicHash:                 PublicHash,
-		RoundVoteAckMap:            map[common.PublicHash]*RoundVoteAck{},
-		BlockVoteMap:               map[common.PublicHash]*BlockVote{},
+		RoundVoteAckMessageMap:     map[common.PublicHash]*RoundVoteAckMessage{},
 		RoundVoteAckMessageWaitMap: map[common.PublicHash]*RoundVoteAckMessage{},
-		BlockVoteWaitMap:           map[common.PublicHash]*BlockVote{},
-		BlockVoteMessageWaitMap:    map[common.PublicHash]*BlockVoteMessage{},
+		BlockRounds:                make([]*BlockRound, 0, MaxBlocksPerFormulator),
+		ClosedBlockRounds:          make([]*BlockRound, 0, MaxBlocksPerFormulator),
+	}
+	for i := uint32(0); i < MaxBlocksPerFormulator; i++ {
+		vr.BlockRounds = append(vr.BlockRounds, NewBlockRound(TargetHeight+i))
+	}
+	return vr
+}
+
+// CloseBlockRound closes a block round
+func (vr *VoteRound) CloseBlockRound() {
+	vr.ClosedBlockRounds = append(vr.ClosedBlockRounds, vr.BlockRounds[0])
+	vr.BlockRounds = vr.BlockRounds[1:]
+}
+
+// RemoveBlockRound removes a block round
+func (vr *VoteRound) RemoveBlockRound(br *BlockRound) {
+	BlockRounds := make([]*BlockRound, 0, len(vr.BlockRounds))
+	for _, v := range vr.BlockRounds {
+		if br != v {
+			BlockRounds = append(BlockRounds, v)
+		}
+	}
+	vr.BlockRounds = BlockRounds
+}
+
+// BlockRoundCount returns a number of remained block rounds
+func (vr *VoteRound) BlockRoundCount() int {
+	return len(vr.BlockRounds)
+}
+
+// BlockRound is data for the block round
+type BlockRound struct {
+	TargetHeight            uint32
+	BlockVoteMap            map[common.PublicHash]*BlockVote
+	BlockGenMessage         *message_def.BlockGenMessage
+	Context                 *data.Context
+	BlockVoteWaitMap        map[common.PublicHash]*BlockVote
+	BlockVoteMessageWaitMap map[common.PublicHash]*BlockVoteMessage
+	BlockGenMessageWait     *message_def.BlockGenMessage
+}
+
+// NewBlockRound returns a VoteRound
+func NewBlockRound(TargetHeight uint32) *BlockRound {
+	vr := &BlockRound{
+		TargetHeight:            TargetHeight,
+		BlockVoteMap:            map[common.PublicHash]*BlockVote{},
+		BlockVoteWaitMap:        map[common.PublicHash]*BlockVote{},
+		BlockVoteMessageWaitMap: map[common.PublicHash]*BlockVoteMessage{},
 	}
 	return vr
 }

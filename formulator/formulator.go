@@ -25,24 +25,25 @@ import (
 // Formulator procudes a block by the consensus
 type Formulator struct {
 	sync.Mutex
-	Config         *Config
-	ms             *Mesh
-	cm             *chain.Manager
-	kn             *kernel.Kernel
-	pm             peer.Manager
-	mm             *message.Manager
-	lastGenMessage *message_def.BlockGenMessage
-	lastReqMessage *message_def.BlockReqMessage
-	lastContext    *data.Context
-	txMsgChans     []*chan *txMsgItem
-	txMsgIdx       uint64
-	statusMap      map[string]*chain.Status
-	requestTimer   *chain.RequestTimer
-	requestLock    sync.RWMutex
-	isRunning      bool
-	closeLock      sync.RWMutex
-	runEnd         chan struct{}
-	isClose        bool
+	Config               *Config
+	ms                   *Mesh
+	cm                   *chain.Manager
+	kn                   *kernel.Kernel
+	pm                   peer.Manager
+	mm                   *message.Manager
+	lastGenMessages      []*message_def.BlockGenMessage
+	lastObSignMessageMap map[uint32]*message_def.BlockObSignMessage
+	lastContextes        []*data.Context
+	lastReqMessage       *message_def.BlockReqMessage
+	txMsgChans           []*chan *txMsgItem
+	txMsgIdx             uint64
+	statusMap            map[string]*chain.Status
+	requestTimer         *chain.RequestTimer
+	requestLock          sync.RWMutex
+	isRunning            bool
+	closeLock            sync.RWMutex
+	runEnd               chan struct{}
+	isClose              bool
 }
 
 // NewFormulator returns a Formulator
@@ -58,14 +59,17 @@ func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
 	}
 
 	fr := &Formulator{
-		Config:       Config,
-		cm:           chain.NewManager(kn),
-		pm:           pm,
-		kn:           kn,
-		mm:           message.NewManager(),
-		statusMap:    map[string]*chain.Status{},
-		requestTimer: chain.NewRequestTimer(nil),
-		runEnd:       make(chan struct{}),
+		Config:               Config,
+		cm:                   chain.NewManager(kn),
+		pm:                   pm,
+		kn:                   kn,
+		mm:                   message.NewManager(),
+		lastGenMessages:      []*message_def.BlockGenMessage{},
+		lastObSignMessageMap: map[uint32]*message_def.BlockObSignMessage{},
+		lastContextes:        []*data.Context{},
+		statusMap:            map[string]*chain.Status{},
+		requestTimer:         chain.NewRequestTimer(nil),
+		runEnd:               make(chan struct{}),
 	}
 	fr.mm.SetCreator(message_def.BlockReqMessageType, fr.messageCreator)
 	fr.mm.SetCreator(message_def.BlockObSignMessageType, fr.messageCreator)
@@ -200,8 +204,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		fr.Lock()
 		defer fr.Unlock()
 
-		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "BlockReqMessage", msg.TargetHeight, RetryCount)
-		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), msg.TargetHeight, "BlockReqMessage")
+		//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "BlockReqMessage", msg.TargetHeight, RetryCount)
 		cp := fr.kn.Provider()
 		Height := cp.Height()
 		if msg.TargetHeight <= Height {
@@ -244,73 +247,128 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 			return ErrInvalidRequest
 		}
 
-		ctx, b, err := fr.kn.GenerateBlock(msg.TimeoutCount, fr.Config.Formulator)
-		if err != nil {
-			return err
-		}
-
-		nm := &message_def.BlockGenMessage{
-			Block: b,
-			Tran:  fr.kn.Transactor(),
-		}
-
-		if sig, err := fr.Config.Key.Sign(b.Header.Hash()); err != nil {
-			return err
-		} else {
-			nm.GeneratorSignature = sig
-		}
-
-		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send BlockGenMessage", nm.Block.Header.Height())
-		if err := p.Send(nm); err != nil {
-			return err
-		}
-
-		fr.lastGenMessage = nm
+		fr.lastGenMessages = []*message_def.BlockGenMessage{}
+		fr.lastObSignMessageMap = map[uint32]*message_def.BlockObSignMessage{}
+		fr.lastContextes = []*data.Context{}
 		fr.lastReqMessage = msg
-		fr.lastContext = ctx
 
+		var ctx *data.Context
+		start := time.Now().UnixNano()
+		StartBlockTime := uint64(time.Now().UnixNano())
+		bNoDelay := false
+		if Height > 0 {
+			LastHeader, err := cp.Header(Height)
+			if err != nil {
+				return err
+			}
+			if StartBlockTime < LastHeader.Timestamp() {
+				StartBlockTime = LastHeader.Timestamp() + uint64(time.Millisecond)
+			} else if LastHeader.Timestamp() < uint64(fr.kn.Config.MaxBlocksPerFormulator)*uint64(500*time.Millisecond) {
+				bNoDelay = true
+			}
+		}
+		for i := uint32(0); i < fr.kn.Config.MaxBlocksPerFormulator; i++ {
+			var TimeoutCount uint32
+			if i == 0 {
+				ctx = data.NewContext(fr.kn.Loader())
+				TimeoutCount = msg.TimeoutCount
+			} else {
+				ctx = ctx.NextContext(fr.lastGenMessages[len(fr.lastGenMessages)-1].Block.Header.Hash())
+			}
+			Timestamp := StartBlockTime
+			if bNoDelay {
+				Timestamp += uint64(i) * uint64(time.Millisecond)
+			} else {
+				Timestamp += uint64(i) * uint64(500*time.Millisecond)
+			}
+			b, err := fr.kn.GenerateBlock(ctx, TimeoutCount, Timestamp, fr.Config.Formulator)
+			if err != nil {
+				return err
+			}
+
+			nm := &message_def.BlockGenMessage{
+				Block: b,
+				Tran:  fr.kn.Transactor(),
+			}
+
+			if sig, err := fr.Config.Key.Sign(b.Header.Hash()); err != nil {
+				return err
+			} else {
+				nm.GeneratorSignature = sig
+			}
+
+			//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send BlockGenMessage", nm.Block.Header.Height())
+			if err := p.Send(nm); err != nil {
+				return err
+			}
+
+			fr.lastGenMessages = append(fr.lastGenMessages, nm)
+			fr.lastContextes = append(fr.lastContextes, ctx)
+
+			PastTime := time.Duration(time.Now().UnixNano()-start) - time.Duration(i)*200*time.Millisecond
+			if PastTime < 200*time.Millisecond {
+				time.Sleep(200*time.Millisecond - PastTime)
+			}
+		}
 		return nil
 	case *message_def.BlockObSignMessage:
 		fr.Lock()
 		defer fr.Unlock()
 
-		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "BlockObSignMessage", msg.TargetHeight)
-		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "BlockObSignMessage")
-		if fr.lastGenMessage == nil {
+		//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "BlockObSignMessage", msg.TargetHeight)
+		if len(fr.lastGenMessages) == 0 {
 			return nil
 		}
 		if msg.TargetHeight <= fr.kn.Provider().Height() {
 			return nil
 		}
-		if msg.TargetHeight != fr.lastGenMessage.Block.Header.Height() {
+		if msg.TargetHeight >= fr.lastReqMessage.TargetHeight+10 {
 			return ErrInvalidRequest
 		}
-		if !msg.ObserverSigned.HeaderHash.Equal(fr.lastGenMessage.Block.Header.Hash()) {
-			return ErrInvalidRequest
-		}
+		fr.lastObSignMessageMap[msg.TargetHeight] = msg
 
-		cd := &chain.Data{
-			Header:     fr.lastGenMessage.Block.Header,
-			Body:       fr.lastGenMessage.Block.Body,
-			Signatures: append([]common.Signature{msg.ObserverSigned.GeneratorSignature}, msg.ObserverSigned.ObserverSignatures...),
-		}
-		if err := fr.cm.Process(cd, fr.lastContext); err != nil {
-			return err
-		}
-		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send BroadcastHeader", cd.Header.Height())
-		fr.cm.BroadcastHeader(cd.Header)
+		for len(fr.lastGenMessages) > 0 {
+			GenMessage := fr.lastGenMessages[0]
+			sm, has := fr.lastObSignMessageMap[GenMessage.Block.Header.Height()]
+			if !has {
+				break
+			}
+			if GenMessage.Block.Header.Height() == sm.TargetHeight {
+				ctx := fr.lastContextes[0]
 
-		if status, has := fr.statusMap[p.ID()]; has {
-			if status.Height < fr.lastGenMessage.Block.Header.Height() {
-				status.Height = fr.lastGenMessage.Block.Header.Height()
+				if !sm.ObserverSigned.HeaderHash.Equal(GenMessage.Block.Header.Hash()) {
+					return ErrInvalidRequest
+				}
+
+				cd := &chain.Data{
+					Header:     GenMessage.Block.Header,
+					Body:       GenMessage.Block.Body,
+					Signatures: append([]common.Signature{sm.ObserverSigned.GeneratorSignature}, sm.ObserverSigned.ObserverSignatures...),
+				}
+				if err := fr.cm.Process(cd, ctx); err != nil {
+					return err
+				}
+				//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send BroadcastHeader", cd.Header.Height())
+				fr.cm.BroadcastHeader(cd.Header)
+
+				if status, has := fr.statusMap[p.ID()]; has {
+					if status.Height < GenMessage.Block.Header.Height() {
+						status.Height = GenMessage.Block.Header.Height()
+					}
+				}
+
+				if len(fr.lastGenMessages) > 1 {
+					fr.lastGenMessages = fr.lastGenMessages[1:]
+					fr.lastContextes = fr.lastContextes[1:]
+				} else {
+					fr.lastGenMessages = []*message_def.BlockGenMessage{}
+					fr.lastContextes = []*data.Context{}
+				}
 			}
 		}
-
-		go fr.tryRequestNext()
 		return nil
 	case *chain.DataMessage:
-		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "chain.DataMessage", msg.Data.Header.Height())
-		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.DataMessage")
+		//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "chain.DataMessage", msg.Data.Header.Height())
 		if msg.Data.Header.Height() <= fr.kn.Provider().Height() {
 			return nil
 		}
@@ -331,8 +389,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		fr.tryRequestNext()
 		return nil
 	case *chain.StatusMessage:
-		fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "chain.StatusMessage", msg.Height)
-		//log.Println(fr.Config.Formulator, fr.kn.Provider().Height(), "chain.StatusMessage")
+		//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "chain.StatusMessage", msg.Height)
 		fr.Lock()
 		if status, has := fr.statusMap[p.ID()]; has {
 			if status.Height < msg.Height {
@@ -349,7 +406,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 				sm := &chain.RequestMessage{
 					Height: TargetHeight,
 				}
-				fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send RequestMessage", sm.Height)
+				//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send RequestMessage", sm.Height)
 				if err := p.Send(sm); err != nil {
 					return err
 				}

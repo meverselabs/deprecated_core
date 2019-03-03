@@ -16,19 +16,22 @@ import (
 // Consensus supports the proof of formulation algorithm
 type Consensus struct {
 	sync.Mutex
-	height                 uint64
-	candidates             []*Rank
-	rankMap                map[common.Address]*Rank
-	ObserverKeyMap         map[common.PublicHash]bool
-	FormulationAccountType account.Type
+	height                   uint64
+	candidates               []*Rank
+	rankMap                  map[common.Address]*Rank
+	blocksFromSameFormulator uint32
+	ObserverKeyMap           map[common.PublicHash]bool
+	MaxBlocksPerFormulator   uint32
+	FormulationAccountType   account.Type
 }
 
 // NewConsensus returns a Consensus
-func NewConsensus(ObserverKeyMap map[common.PublicHash]bool, FormulationAccountType account.Type) *Consensus {
+func NewConsensus(ObserverKeyMap map[common.PublicHash]bool, MaxBlocksPerFormulator uint32, FormulationAccountType account.Type) *Consensus {
 	cs := &Consensus{
 		candidates:             []*Rank{},
 		rankMap:                map[common.Address]*Rank{},
 		ObserverKeyMap:         ObserverKeyMap,
+		MaxBlocksPerFormulator: MaxBlocksPerFormulator,
 		FormulationAccountType: FormulationAccountType,
 	}
 	return cs
@@ -40,6 +43,14 @@ func (cs *Consensus) CandidateCount() int {
 	defer cs.Unlock()
 
 	return len(cs.candidates)
+}
+
+// BlocksFromSameFormulator returns a number of blocks made from same formulator
+func (cs *Consensus) BlocksFromSameFormulator() uint32 {
+	cs.Lock()
+	defer cs.Unlock()
+
+	return cs.blocksFromSameFormulator
 }
 
 // TopRank returns the top rank by Timeoutcount
@@ -139,9 +150,18 @@ func (cs *Consensus) ProcessContext(ctd *data.ContextData, HeaderHash hash.Hash2
 	cs.Lock()
 	defer cs.Unlock()
 
-	if err := cs.forwardCandidates(int(bh.TimeoutCount), HeaderHash); err != nil {
-		return nil, err
+	if bh.TimeoutCount > 0 {
+		if err := cs.forwardCandidates(int(bh.TimeoutCount)); err != nil {
+			return nil, err
+		}
+		cs.blocksFromSameFormulator = 0
 	}
+	cs.blocksFromSameFormulator++
+	if cs.blocksFromSameFormulator >= cs.MaxBlocksPerFormulator {
+		cs.forwardTop(HeaderHash)
+		cs.blocksFromSameFormulator = 0
+	}
+
 	phase := cs.largestPhase() + 1
 	for _, a := range ctd.CreatedAccountMap {
 		if a.Type() == cs.FormulationAccountType {
@@ -170,6 +190,12 @@ func (cs *Consensus) buildSaveData() ([]byte, error) {
 	{
 		var buffer bytes.Buffer
 		if _, err := util.WriteUint64(&buffer, cs.height); err != nil {
+			return nil, err
+		}
+		if _, err := util.WriteUint32(&buffer, cs.MaxBlocksPerFormulator); err != nil {
+			return nil, err
+		}
+		if _, err := util.WriteUint32(&buffer, cs.blocksFromSameFormulator); err != nil {
 			return nil, err
 		}
 		if _, err := util.WriteUint32(&buffer, uint32(len(cs.candidates))); err != nil {
@@ -204,6 +230,18 @@ func (cs *Consensus) LoadFromSaveData(SaveData []byte) error {
 		return err
 	} else {
 		cs.height = v
+	}
+	if v, _, err := util.ReadUint32(r); err != nil {
+		return err
+	} else {
+		if cs.MaxBlocksPerFormulator != v {
+			return ErrInvalidMaxBlocksPerFormulator
+		}
+	}
+	if v, _, err := util.ReadUint32(r); err != nil {
+		return err
+	} else {
+		cs.blocksFromSameFormulator = v
 	}
 	if Len, _, err := util.ReadUint32(r); err != nil {
 		return err
@@ -269,7 +307,7 @@ func (cs *Consensus) removeRank(addr common.Address) {
 	}
 }
 
-func (cs *Consensus) forwardCandidates(TimeoutCount int, LastTableAppendHash hash.Hash256) error {
+func (cs *Consensus) forwardCandidates(TimeoutCount int) error {
 	if TimeoutCount >= len(cs.candidates) {
 		return ErrExceedCandidateCount
 	}
@@ -284,7 +322,10 @@ func (cs *Consensus) forwardCandidates(TimeoutCount int, LastTableAppendHash has
 		copy(cs.candidates, cs.candidates[1:idx+1])
 		cs.candidates[idx] = m
 	}
+	return nil
+}
 
+func (cs *Consensus) forwardTop(LastTableAppendHash hash.Hash256) {
 	// update top phase and hashSpace
 	top := cs.candidates[0]
 	top.Set(top.Phase()+1, LastTableAppendHash)
@@ -295,7 +336,6 @@ func (cs *Consensus) forwardCandidates(TimeoutCount int, LastTableAppendHash has
 	cs.candidates[idx] = top
 
 	cs.height++
-	return nil
 }
 
 // InsertRankToList inserts the rank by the score to the rank list

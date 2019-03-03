@@ -35,6 +35,14 @@ func NewContext(loader Loader) *Context {
 	return ctx
 }
 
+// NextContext returns the next Context of the Context
+func (ctx *Context) NextContext(NextHash hash.Hash256) *Context {
+	nctx := NewContext(ctx)
+	nctx.genTargetHeight = ctx.genTargetHeight + 1
+	nctx.genLastHash = NextHash
+	return nctx
+}
+
 // Hash returns the hash value of it
 func (ctx *Context) Hash() hash.Hash256 {
 	if !ctx.isLatestHash {
@@ -91,6 +99,11 @@ func (ctx *Context) Account(addr common.Address) (account.Account, error) {
 	return ctx.Top().Account(addr)
 }
 
+// AddressByName returns the account address of the name
+func (ctx *Context) AddressByName(Name string) (common.Address, error) {
+	return ctx.Top().AddressByName(Name)
+}
+
 // IsExistAccount checks that the account of the address is exist or not
 func (ctx *Context) IsExistAccount(addr common.Address) (bool, error) {
 	return ctx.Top().IsExistAccount(addr)
@@ -122,6 +135,11 @@ func (ctx *Context) AccountData(addr common.Address, name []byte) []byte {
 func (ctx *Context) SetAccountData(addr common.Address, name []byte, value []byte) {
 	ctx.isLatestHash = false
 	ctx.Top().SetAccountData(addr, name, value)
+}
+
+// IsExistUTXO checks that the utxo of the id is exist or not
+func (ctx *Context) IsExistUTXO(id uint64) (bool, error) {
+	return ctx.Top().IsExistUTXO(id)
 }
 
 // UTXO returns the UTXO from the top snapshot

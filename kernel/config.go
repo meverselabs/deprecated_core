@@ -6,6 +6,8 @@ import (
 
 // Config is the configuration of the kernel
 type Config struct {
-	ChainCoord     *common.Coordinate
-	ObserverKeyMap map[common.PublicHash]bool
+	ChainCoord              *common.Coordinate
+	ObserverKeyMap          map[common.PublicHash]bool
+	MaxBlocksPerFormulator  uint32
+	MaxTransactionsPerBlock int
 }

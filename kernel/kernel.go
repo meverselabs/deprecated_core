@@ -32,7 +32,7 @@ type Kernel struct {
 	sync.Mutex
 	Config             *Config
 	store              *Store
-	consensus          *consensus.Consensus
+	cs                 *consensus.Consensus
 	txPool             *txpool.TransactionPool
 	txQueue            *queue.ExpireQueue
 	txWorkingMap       map[hash.Hash256]bool
@@ -57,7 +57,7 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		store:              st,
 		genesisContextData: genesisContextData,
 		rewarder:           rewarder,
-		consensus:          consensus.NewConsensus(Config.ObserverKeyMap, FormulationAccountType),
+		cs:                 consensus.NewConsensus(Config.ObserverKeyMap, Config.MaxBlocksPerFormulator, FormulationAccountType),
 		txPool:             txpool.NewTransactionPool(),
 		txQueue:            queue.NewExpireQueue(),
 		txWorkingMap:       map[hash.Hash256]bool{},
@@ -106,7 +106,7 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 			return nil, err
 		} else {
 			CustomData := map[string][]byte{}
-			if SaveData, err := kn.consensus.ApplyGenesis(kn.genesisContextData); err != nil {
+			if SaveData, err := kn.cs.ApplyGenesis(kn.genesisContextData); err != nil {
 				return nil, err
 			} else {
 				CustomData["consensus"] = SaveData
@@ -121,7 +121,7 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		}
 		if SaveData := kn.store.CustomData("consensus"); SaveData == nil {
 			return nil, ErrNotExistConsensusSaveData
-		} else if err := kn.consensus.LoadFromSaveData(SaveData); err != nil {
+		} else if err := kn.cs.LoadFromSaveData(SaveData); err != nil {
 			return nil, err
 		}
 	}
@@ -197,27 +197,32 @@ func (kn *Kernel) Block(height uint32) (*block.Block, error) {
 
 // CandidateCount returns a count of the rank table
 func (kn *Kernel) CandidateCount() int {
-	return kn.consensus.CandidateCount()
+	return kn.cs.CandidateCount()
+}
+
+// BlocksFromSameFormulator returns a number of blocks made from same formulator
+func (kn *Kernel) BlocksFromSameFormulator() uint32 {
+	return kn.cs.BlocksFromSameFormulator()
 }
 
 // TopRank returns the top rank by the given timeout count
 func (kn *Kernel) TopRank(TimeoutCount int) (*consensus.Rank, error) {
-	return kn.consensus.TopRank(TimeoutCount)
+	return kn.cs.TopRank(TimeoutCount)
 }
 
 // TopRankInMap returns the top rank by the given timeout count in the given map
 func (kn *Kernel) TopRankInMap(FormulatorMap map[common.Address]bool) (*consensus.Rank, int, error) {
-	return kn.consensus.TopRankInMap(FormulatorMap)
+	return kn.cs.TopRankInMap(FormulatorMap)
 }
 
 // RanksInMap returns the ranks in the map
 func (kn *Kernel) RanksInMap(FormulatorMap map[common.Address]bool, Limit int) ([]*consensus.Rank, error) {
-	return kn.consensus.RanksInMap(FormulatorMap, Limit)
+	return kn.cs.RanksInMap(FormulatorMap, Limit)
 }
 
 // IsFormulator returns the given information is correct or not
 func (kn *Kernel) IsFormulator(Formulator common.Address, Publichash common.PublicHash) bool {
-	return kn.consensus.IsFormulator(Formulator, Publichash)
+	return kn.cs.IsFormulator(Formulator, Publichash)
 }
 
 // Screening determines the acceptance of the chain data
@@ -314,7 +319,7 @@ func (kn *Kernel) Validate(b *block.Block, GeneratorSignature common.Signature) 
 		return nil, ErrInvalidChainCoord
 	}
 
-	Top, err := kn.consensus.TopRank(int(b.Header.TimeoutCount))
+	Top, err := kn.cs.TopRank(int(b.Header.TimeoutCount))
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +368,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		ObserverSignatures: cd.Signatures[1:],
 	}
 
-	Top, err := kn.consensus.TopRank(int(b.Header.TimeoutCount))
+	Top, err := kn.cs.TopRank(int(b.Header.TimeoutCount))
 	if err != nil {
 		return err
 	}
@@ -394,7 +399,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	}
 	top := ctx.Top()
 	CustomMap := map[string][]byte{}
-	if SaveData, err := kn.consensus.ProcessContext(top, s.HeaderHash, b.Header); err != nil {
+	if SaveData, err := kn.cs.ProcessContext(top, s.HeaderHash, b.Header); err != nil {
 		return err
 	} else {
 		CustomMap["consensus"] = SaveData
@@ -412,6 +417,7 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 		delete(kn.txWorkingMap, h)
 		delete(kn.txSignersMap, h)
 	}
+	kn.DebugLog("Kernel", "Block Connected :", kn.store.Height(), HeaderHash.String(), b.Header.Formulator.String(), len(b.Body.Transactions))
 	log.Println("Block Connected :", kn.store.Height(), HeaderHash.String(), b.Header.Formulator.String(), len(b.Body.Transactions))
 	return nil
 }
@@ -529,21 +535,20 @@ func (kn *Kernel) contextByBlock(b *block.Block) (*data.Context, error) {
 }
 
 // GenerateBlock generate a next block and its signature using transactions in the pool
-func (kn *Kernel) GenerateBlock(TimeoutCount uint32, Formulator common.Address) (*data.Context, *block.Block, error) {
+func (kn *Kernel) GenerateBlock(ctx *data.Context, TimeoutCount uint32, Timestamp uint64, Formulator common.Address) (*block.Block, error) {
 	kn.closeLock.RLock()
 	defer kn.closeLock.RUnlock()
 	if kn.isClose {
-		return nil, nil, ErrKernelClosed
+		return nil, ErrKernelClosed
 	}
 
-	ctx := data.NewContext(kn.Loader())
 	b := &block.Block{
 		Header: &block.Header{
 			Base: chain.Base{
 				Version_:   kn.Provider().Version(),
 				Height_:    ctx.TargetHeight(),
 				PrevHash_:  ctx.LastHash(),
-				Timestamp_: uint64(time.Now().UnixNano()),
+				Timestamp_: Timestamp,
 			},
 			ChainCoord:   *ctx.ChainCoord(),
 			Formulator:   Formulator,
@@ -583,7 +588,7 @@ TxLoop:
 
 			TxHashes = append(TxHashes, item.TxHash)
 
-			if len(TxHashes) > 5000 {
+			if len(TxHashes) > kn.Config.MaxTransactionsPerBlock {
 				break TxLoop
 			}
 		}
@@ -591,19 +596,19 @@ TxLoop:
 	kn.txPool.Unlock() // Prevent delaying from TxPool.Push
 
 	if err := kn.rewarder.ProcessReward(b.Header.Formulator, ctx); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if ctx.StackSize() > 1 {
-		return nil, nil, ErrDirtyContext
+		return nil, ErrDirtyContext
 	}
 	b.Header.ContextHash = ctx.Hash()
 
 	if h, err := level.BuildLevelRoot(TxHashes); err != nil {
-		return nil, nil, err
+		return nil, err
 	} else {
 		b.Header.LevelRootHash = h
 	}
-	return ctx, b, nil
+	return b, nil
 }
 
 func (kn *Kernel) validateBlockBody(b *block.Block) error {
@@ -680,7 +685,7 @@ func (kn *Kernel) OnItemExpired(Interval time.Duration, Key string, Item interfa
 
 // DebugLog TEMP
 func (kn *Kernel) DebugLog(args ...interface{}) {
-	//log.Println(args...)
+	log.Println(args...)
 	for _, eh := range kn.eventHandlers {
 		eh.DebugLog(kn, args...)
 	}

@@ -12,7 +12,7 @@ import (
 type RoundVote struct {
 	ChainCoord           *common.Coordinate
 	LastHash             hash.Hash256
-	TargetHeight         uint32
+	VoteTargetHeight     uint32
 	TimeoutCount         uint32
 	Formulator           common.Address
 	FormulatorPublicHash common.PublicHash
@@ -37,7 +37,7 @@ func (vt *RoundVote) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := util.WriteUint32(w, vt.TargetHeight); err != nil {
+	if n, err := util.WriteUint32(w, vt.VoteTargetHeight); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -82,7 +82,7 @@ func (vt *RoundVote) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		vt.TargetHeight = v
+		vt.VoteTargetHeight = v
 	}
 	if v, n, err := util.ReadUint32(r); err != nil {
 		return read, err
@@ -111,7 +111,7 @@ func (vt *RoundVote) ReadFrom(r io.Reader) (int64, error) {
 
 // RoundVoteAck is a message for a round vote ack
 type RoundVoteAck struct {
-	TargetHeight         uint32
+	VoteTargetHeight     uint32
 	TimeoutCount         uint32
 	Formulator           common.Address
 	FormulatorPublicHash common.PublicHash
@@ -127,7 +127,7 @@ func (vt *RoundVoteAck) Hash() hash.Hash256 {
 // WriteTo is a serialization function
 func (vt *RoundVoteAck) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := util.WriteUint32(w, vt.TargetHeight); err != nil {
+	if n, err := util.WriteUint32(w, vt.VoteTargetHeight); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -167,7 +167,7 @@ func (vt *RoundVoteAck) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		vt.TargetHeight = v
+		vt.VoteTargetHeight = v
 	}
 	if v, n, err := util.ReadUint32(r); err != nil {
 		return read, err
@@ -201,6 +201,7 @@ func (vt *RoundVoteAck) ReadFrom(r io.Reader) (int64, error) {
 
 // BlockVote is message for a block vote
 type BlockVote struct {
+	VoteTargetHeight   uint32
 	Header             chain.Header
 	GeneratorSignature common.Signature
 	ObserverSignature  common.Signature
@@ -215,6 +216,11 @@ func (vt *BlockVote) Hash() hash.Hash256 {
 // WriteTo is a serialization function
 func (vt *BlockVote) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
+	if n, err := util.WriteUint32(w, vt.VoteTargetHeight); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := vt.Header.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
@@ -241,6 +247,12 @@ func (vt *BlockVote) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom is a deserialization function
 func (vt *BlockVote) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		vt.VoteTargetHeight = v
+	}
 	if n, err := vt.Header.ReadFrom(r); err != nil {
 		return read, err
 	} else {
@@ -266,9 +278,10 @@ func (vt *BlockVote) ReadFrom(r io.Reader) (int64, error) {
 }
 
 type BlockVoteEnd struct {
-	TargetHeight uint32
-	BlockVotes   []*BlockVote
-	Provider     chain.Provider
+	VoteTargetHeight uint32
+	TargetHeight     uint32
+	BlockVotes       []*BlockVote
+	Provider         chain.Provider
 }
 
 // Hash returns the hash value of it
@@ -279,6 +292,11 @@ func (vt *BlockVoteEnd) Hash() hash.Hash256 {
 // WriteTo is a serialization function
 func (vt *BlockVoteEnd) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
+	if n, err := util.WriteUint32(w, vt.VoteTargetHeight); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := util.WriteUint32(w, vt.TargetHeight); err != nil {
 		return wrote, err
 	} else {
@@ -302,6 +320,12 @@ func (vt *BlockVoteEnd) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom is a deserialization function
 func (vt *BlockVoteEnd) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		vt.VoteTargetHeight = v
+	}
 	if v, n, err := util.ReadUint32(r); err != nil {
 		return read, err
 	} else {
