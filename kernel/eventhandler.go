@@ -1,11 +1,11 @@
 package kernel
 
 import (
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/block"
-	"git.fleta.io/fleta/core/data"
-	"git.fleta.io/fleta/core/message_def"
-	"git.fleta.io/fleta/core/transaction"
+	"github.com/fletaio/common"
+	"github.com/fletaio/core/block"
+	"github.com/fletaio/core/data"
+	"github.com/fletaio/core/message_def"
+	"github.com/fletaio/core/transaction"
 )
 
 // EventHandler provides callback abilities to the kernel

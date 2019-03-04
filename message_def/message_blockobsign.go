@@ -3,10 +3,10 @@ package message_def
 import (
 	"io"
 
-	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/block"
+	"github.com/fletaio/common/util"
+	"github.com/fletaio/core/block"
 
-	"git.fleta.io/fleta/framework/message"
+	"github.com/fletaio/framework/message"
 )
 
 // BlockObSignMessage is a message for a block observer signatures

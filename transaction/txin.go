@@ -3,7 +3,7 @@ package transaction
 import (
 	"io"
 
-	"git.fleta.io/fleta/common/util"
+	"github.com/fletaio/common/util"
 )
 
 // TxIn represents the position of the UTXO

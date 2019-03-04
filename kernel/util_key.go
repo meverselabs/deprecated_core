@@ -3,8 +3,8 @@ package kernel
 import (
 	"encoding/binary"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
 )
 
 var (

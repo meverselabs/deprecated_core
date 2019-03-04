@@ -1,10 +1,10 @@
 package formulator
 
 import (
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/key"
-	"git.fleta.io/fleta/framework/peer"
-	"git.fleta.io/fleta/framework/router"
+	"github.com/fletaio/common"
+	"github.com/fletaio/core/key"
+	"github.com/fletaio/framework/peer"
+	"github.com/fletaio/framework/router"
 )
 
 // Config is a configuration of the formulator

@@ -5,11 +5,11 @@ import (
 	"sort"
 	"strconv"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/account"
-	"git.fleta.io/fleta/core/transaction"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/common/util"
+	"github.com/fletaio/core/account"
+	"github.com/fletaio/core/transaction"
 )
 
 // Context is an intermediate in-memory state using the context data stack between blocks

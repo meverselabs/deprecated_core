@@ -8,21 +8,21 @@ import (
 	"sync"
 	"time"
 
-	"git.fleta.io/fleta/core/message_def"
+	"github.com/fletaio/core/message_def"
 
-	"git.fleta.io/fleta/core/reward"
+	"github.com/fletaio/core/reward"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/queue"
-	"git.fleta.io/fleta/core/block"
-	"git.fleta.io/fleta/core/consensus"
-	"git.fleta.io/fleta/core/data"
-	"git.fleta.io/fleta/core/db"
-	"git.fleta.io/fleta/core/level"
-	"git.fleta.io/fleta/core/transaction"
-	"git.fleta.io/fleta/core/txpool"
-	"git.fleta.io/fleta/framework/chain"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/common/queue"
+	"github.com/fletaio/core/block"
+	"github.com/fletaio/core/consensus"
+	"github.com/fletaio/core/data"
+	"github.com/fletaio/core/db"
+	"github.com/fletaio/core/level"
+	"github.com/fletaio/core/transaction"
+	"github.com/fletaio/core/txpool"
+	"github.com/fletaio/framework/chain"
 )
 
 // Kernel processes the block chain using its components and stores state of the block chain

@@ -3,12 +3,12 @@ package message_def
 import (
 	"io"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/util"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/common/util"
 
-	"git.fleta.io/fleta/framework/chain"
-	"git.fleta.io/fleta/framework/message"
+	"github.com/fletaio/framework/chain"
+	"github.com/fletaio/framework/message"
 )
 
 // BlockReqMessage is a message for a block request

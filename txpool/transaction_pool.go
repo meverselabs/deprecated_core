@@ -3,10 +3,10 @@ package txpool
 import (
 	"sync"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/queue"
-	"git.fleta.io/fleta/core/transaction"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/common/queue"
+	"github.com/fletaio/core/transaction"
 )
 
 // AccountTransaction is an interface that defines common functions of account model based transactions

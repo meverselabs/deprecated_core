@@ -5,17 +5,17 @@ import (
 	"testing"
 	"time"
 
-	"git.fleta.io/fleta/common/hash"
+	"github.com/fletaio/common/hash"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/framework/log"
+	"github.com/fletaio/common"
+	"github.com/fletaio/framework/log"
 
-	"git.fleta.io/fleta/core/amount"
-	"git.fleta.io/fleta/core/key"
-	"git.fleta.io/fleta/core/transaction"
+	"github.com/fletaio/core/amount"
+	"github.com/fletaio/core/key"
+	"github.com/fletaio/core/transaction"
 
-	"git.fleta.io/fleta/extension/account_tx"
-	"git.fleta.io/fleta/extension/utxo_tx"
+	"github.com/fletaio/extension/account_tx"
+	"github.com/fletaio/extension/utxo_tx"
 )
 
 type testCtx struct {

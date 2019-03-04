@@ -1,8 +1,8 @@
 package data
 
 import (
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/account"
+	"github.com/fletaio/common"
+	"github.com/fletaio/core/account"
 )
 
 // Accounter provide account's handlers of the target chain

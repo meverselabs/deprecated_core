@@ -1,9 +1,9 @@
 package data
 
 import (
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/amount"
-	"git.fleta.io/fleta/core/transaction"
+	"github.com/fletaio/common"
+	"github.com/fletaio/core/amount"
+	"github.com/fletaio/core/transaction"
 )
 
 // Transactor provide transaction's handlers of the target chain

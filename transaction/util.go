@@ -1,6 +1,6 @@
 package transaction
 
-import "git.fleta.io/fleta/common"
+import "github.com/fletaio/common"
 
 // IsMainChain returns that the target chain is the main chain or not
 func IsMainChain(ChainCoord *common.Coordinate) bool {

@@ -5,9 +5,9 @@ import (
 	"encoding/binary"
 	"io"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/util"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/common/util"
 )
 
 // Rank represents the rank information of the formulation account

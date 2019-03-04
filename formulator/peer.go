@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/framework/message"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/util"
+	"github.com/fletaio/framework/message"
 )
 
 // Peer is a peer of the formulator

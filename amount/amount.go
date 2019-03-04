@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"git.fleta.io/fleta/common/util"
+	"github.com/fletaio/common/util"
 )
 
 // COIN is 1 coin

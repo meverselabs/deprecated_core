@@ -1,9 +1,9 @@
 package node
 
 import (
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/framework/peer"
-	"git.fleta.io/fleta/framework/router"
+	"github.com/fletaio/common"
+	"github.com/fletaio/framework/peer"
+	"github.com/fletaio/framework/router"
 )
 
 type Config struct {

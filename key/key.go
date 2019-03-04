@@ -3,8 +3,8 @@ package key
 import (
 	"io"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
 )
 
 // Key is an interface that defines crypto key functions

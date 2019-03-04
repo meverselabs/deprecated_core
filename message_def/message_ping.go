@@ -3,7 +3,7 @@ package message_def
 import (
 	"io"
 
-	"git.fleta.io/fleta/framework/message"
+	"github.com/fletaio/framework/message"
 )
 
 // PingMessage is a message for a block generation

@@ -1,10 +1,10 @@
 package data
 
 import (
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/core/account"
-	"git.fleta.io/fleta/core/transaction"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/core/account"
+	"github.com/fletaio/core/transaction"
 )
 
 // Loader is an interface to provide data from the target chain

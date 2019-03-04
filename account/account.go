@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"io"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/amount"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/util"
+	"github.com/fletaio/core/amount"
 )
 
 // Type is using when serealization and deserialization account

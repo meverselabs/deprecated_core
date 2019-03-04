@@ -1,8 +1,8 @@
 package observer
 
 import (
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/key"
+	"github.com/fletaio/common"
+	"github.com/fletaio/core/key"
 )
 
 // Config is the configuration for the observer

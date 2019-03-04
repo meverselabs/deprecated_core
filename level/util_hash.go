@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"sync"
 
-	"git.fleta.io/fleta/common/hash"
+	"github.com/fletaio/common/hash"
 )
 
 const hashPerLevel = 16

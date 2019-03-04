@@ -3,12 +3,12 @@ package message_def
 import (
 	"io"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/block"
-	"git.fleta.io/fleta/core/data"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/util"
+	"github.com/fletaio/core/block"
+	"github.com/fletaio/core/data"
 
-	"git.fleta.io/fleta/framework/message"
+	"github.com/fletaio/framework/message"
 )
 
 // BlockGenMessage is a message for a block generation

@@ -1,7 +1,7 @@
 package kernel
 
 import (
-	"git.fleta.io/fleta/common"
+	"github.com/fletaio/common"
 )
 
 // Config is the configuration of the kernel

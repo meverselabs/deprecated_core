@@ -1,6 +1,6 @@
 package message_def
 
-import "git.fleta.io/fleta/framework/message"
+import "github.com/fletaio/framework/message"
 
 // types
 var (

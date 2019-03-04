@@ -11,13 +11,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/key"
-	"git.fleta.io/fleta/core/message_def"
-	"git.fleta.io/fleta/framework/chain/mesh"
-	"git.fleta.io/fleta/framework/message"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/common/util"
+	"github.com/fletaio/core/key"
+	"github.com/fletaio/core/message_def"
+	"github.com/fletaio/framework/chain/mesh"
+	"github.com/fletaio/framework/message"
 )
 
 // EventHandler is a event handler of the mesh

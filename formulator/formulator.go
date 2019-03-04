@@ -7,19 +7,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"git.fleta.io/fleta/framework/router"
+	"github.com/fletaio/framework/router"
 
-	"git.fleta.io/fleta/core/data"
-	"git.fleta.io/fleta/core/kernel"
-	"git.fleta.io/fleta/core/transaction"
+	"github.com/fletaio/core/data"
+	"github.com/fletaio/core/kernel"
+	"github.com/fletaio/core/transaction"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/block"
-	"git.fleta.io/fleta/core/message_def"
-	"git.fleta.io/fleta/framework/chain"
-	"git.fleta.io/fleta/framework/chain/mesh"
-	"git.fleta.io/fleta/framework/message"
-	"git.fleta.io/fleta/framework/peer"
+	"github.com/fletaio/common"
+	"github.com/fletaio/core/block"
+	"github.com/fletaio/core/message_def"
+	"github.com/fletaio/framework/chain"
+	"github.com/fletaio/framework/chain/mesh"
+	"github.com/fletaio/framework/message"
+	"github.com/fletaio/framework/peer"
 )
 
 // Formulator procudes a block by the consensus

@@ -5,10 +5,10 @@ import (
 	"io"
 	"math/big"
 
-	"git.fleta.io/fleta/common"
-	ecrypto "git.fleta.io/fleta/common/crypto"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/util"
+	"github.com/fletaio/common"
+	ecrypto "github.com/fletaio/common/crypto"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/common/util"
 )
 
 // MemoryKey is the in-memory crypto key

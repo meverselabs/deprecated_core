@@ -3,8 +3,8 @@ package observer
 import (
 	"io"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/framework/message"
+	"github.com/fletaio/common"
+	"github.com/fletaio/framework/message"
 )
 
 // message types

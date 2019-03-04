@@ -7,18 +7,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/data"
-	"git.fleta.io/fleta/core/transaction"
+	"github.com/fletaio/common/util"
+	"github.com/fletaio/core/data"
+	"github.com/fletaio/core/transaction"
 
-	"git.fleta.io/fleta/core/kernel"
+	"github.com/fletaio/core/kernel"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/block"
-	"git.fleta.io/fleta/core/message_def"
-	"git.fleta.io/fleta/framework/chain"
-	"git.fleta.io/fleta/framework/chain/mesh"
-	"git.fleta.io/fleta/framework/message"
+	"github.com/fletaio/common"
+	"github.com/fletaio/core/block"
+	"github.com/fletaio/core/message_def"
+	"github.com/fletaio/framework/chain"
+	"github.com/fletaio/framework/chain/mesh"
+	"github.com/fletaio/framework/message"
 )
 
 // Observer supports the chain validation

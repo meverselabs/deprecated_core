@@ -1,9 +1,9 @@
 package observer
 
 import (
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/data"
-	"git.fleta.io/fleta/core/message_def"
+	"github.com/fletaio/common"
+	"github.com/fletaio/core/data"
+	"github.com/fletaio/core/message_def"
 )
 
 // consts

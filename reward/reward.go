@@ -1,8 +1,8 @@
 package reward
 
 import (
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/core/data"
+	"github.com/fletaio/common"
+	"github.com/fletaio/core/data"
 )
 
 // Rewarder procceses rewards of the target height

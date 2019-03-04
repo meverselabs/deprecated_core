@@ -5,12 +5,12 @@ import (
 	"sort"
 	"sync"
 
-	"git.fleta.io/fleta/common"
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/util"
-	"git.fleta.io/fleta/core/account"
-	"git.fleta.io/fleta/core/block"
-	"git.fleta.io/fleta/core/data"
+	"github.com/fletaio/common"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/common/util"
+	"github.com/fletaio/core/account"
+	"github.com/fletaio/core/block"
+	"github.com/fletaio/core/data"
 )
 
 // Consensus supports the proof of formulation algorithm

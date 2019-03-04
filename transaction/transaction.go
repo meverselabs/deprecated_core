@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"io"
 
-	"git.fleta.io/fleta/common/hash"
-	"git.fleta.io/fleta/common/util"
+	"github.com/fletaio/common/hash"
+	"github.com/fletaio/common/util"
 )
 
 // Transaction is an interface that defines common transaction functions
