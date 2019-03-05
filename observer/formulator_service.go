@@ -134,6 +134,17 @@ func (ms *FormulatorService) GuessHeightCountMap() map[uint32]int {
 	return CountMap
 }
 
+// GuessHeight returns the guess height of the fomrulator
+func (ms *FormulatorService) GuessHeight(Formulator common.Address) (uint32, error) {
+	ms.Lock()
+	p, has := ms.peerMap[Formulator]
+	ms.Unlock()
+	if !has {
+		return 0, ErrUnknownFormulator
+	}
+	return p.GuessHeight(), nil
+}
+
 // UpdateGuessHeight updates the guess height of the fomrulator
 func (ms *FormulatorService) UpdateGuessHeight(Formulator common.Address, height uint32) {
 	ms.Lock()

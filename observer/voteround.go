@@ -69,7 +69,6 @@ type BlockRound struct {
 	BlockVoteMap            map[common.PublicHash]*BlockVote
 	BlockGenMessage         *message_def.BlockGenMessage
 	Context                 *data.Context
-	BlockVoteWaitMap        map[common.PublicHash]*BlockVote
 	BlockVoteMessageWaitMap map[common.PublicHash]*BlockVoteMessage
 	BlockGenMessageWait     *message_def.BlockGenMessage
 }
@@ -79,7 +78,6 @@ func NewBlockRound(TargetHeight uint32) *BlockRound {
 	vr := &BlockRound{
 		TargetHeight:            TargetHeight,
 		BlockVoteMap:            map[common.PublicHash]*BlockVote{},
-		BlockVoteWaitMap:        map[common.PublicHash]*BlockVote{},
 		BlockVoteMessageWaitMap: map[common.PublicHash]*BlockVoteMessage{},
 	}
 	return vr

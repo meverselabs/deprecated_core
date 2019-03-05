@@ -211,16 +211,12 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 			return nil
 		}
 		if msg.TargetHeight > Height+1 {
-			if RetryCount >= 20 {
+			if RetryCount >= 40 {
 				return nil
 			}
 			go func() {
-				if msg.PrevData.Header.Height() == Height+1 {
-					fr.cm.AddData(msg.PrevData)
-				} else {
-					fr.tryRequestNext()
-					time.Sleep(50 * time.Millisecond)
-				}
+				fr.tryRequestNext()
+				time.Sleep(50 * time.Millisecond)
 				fr.handleMessage(p, m, RetryCount+1)
 			}()
 			return nil
@@ -305,9 +301,10 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 			fr.lastGenMessages = append(fr.lastGenMessages, nm)
 			fr.lastContextes = append(fr.lastContextes, ctx)
 
-			PastTime := time.Duration(time.Now().UnixNano()-start) - time.Duration(i)*200*time.Millisecond
-			if PastTime < 200*time.Millisecond {
-				time.Sleep(200*time.Millisecond - PastTime)
+			ExpectedTime := time.Duration(i+1) * 200 * time.Millisecond
+			PastTime := time.Duration(time.Now().UnixNano() - start)
+			if ExpectedTime > PastTime {
+				time.Sleep(ExpectedTime - PastTime)
 			}
 		}
 		return nil
@@ -391,6 +388,8 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 	case *chain.StatusMessage:
 		//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "chain.StatusMessage", msg.Height)
 		fr.Lock()
+		defer fr.Unlock()
+
 		if status, has := fr.statusMap[p.ID()]; has {
 			if status.Height < msg.Height {
 				status.Version = msg.Version
@@ -398,19 +397,20 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 				status.LastHash = msg.LastHash
 			}
 		}
-		fr.Unlock()
 
 		TargetHeight := fr.kn.Provider().Height() + 1
 		for TargetHeight <= msg.Height {
 			if !fr.requestTimer.Exist(TargetHeight) {
-				sm := &chain.RequestMessage{
-					Height: TargetHeight,
+				if !fr.cm.IsExistData(TargetHeight) {
+					sm := &chain.RequestMessage{
+						Height: TargetHeight,
+					}
+					//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send RequestMessage by StatusMessage", sm.Height)
+					if err := p.Send(sm); err != nil {
+						return err
+					}
+					fr.requestTimer.Add(TargetHeight, 10*time.Second, p.ID())
 				}
-				//fr.kn.DebugLog("Formulator", fr.kn.Provider().Height(), "Send RequestMessage", sm.Height)
-				if err := p.Send(sm); err != nil {
-					return err
-				}
-				fr.requestTimer.Add(TargetHeight, 10*time.Second, p.ID())
 			}
 			TargetHeight++
 		}
@@ -435,19 +435,21 @@ func (fr *Formulator) tryRequestNext() {
 
 	TargetHeight := fr.kn.Provider().Height() + 1
 	if !fr.requestTimer.Exist(TargetHeight) {
-		fr.Lock()
-		defer fr.Unlock()
+		if !fr.cm.IsExistData(TargetHeight) {
+			fr.Lock()
+			defer fr.Unlock()
 
-		for id, status := range fr.statusMap {
-			if TargetHeight <= status.Height {
-				sm := &chain.RequestMessage{
-					Height: TargetHeight,
-				}
-				if err := fr.ms.SendTo(id, sm); err != nil {
+			for id, status := range fr.statusMap {
+				if TargetHeight <= status.Height {
+					sm := &chain.RequestMessage{
+						Height: TargetHeight,
+					}
+					if err := fr.ms.SendTo(id, sm); err != nil {
+						return
+					}
+					fr.requestTimer.Add(TargetHeight, 10*time.Second, id)
 					return
 				}
-				fr.requestTimer.Add(TargetHeight, 10*time.Second, id)
-				return
 			}
 		}
 	}
@@ -456,12 +458,7 @@ func (fr *Formulator) tryRequestNext() {
 func (fr *Formulator) messageCreator(r io.Reader, t message.Type) (message.Message, error) {
 	switch t {
 	case message_def.BlockReqMessageType:
-		p := &message_def.BlockReqMessage{
-			PrevData: &chain.Data{
-				Header: fr.kn.Provider().CreateHeader(),
-				Body:   fr.kn.Provider().CreateBody(),
-			},
-		}
+		p := &message_def.BlockReqMessage{}
 		if _, err := p.ReadFrom(r); err != nil {
 			return nil, err
 		}

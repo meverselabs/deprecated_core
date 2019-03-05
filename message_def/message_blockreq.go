@@ -7,7 +7,6 @@ import (
 	"github.com/fletaio/common/hash"
 	"github.com/fletaio/common/util"
 
-	"github.com/fletaio/framework/chain"
 	"github.com/fletaio/framework/message"
 )
 
@@ -18,7 +17,6 @@ type BlockReqMessage struct {
 	TimeoutCount         uint32
 	Formulator           common.Address
 	FormulatorPublicHash common.PublicHash
-	PrevData             *chain.Data
 }
 
 // Type returns the type of the message
@@ -54,19 +52,6 @@ func (b *BlockReqMessage) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	HasPrevData := (b.PrevData != nil)
-	if n, err := util.WriteBool(w, HasPrevData); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
-	if HasPrevData {
-		if n, err := b.PrevData.WriteTo(w); err != nil {
-			return wrote, err
-		} else {
-			wrote += n
-		}
-	}
 	return wrote, nil
 }
 
@@ -99,18 +84,6 @@ func (b *BlockReqMessage) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-	}
-	if v, n, err := util.ReadBool(r); err != nil {
-		return read, err
-	} else {
-		read += n
-		if v {
-			if n, err := b.PrevData.ReadFrom(r); err != nil {
-				return read, err
-			} else {
-				read += n
-			}
-		}
 	}
 	return read, nil
 }
