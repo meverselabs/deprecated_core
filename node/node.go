@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/fletaio/core/txpool"
+
 	"github.com/fletaio/core/block"
 	"github.com/fletaio/core/data"
 	"github.com/fletaio/core/transaction"
@@ -192,7 +194,7 @@ func (nd *Node) handleMessage(p mesh.Peer, m message.Message) error {
 			pErrCh:  &errCh,
 		}
 		err := <-errCh
-		if err != kernel.ErrInvalidUTXO {
+		if err != kernel.ErrInvalidUTXO && err != txpool.ErrExistTransaction {
 			return err
 		}
 		return nil

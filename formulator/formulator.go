@@ -12,6 +12,7 @@ import (
 	"github.com/fletaio/core/data"
 	"github.com/fletaio/core/kernel"
 	"github.com/fletaio/core/transaction"
+	"github.com/fletaio/core/txpool"
 
 	"github.com/fletaio/common"
 	"github.com/fletaio/core/block"
@@ -424,7 +425,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 			pErrCh:  &errCh,
 		}
 		err := <-errCh
-		if err != kernel.ErrInvalidUTXO {
+		if err != kernel.ErrInvalidUTXO && err != txpool.ErrExistTransaction {
 			return err
 		}
 		return nil
