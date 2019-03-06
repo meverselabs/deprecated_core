@@ -191,7 +191,11 @@ func (nd *Node) handleMessage(p mesh.Peer, m message.Message) error {
 			PeerID:  "",
 			pErrCh:  &errCh,
 		}
-		return <-errCh
+		err := <-errCh
+		if err != kernel.ErrInvalidUTXO {
+			return err
+		}
+		return nil
 	default:
 		return message.ErrUnhandledMessage
 	}
