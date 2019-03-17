@@ -16,21 +16,27 @@ const (
 
 // VoteRound is data for the voting round
 type VoteRound struct {
+	RoundState                 int
 	VoteTargetHeight           uint32
+	VoteFailCount              int
+	RoundVoteMessageMap        map[common.PublicHash]*RoundVoteMessage
 	PublicHash                 common.PublicHash
 	RoundVoteAckMessageMap     map[common.PublicHash]*RoundVoteAckMessage
 	MinRoundVoteAck            *RoundVoteAck
+	RoundVoteWaitMap           map[common.PublicHash]*RoundVoteMessage
 	RoundVoteAckMessageWaitMap map[common.PublicHash]*RoundVoteAckMessage
 	BlockRounds                []*BlockRound
 	ClosedBlockRounds          []*BlockRound
 }
 
 // NewVoteRound returns a VoteRound
-func NewVoteRound(TargetHeight uint32, PublicHash common.PublicHash, MaxBlocksPerFormulator uint32) *VoteRound {
+func NewVoteRound(TargetHeight uint32, MaxBlocksPerFormulator uint32) *VoteRound {
 	vr := &VoteRound{
+		RoundState:                 RoundVoteState,
 		VoteTargetHeight:           TargetHeight,
-		PublicHash:                 PublicHash,
+		RoundVoteMessageMap:        map[common.PublicHash]*RoundVoteMessage{},
 		RoundVoteAckMessageMap:     map[common.PublicHash]*RoundVoteAckMessage{},
+		RoundVoteWaitMap:           map[common.PublicHash]*RoundVoteMessage{},
 		RoundVoteAckMessageWaitMap: map[common.PublicHash]*RoundVoteAckMessage{},
 		BlockRounds:                make([]*BlockRound, 0, MaxBlocksPerFormulator),
 		ClosedBlockRounds:          make([]*BlockRound, 0, MaxBlocksPerFormulator),
