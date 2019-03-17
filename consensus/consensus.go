@@ -315,7 +315,7 @@ func (cs *Consensus) forwardCandidates(TimeoutCount int) error {
 	// increase phase
 	for i := 0; i < TimeoutCount; i++ {
 		m := cs.candidates[0]
-		m.SetPhase(m.Phase() + 1)
+		m.SetPhase(m.Phase() + 2)
 		idx := sort.Search(len(cs.candidates)-1, func(i int) bool {
 			return m.Less(cs.candidates[i+1])
 		})
