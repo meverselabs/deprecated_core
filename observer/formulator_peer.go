@@ -42,44 +42,30 @@ func NewFormulatorPeer(conn net.Conn, pubhash common.PublicHash, address common.
 		writeChan: make(chan []byte, 10),
 	}
 	go func() {
+		defer p.conn.Close()
+
 		for {
 			select {
 			case bs := <-p.writeChan:
-				errCh := make(chan error)
-				var wg sync.WaitGroup
-				wg.Add(1)
-				go func() {
-					wg.Done()
-					var buffer bytes.Buffer
-					buffer.Write(bs[:8])          // message type
-					buffer.Write(make([]byte, 4)) //size of gzip
-					if len(bs) > 8 {
-						zw := gzip.NewWriter(&buffer)
-						zw.Write(bs[8:])
-						zw.Flush()
-						zw.Close()
-					}
-					wbs := buffer.Bytes()
-					binary.LittleEndian.PutUint32(wbs[8:], uint32(len(wbs)-12))
-					_, err := p.conn.Write(wbs)
-					if err != nil {
-						p.conn.Close()
-					}
-					atomic.AddUint64(&p.writeTotal, uint64(len(wbs)))
-					errCh <- err
-				}()
-				wg.Wait()
-				deadTimer := time.NewTimer(5 * time.Second)
-				select {
-				case <-deadTimer.C:
-					p.conn.Close()
-					return
-				case err := <-errCh:
-					deadTimer.Stop()
-					if err != nil {
-						return
-					}
+				var buffer bytes.Buffer
+				buffer.Write(bs[:8])          // message type
+				buffer.Write(make([]byte, 4)) //size of gzip
+				if len(bs) > 8 {
+					zw := gzip.NewWriter(&buffer)
+					zw.Write(bs[8:])
+					zw.Flush()
+					zw.Close()
 				}
+				wbs := buffer.Bytes()
+				binary.LittleEndian.PutUint32(wbs[8:], uint32(len(wbs)-12))
+				if err := p.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+					return
+				}
+				_, err := p.conn.Write(wbs)
+				if err != nil {
+					return
+				}
+				atomic.AddUint64(&p.writeTotal, uint64(len(wbs)))
 			}
 		}
 	}()
