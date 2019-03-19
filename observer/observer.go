@@ -326,6 +326,9 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 
 		if old, has := ob.round.RoundVoteMessageMap[SenderPublicHash]; has {
 			if msg.RoundVote.Formulator.Equal(old.RoundVote.Formulator) {
+				if !msg.RoundVote.IsReply {
+					ob.sendRoundVoteTo(SenderPublicHash)
+				}
 				return ErrAlreadyVoted
 			}
 		}
@@ -411,6 +414,9 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 
 		if old, has := ob.round.RoundVoteAckMessageMap[SenderPublicHash]; has {
 			if msg.RoundVoteAck.Formulator.Equal(old.RoundVoteAck.Formulator) {
+				if !msg.RoundVoteAck.IsReply {
+					ob.sendRoundVoteAckTo(SenderPublicHash)
+				}
 				return ErrAlreadyVoted
 			}
 		}
@@ -559,6 +565,9 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 		}
 
 		if _, has := br.BlockVoteMap[SenderPublicHash]; has {
+			if !msg.BlockVote.IsReply {
+				ob.sendBlockVoteTo(br, SenderPublicHash)
+			}
 			return ErrAlreadyVoted
 		}
 		br.BlockVoteMap[SenderPublicHash] = msg.BlockVote
