@@ -147,7 +147,7 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 				}
 			}
 			if len(ob.adjustFormulatorMap()) > 0 {
-				if ob.round.RoundState == RoundVoteState {
+				if ob.round.RoundState == RoundVoteState && !ob.round.HasForwardVote {
 					ob.sendRoundVote()
 				} else {
 					ob.round.VoteFailCount++
@@ -285,7 +285,7 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 			}
 		}
 
-		//ob.kn.DebugLog("Observer", ob.round.RoundState, ob.kn.Provider().Height(), msg.RoundVote.VoteTargetHeight, "RoundVoteMessage")
+		//ob.kn.DebugLog("Observer", SenderPublicHash, ob.round.RoundState, ob.kn.Provider().Height(), msg.RoundVote.VoteTargetHeight, "RoundVoteMessage", ob.round.VoteTargetHeight, len(ob.round.RoundVoteMessageMap), len(ob.Config.ObserverKeyMap)/2+2)
 		if !msg.RoundVote.ChainCoord.Equal(ob.kn.ChainCoord()) {
 			return ErrInvalidVote
 		}
@@ -299,10 +299,13 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 						Height:   cp.Height(),
 						LastHash: cp.LastHash(),
 					})
+				} else {
+					ob.round.HasForwardVote = true
 				}
 			}
 			return ErrInvalidVote
 		}
+
 		if ob.round.RoundState != RoundVoteState {
 			if !msg.RoundVote.IsReply {
 				ob.sendRoundVoteTo(SenderPublicHash)
@@ -325,7 +328,7 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 		}
 
 		if old, has := ob.round.RoundVoteMessageMap[SenderPublicHash]; has {
-			if msg.RoundVote.Formulator.Equal(old.RoundVote.Formulator) {
+			if msg.RoundVote.Timestamp <= old.RoundVote.Timestamp {
 				if !msg.RoundVote.IsReply {
 					ob.sendRoundVoteTo(SenderPublicHash)
 				}
@@ -413,7 +416,7 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 		}
 
 		if old, has := ob.round.RoundVoteAckMessageMap[SenderPublicHash]; has {
-			if msg.RoundVoteAck.Formulator.Equal(old.RoundVoteAck.Formulator) {
+			if msg.RoundVoteAck.Timestamp <= old.RoundVoteAck.Timestamp {
 				if !msg.RoundVoteAck.IsReply {
 					ob.sendRoundVoteAckTo(SenderPublicHash)
 				}
@@ -670,7 +673,7 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 				ob.round.VoteFailCount = 0
 				if ob.round.BlockRoundCount() > 0 {
 					br := ob.round.BlockRounds[0]
-					if br.BlockGenMessageWait != nil {
+					if br.BlockGenMessageWait != nil && br.BlockGenMessage == nil {
 						ob.messageChan <- &messageItem{
 							Message: br.BlockGenMessageWait,
 						}
@@ -690,7 +693,7 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 }
 
 func (ob *Observer) handleBlockGenMessage(msg *message_def.BlockGenMessage, raw []byte) error {
-	ob.kn.DebugLog("Observer", ob.kn.Provider().Height(), "BlockGenMessage", msg.Block.Header.Height())
+	//ob.kn.DebugLog("Observer", ob.kn.Provider().Height(), "BlockGenMessage", msg.Block.Header.Height())
 	if msg.Block.Header.Height() < ob.round.VoteTargetHeight {
 		return ErrInvalidVote
 	}
@@ -836,6 +839,7 @@ func (ob *Observer) sendRoundVote() error {
 			TimeoutCount:         uint32(TimeoutCount),
 			Formulator:           Top.Address,
 			FormulatorPublicHash: Top.PublicHash,
+			Timestamp:            uint64(time.Now().UnixNano()),
 			IsReply:              false,
 		},
 	}
@@ -867,7 +871,7 @@ func (ob *Observer) sendRoundVote() error {
 		Message:    nm,
 	}
 
-	//ob.kn.DebugLog("Observer", "Send RoundVote", nm.RoundVote.Formulator, nm.RoundVote.VoteTargetHeight)
+	//ob.kn.DebugLog("Observer", "Send RoundVote", nm.RoundVote.Formulator, nm.RoundVote.VoteTargetHeight, cp.Height())
 	ob.ms.BroadcastMessage(nm)
 	return nil
 }
@@ -889,6 +893,7 @@ func (ob *Observer) sendRoundVoteTo(TargetPubHash common.PublicHash) error {
 			TimeoutCount:         MyMsg.RoundVote.TimeoutCount,
 			Formulator:           MyMsg.RoundVote.Formulator,
 			FormulatorPublicHash: MyMsg.RoundVote.FormulatorPublicHash,
+			Timestamp:            MyMsg.RoundVote.Timestamp,
 			IsReply:              true,
 		},
 	}
@@ -913,6 +918,7 @@ func (ob *Observer) sendRoundVoteAck() error {
 			Formulator:           MinRoundVote.Formulator,
 			FormulatorPublicHash: MinRoundVote.FormulatorPublicHash,
 			PublicHash:           ob.round.PublicHash,
+			Timestamp:            uint64(time.Now().UnixNano()),
 			IsReply:              false,
 		},
 	}
@@ -937,14 +943,18 @@ func (ob *Observer) sendRoundVoteAckTo(TargetPubHash common.PublicHash) error {
 		return nil
 	}
 
-	MinRoundVote := ob.round.RoundVoteMessageMap[ob.round.PublicHash].RoundVote
+	MyMsg, has := ob.round.RoundVoteAckMessageMap[ob.observerPubHash]
+	if !has {
+		return nil
+	}
 	nm := &RoundVoteAckMessage{
 		RoundVoteAck: &RoundVoteAck{
-			VoteTargetHeight:     MinRoundVote.VoteTargetHeight,
-			TimeoutCount:         MinRoundVote.TimeoutCount,
-			Formulator:           MinRoundVote.Formulator,
-			FormulatorPublicHash: MinRoundVote.FormulatorPublicHash,
-			PublicHash:           ob.round.PublicHash,
+			VoteTargetHeight:     MyMsg.RoundVoteAck.VoteTargetHeight,
+			TimeoutCount:         MyMsg.RoundVoteAck.TimeoutCount,
+			Formulator:           MyMsg.RoundVoteAck.Formulator,
+			FormulatorPublicHash: MyMsg.RoundVoteAck.FormulatorPublicHash,
+			PublicHash:           MyMsg.RoundVoteAck.PublicHash,
+			Timestamp:            MyMsg.RoundVoteAck.Timestamp,
 			IsReply:              true,
 		},
 	}

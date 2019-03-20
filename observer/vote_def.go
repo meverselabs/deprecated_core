@@ -16,6 +16,7 @@ type RoundVote struct {
 	TimeoutCount         uint32
 	Formulator           common.Address
 	FormulatorPublicHash common.PublicHash
+	Timestamp            uint64
 	IsReply              bool
 }
 
@@ -53,6 +54,11 @@ func (vt *RoundVote) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 	if n, err := vt.FormulatorPublicHash.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint64(w, vt.Timestamp); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -100,6 +106,12 @@ func (vt *RoundVote) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
+	if v, n, err := util.ReadUint64(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		vt.Timestamp = v
+	}
 	if v, n, err := util.ReadBool(r); err != nil {
 		return read, err
 	} else {
@@ -116,6 +128,7 @@ type RoundVoteAck struct {
 	Formulator           common.Address
 	FormulatorPublicHash common.PublicHash
 	PublicHash           common.PublicHash
+	Timestamp            uint64
 	IsReply              bool
 }
 
@@ -148,6 +161,11 @@ func (vt *RoundVoteAck) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 	if n, err := vt.PublicHash.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint64(w, vt.Timestamp); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -189,6 +207,12 @@ func (vt *RoundVoteAck) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
+	}
+	if v, n, err := util.ReadUint64(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		vt.Timestamp = v
 	}
 	if v, n, err := util.ReadBool(r); err != nil {
 		return read, err

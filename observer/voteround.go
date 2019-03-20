@@ -19,6 +19,7 @@ type VoteRound struct {
 	RoundState                 int
 	VoteTargetHeight           uint32
 	VoteFailCount              int
+	HasForwardVote             bool
 	RoundVoteMessageMap        map[common.PublicHash]*RoundVoteMessage
 	PublicHash                 common.PublicHash
 	RoundVoteAckMessageMap     map[common.PublicHash]*RoundVoteAckMessage
