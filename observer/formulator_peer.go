@@ -39,7 +39,7 @@ func NewFormulatorPeer(conn net.Conn, pubhash common.PublicHash, address common.
 		pubhash:   pubhash,
 		address:   address,
 		startTime: uint64(time.Now().UnixNano()),
-		writeChan: make(chan []byte, 10),
+		writeChan: make(chan []byte, 100),
 	}
 	go func() {
 		defer p.conn.Close()

@@ -29,7 +29,7 @@ func NewPeer(conn net.Conn, pubhash common.PublicHash) *Peer {
 		netAddr:   conn.RemoteAddr().String(),
 		conn:      conn,
 		pubhash:   pubhash,
-		writeChan: make(chan []byte, 10),
+		writeChan: make(chan []byte, 100),
 	}
 	go func() {
 		defer p.conn.Close()

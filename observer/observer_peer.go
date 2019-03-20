@@ -34,7 +34,7 @@ func NewPeer(conn net.Conn, pubhash common.PublicHash) *Peer {
 		conn:      conn,
 		pubhash:   pubhash,
 		startTime: uint64(time.Now().UnixNano()),
-		writeChan: make(chan []byte, 10),
+		writeChan: make(chan []byte, 100),
 	}
 	go func() {
 		defer p.conn.Close()
