@@ -49,7 +49,7 @@ type Formulator struct {
 
 // NewFormulator returns a Formulator
 func NewFormulator(Config *Config, kn *kernel.Kernel) (*Formulator, error) {
-	r, err := router.NewRouter(&Config.Router)
+	r, err := router.NewRouter(&Config.Router, kn.ChainCoord())
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,6 @@ func (fr *Formulator) Run() {
 		for _, v := range fr.Config.SeedNodes {
 			fr.pm.AddNode(v)
 		}
-		fr.pm.EnforceConnect()
 	}()
 	go fr.cm.Run()
 	go fr.ms.Run()

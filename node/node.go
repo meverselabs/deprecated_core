@@ -43,7 +43,7 @@ type Node struct {
 
 // NewNode returns a Node
 func NewNode(Config *Config, kn *kernel.Kernel) (*Node, error) {
-	r, err := router.NewRouter(&Config.Router)
+	r, err := router.NewRouter(&Config.Router, kn.ChainCoord())
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,6 @@ func (nd *Node) Run() {
 		for _, v := range nd.Config.SeedNodes {
 			nd.pm.AddNode(v)
 		}
-		nd.pm.EnforceConnect()
 	}()
 	go nd.cm.Run()
 
