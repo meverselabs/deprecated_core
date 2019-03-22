@@ -461,12 +461,14 @@ func (ob *Observer) handleObserverMessage(SenderPublicHash common.PublicHash, m 
 				ob.round.RoundState = BlockVoteState
 				ob.round.MinRoundVoteAck = MinRoundVoteAck
 
-				LastHeader, err := cp.Header(cp.Height())
-				if err != nil {
-					return err
-				}
-				if LastHeader.(*block.Header).Formulator.Equal(MinRoundVoteAck.Formulator) {
-					ob.round.BlockRounds = ob.round.BlockRounds[:ob.kn.Config.MaxBlocksPerFormulator-ob.kn.BlocksFromSameFormulator()]
+				if cp.Height() > 0 {
+					LastHeader, err := cp.Header(cp.Height())
+					if err != nil {
+						return err
+					}
+					if LastHeader.(*block.Header).Formulator.Equal(MinRoundVoteAck.Formulator) {
+						ob.round.BlockRounds = ob.round.BlockRounds[:ob.kn.Config.MaxBlocksPerFormulator-ob.kn.BlocksFromSameFormulator()]
+					}
 				}
 
 				if ob.round.MinRoundVoteAck.PublicHash.Equal(ob.observerPubHash) {
