@@ -252,6 +252,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 		start := time.Now().UnixNano()
 		StartBlockTime := uint64(time.Now().UnixNano())
 		bNoDelay := false
+		TargetBlocksInTurn := fr.kn.Config.MaxBlocksPerFormulator
 		if Height > 0 {
 			LastHeader, err := cp.Header(Height)
 			if err != nil {
@@ -262,8 +263,11 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 			} else if LastHeader.Timestamp() < uint64(fr.kn.Config.MaxBlocksPerFormulator)*uint64(500*time.Millisecond) {
 				bNoDelay = true
 			}
+			if LastHeader.(*block.Header).Formulator.Equal(fr.Config.Formulator) {
+				TargetBlocksInTurn -= fr.kn.BlocksFromSameFormulator()
+			}
 		}
-		for i := uint32(0); i < fr.kn.Config.MaxBlocksPerFormulator; i++ {
+		for i := uint32(0); i < TargetBlocksInTurn; i++ {
 			var TimeoutCount uint32
 			if i == 0 {
 				ctx = data.NewContext(fr.kn.Loader())
