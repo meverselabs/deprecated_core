@@ -32,6 +32,24 @@ func NewMemoryKey() (*MemoryKey, error) {
 	return ac, nil
 }
 
+// NewMemoryKeyFromString parse memory key by the hex string
+func NewMemoryKeyFromString(sk string) (*MemoryKey, error) {
+	ac := &MemoryKey{
+		privkey: &ecdsa.PrivateKey{
+			PublicKey: ecdsa.PublicKey{
+				Curve: ecrypto.S256(),
+			},
+			D: new(big.Int),
+		},
+	}
+	ac.privkey.D.SetString(sk, 16)
+	ac.privkey.PublicKey.X, ac.privkey.PublicKey.Y = ac.privkey.Curve.ScalarBaseMult(ac.privkey.D.Bytes())
+	if err := ac.calcPubkey(); err != nil {
+		return nil, err
+	}
+	return ac, nil
+}
+
 // NewMemoryKeyFromBytes parse memory key by the byte array
 func NewMemoryKeyFromBytes(pk []byte) (*MemoryKey, error) {
 	ac := &MemoryKey{
