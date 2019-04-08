@@ -413,7 +413,7 @@ func (fr *Formulator) handleMessage(p mesh.Peer, m message.Message, RetryCount i
 					if err := p.Send(sm); err != nil {
 						return err
 					}
-					fr.requestTimer.Add(TargetHeight, 10*time.Second, p.ID())
+					fr.requestTimer.Add(TargetHeight, 10*time.Second, p, p.ID())
 				}
 			}
 			TargetHeight++
@@ -455,7 +455,7 @@ func (fr *Formulator) tryRequestNext() {
 					if err := fr.ms.SendTo(id, sm); err != nil {
 						return
 					}
-					fr.requestTimer.Add(TargetHeight, 10*time.Second, id)
+					fr.requestTimer.Add(TargetHeight, 10*time.Second, nil, id)
 					return
 				}
 			}
