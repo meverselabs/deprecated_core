@@ -61,7 +61,7 @@ func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 	Height := kn.Provider().Height()
 	ob := &Observer{
 		Config:          Config,
-		obLock:          router.NewNamedLock("ConnMap"),
+		obLock:          router.NewNamedLock("Observer"),
 		observerPubHash: common.NewPublicHash(Config.Key.PublicKey()),
 		round:           NewVoteRound(Height+1, kn.Config.MaxBlocksPerFormulator),
 		ignoreMap:       map[common.Address]int64{},
