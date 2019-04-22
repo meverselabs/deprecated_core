@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/fletaio/framework/router"
+
 	"github.com/fletaio/common/queue"
 	"github.com/fletaio/common/util"
 	"github.com/fletaio/core/consensus"
@@ -32,7 +34,7 @@ type messageItem struct {
 
 // Observer supports the chain validation
 type Observer struct {
-	sync.Mutex
+	obLock               *router.NamedLock
 	Config               *Config
 	observerPubHash      common.PublicHash
 	round                *VoteRound
@@ -59,6 +61,7 @@ func NewObserver(Config *Config, kn *kernel.Kernel) (*Observer, error) {
 	Height := kn.Provider().Height()
 	ob := &Observer{
 		Config:          Config,
+		obLock:          router.NewNamedLock("ConnMap"),
 		observerPubHash: common.NewPublicHash(Config.Key.PublicKey()),
 		round:           NewVoteRound(Height+1, kn.Config.MaxBlocksPerFormulator),
 		ignoreMap:       map[common.Address]int64{},
@@ -86,8 +89,8 @@ func (ob *Observer) Close() {
 	ob.closeLock.Lock()
 	defer ob.closeLock.Unlock()
 
-	ob.Lock()
-	defer ob.Unlock()
+	ob.obLock.Lock("Close")
+	defer ob.obLock.Unlock()
 
 	ob.isClose = true
 	ob.kn.Close()
@@ -96,13 +99,13 @@ func (ob *Observer) Close() {
 
 // Run operates servers and a round voting
 func (ob *Observer) Run(BindObserver string, BindFormulator string) {
-	ob.Lock()
+	ob.obLock.Lock("Run")
 	if ob.isRunning {
-		ob.Unlock()
+		ob.obLock.Unlock()
 		return
 	}
 	ob.isRunning = true
-	ob.Unlock()
+	ob.obLock.Unlock()
 
 	go ob.ms.Run(BindObserver)
 	go ob.fs.Run(BindFormulator)
@@ -117,19 +120,19 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 			for v != nil {
 				item := v.(*messageItem)
 				if msg, is := item.Message.(*message_def.BlockGenMessage); is {
-					ob.Lock()
+					ob.obLock.Lock("Run queueTimer msg is blockgenmessage")
 					ob.handleBlockGenMessage(msg, item.Raw)
-					ob.Unlock()
+					ob.obLock.Unlock()
 				} else {
-					ob.Lock()
+					ob.obLock.Lock("Run queueTimer msg is not blockgenmessage")
 					ob.handleObserverMessage(item.PublicHash, item.Message)
-					ob.Unlock()
+					ob.obLock.Unlock()
 				}
 				v = ob.messageQueue.Pop()
 			}
 			queueTimer.Reset(10 * time.Millisecond)
 		case <-voteTimer.C:
-			ob.Lock()
+			ob.obLock.Lock("Run voteTimer")
 			ob.kn.DebugLog("Observer", ob.kn.Provider().Height(), "Current State", ob.round.RoundState, len(ob.adjustFormulatorMap()), ob.fs.PeerCount(), (time.Now().UnixNano()-ob.prevRoundEndTime)/int64(time.Millisecond))
 			lastestProcessHeight := atomic.LoadUint32(&ob.lastestProcessHeight)
 			if lastestProcessHeight >= ob.round.VoteTargetHeight {
@@ -181,7 +184,7 @@ func (ob *Observer) Run(BindObserver string, BindFormulator string) {
 					}
 				}
 			}
-			ob.Unlock()
+			ob.obLock.Unlock()
 
 			voteTimer.Reset(100 * time.Millisecond)
 		case <-ob.runEnd:
@@ -225,8 +228,8 @@ func (ob *Observer) OnRecv(p mesh.Peer, r io.Reader, t message.Type) error {
 
 			if msg, is := m.(*chain.RequestMessage); is {
 				if fp, is := p.(*FormulatorPeer); is {
-					ob.Lock()
-					defer ob.Unlock()
+					ob.obLock.Lock("OnRecv msg is RequestMessage")
+					defer ob.obLock.Unlock()
 
 					enable := false
 
