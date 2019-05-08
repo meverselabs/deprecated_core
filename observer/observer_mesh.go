@@ -111,9 +111,32 @@ func (ms *ObserverMesh) Run(BindAddress string) {
 }
 
 // RemovePeer removes peers from the mesh
-func (ms *ObserverMesh) RemovePeer(p *Peer, peerHash map[common.PublicHash]*Peer) {
+func (ms *ObserverMesh) RemovePeer(p *Peer) {
 	ms.Lock()
-	delete(peerHash, p.pubhash)
+	pc, hasClient := ms.clientPeerMap[p.pubhash]
+	if hasClient {
+		delete(ms.clientPeerMap, p.pubhash)
+	}
+	ps, hasServer := ms.serverPeerMap[p.pubhash]
+	if hasServer {
+		delete(ms.serverPeerMap, p.pubhash)
+	}
+	ms.Unlock()
+
+	if hasClient {
+		pc.conn.Close()
+		ms.handler.OnDisconnected(pc)
+	}
+	if hasServer {
+		ps.conn.Close()
+		ms.handler.OnDisconnected(ps)
+	}
+}
+
+// RemovePeerInMap removes peers from the mesh in the map
+func (ms *ObserverMesh) RemovePeerInMap(p *Peer, peerMap map[common.PublicHash]*Peer) {
+	ms.Lock()
+	delete(peerMap, p.pubhash)
 	ms.Unlock()
 
 	p.conn.Close()
@@ -124,13 +147,10 @@ func (ms *ObserverMesh) RemovePeer(p *Peer, peerHash map[common.PublicHash]*Peer
 func (ms *ObserverMesh) SendTo(PublicHash common.PublicHash, m message.Message) error {
 	ms.Lock()
 	var p *Peer
-	targetMap := map[common.PublicHash]*Peer{}
 	if cp, has := ms.clientPeerMap[PublicHash]; has {
 		p = cp
-		targetMap = ms.clientPeerMap
 	} else if sp, has := ms.serverPeerMap[PublicHash]; has {
 		p = sp
-		targetMap = ms.serverPeerMap
 	}
 	ms.Unlock()
 	if p == nil {
@@ -139,7 +159,7 @@ func (ms *ObserverMesh) SendTo(PublicHash common.PublicHash, m message.Message) 
 
 	if err := p.Send(m); err != nil {
 		log.Println(err)
-		ms.RemovePeer(p, targetMap)
+		ms.RemovePeer(p)
 	}
 	return nil
 }
@@ -147,22 +167,19 @@ func (ms *ObserverMesh) SendTo(PublicHash common.PublicHash, m message.Message) 
 // BroadcastRaw sends a message to all peers
 func (ms *ObserverMesh) BroadcastRaw(bs []byte) error {
 	peerMap := map[common.PublicHash]*Peer{}
-	targetMap := map[common.PublicHash]map[common.PublicHash]*Peer{}
 	ms.Lock()
 	for _, p := range ms.clientPeerMap {
 		peerMap[p.pubhash] = p
-		targetMap[p.pubhash] = ms.clientPeerMap
 	}
 	for _, p := range ms.serverPeerMap {
 		peerMap[p.pubhash] = p
-		targetMap[p.pubhash] = ms.serverPeerMap
 	}
 	ms.Unlock()
 
-	for pubhash, p := range peerMap {
+	for _, p := range peerMap {
 		if err := p.SendRaw(bs); err != nil {
 			log.Println(err)
-			ms.RemovePeer(p, targetMap[pubhash])
+			ms.RemovePeer(p)
 		}
 	}
 	runtime.Gosched()
@@ -181,22 +198,19 @@ func (ms *ObserverMesh) BroadcastMessage(m message.Message) error {
 	data := buffer.Bytes()
 
 	peerMap := map[common.PublicHash]*Peer{}
-	targetMap := map[common.PublicHash]map[common.PublicHash]*Peer{}
 	ms.Lock()
 	for _, p := range ms.clientPeerMap {
 		peerMap[p.pubhash] = p
-		targetMap[p.pubhash] = ms.clientPeerMap
 	}
 	for _, p := range ms.serverPeerMap {
 		peerMap[p.pubhash] = p
-		targetMap[p.pubhash] = ms.serverPeerMap
 	}
 	ms.Unlock()
 
-	for pubhash, p := range peerMap {
+	for _, p := range peerMap {
 		if err := p.SendRaw(data); err != nil {
 			log.Println(err)
-			ms.RemovePeer(p, targetMap[pubhash])
+			ms.RemovePeer(p)
 		}
 	}
 	runtime.Gosched()
@@ -232,9 +246,9 @@ func (ms *ObserverMesh) client(Address string, TargetPubHash common.PublicHash) 
 	ms.clientPeerMap[pubhash] = p
 	ms.Unlock()
 	if has {
-		ms.RemovePeer(old, ms.clientPeerMap)
+		ms.RemovePeerInMap(old, ms.clientPeerMap)
 	}
-	defer ms.RemovePeer(p, ms.clientPeerMap)
+	defer ms.RemovePeerInMap(p, ms.clientPeerMap)
 
 	if err := ms.handleConnection(p); err != nil {
 		log.Println("[handleConnection]", err)
@@ -276,9 +290,9 @@ func (ms *ObserverMesh) server(BindAddress string) error {
 			ms.serverPeerMap[pubhash] = p
 			ms.Unlock()
 			if has {
-				ms.RemovePeer(old, ms.serverPeerMap)
+				ms.RemovePeerInMap(old, ms.serverPeerMap)
 			}
-			defer ms.RemovePeer(p, ms.serverPeerMap)
+			defer ms.RemovePeerInMap(p, ms.serverPeerMap)
 
 			if err := ms.handleConnection(p); err != nil {
 				log.Println("[handleConnection]", err)
@@ -300,11 +314,11 @@ func (ms *ObserverMesh) handleConnection(p *Peer) error {
 			select {
 			case <-pingTicker.C:
 				if err := p.Send(&message_def.PingMessage{}); err != nil {
-					p.conn.Close()
+					ms.RemovePeer(p)
 					return
 				}
 				if atomic.AddUint64(&pingCount, 1) > pingCountLimit {
-					p.conn.Close()
+					ms.RemovePeer(p)
 					return
 				}
 			}
