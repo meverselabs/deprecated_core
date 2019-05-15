@@ -9,6 +9,7 @@ import (
 	"github.com/fletaio/common/hash"
 	"github.com/fletaio/common/util"
 	"github.com/fletaio/core/account"
+	"github.com/fletaio/core/event"
 	"github.com/fletaio/core/transaction"
 )
 
@@ -65,6 +66,11 @@ func (ctx *Context) Accounter() *Accounter {
 // Transactor returns the transactor of the target chain
 func (ctx *Context) Transactor() *Transactor {
 	return ctx.loader.Transactor()
+}
+
+// Eventer returns the eventer of the target chain
+func (ctx *Context) Eventer() *Eventer {
+	return ctx.loader.Eventer()
 }
 
 // TargetHeight returns the recorded target height when context generation
@@ -159,6 +165,13 @@ func (ctx *Context) DeleteUTXO(id uint64) error {
 	return ctx.Top().DeleteUTXO(id)
 }
 
+// EmitEvent creates the event to the top snapshot
+func (ctx *Context) EmitEvent(e event.Event) error {
+	ctx.isLatestHash = false
+	return ctx.Top().EmitEvent(e)
+}
+
+// Dump prints the top context data of the context
 func (ctx *Context) Dump() string {
 	return ctx.Top().Dump()
 }
@@ -220,6 +233,10 @@ func (ctx *Context) Commit(sn int) {
 			delete(top.CreatedUTXOMap, k)
 			top.DeletedUTXOMap[k] = v
 		}
+		for _, v := range ctd.Events {
+			top.Events = append(top.Events, v)
+		}
+		top.EventIndex = ctd.EventIndex
 	}
 }
 
@@ -244,6 +261,8 @@ type ContextData struct {
 	UTXOMap               map[uint64]*transaction.UTXO
 	CreatedUTXOMap        map[uint64]*transaction.TxOut
 	DeletedUTXOMap        map[uint64]bool
+	Events                []event.Event
+	EventIndex            uint16
 	isTop                 bool
 }
 
@@ -264,6 +283,8 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 		UTXOMap:               map[uint64]*transaction.UTXO{},
 		CreatedUTXOMap:        map[uint64]*transaction.TxOut{},
 		DeletedUTXOMap:        map[uint64]bool{},
+		Events:                []event.Event{},
+		EventIndex:            Parent.EventIndex,
 		isTop:                 true,
 	}
 	return ctd
@@ -455,6 +476,14 @@ func (ctd *ContextData) Hash() hash.Hash256 {
 		sort.Sort(uint64Slice(keys))
 		for _, k := range keys {
 			if _, err := util.WriteUint64(&buffer, k); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("Events")
+	if len(ctd.Events) > 0 {
+		for _, e := range ctd.Events {
+			if _, err := e.WriteTo(&buffer); err != nil {
 				panic(err)
 			}
 		}
@@ -752,6 +781,15 @@ func (ctd *ContextData) DeleteUTXO(id uint64) error {
 	return nil
 }
 
+// EmitEvent creates the event to the top snapshot
+func (ctd *ContextData) EmitEvent(e event.Event) error {
+	e.SetIndex(ctd.EventIndex)
+	ctd.EventIndex++
+	ctd.Events = append(ctd.Events, e)
+	return nil
+}
+
+// Dump prints the context data
 func (ctd *ContextData) Dump() string {
 	var buffer bytes.Buffer
 	buffer.WriteString("SeqMap\n")
@@ -954,6 +992,18 @@ func (ctd *ContextData) Dump() string {
 		sort.Sort(uint64Slice(keys))
 		for _, k := range keys {
 			buffer.WriteString(strconv.FormatInt(int64(k), 10))
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("Events\n")
+	{
+		for _, v := range ctd.Events {
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
 			buffer.WriteString("\n")
 		}
 	}

@@ -90,7 +90,7 @@ func (act *Accounter) NameByType(t account.Type) (string, error) {
 	if item, has := act.typeMap[t]; has {
 		return item.Name, nil
 	} else {
-		return "", ErrUnknownTransactionType
+		return "", ErrUnknownAccountType
 	}
 }
 

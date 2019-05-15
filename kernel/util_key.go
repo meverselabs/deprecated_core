@@ -19,6 +19,7 @@ var (
 	tagAccountData    = []byte{2, 4}
 	tagUTXO           = []byte{3, 0}
 	tagCustomData     = []byte{4, 0}
+	tagEvent          = []byte{5, 0}
 )
 
 func toHeightDataKey(height uint32) []byte {
@@ -99,5 +100,12 @@ func toCustomData(key string) []byte {
 	bs := make([]byte, 2+len(key))
 	copy(bs, tagCustomData)
 	copy(bs[2:], []byte(key))
+	return bs
+}
+
+func toEventKey(id uint64) []byte {
+	bs := make([]byte, 10)
+	copy(bs, tagEvent)
+	binary.LittleEndian.PutUint64(bs[2:], id)
 	return bs
 }

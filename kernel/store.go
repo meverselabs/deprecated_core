@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dgraph-io/badger"
 	"github.com/fletaio/common"
 	"github.com/fletaio/common/hash"
 	"github.com/fletaio/common/util"
@@ -14,9 +15,9 @@ import (
 	"github.com/fletaio/core/block"
 	"github.com/fletaio/core/data"
 	"github.com/fletaio/core/db"
+	"github.com/fletaio/core/event"
 	"github.com/fletaio/core/transaction"
 	"github.com/fletaio/framework/chain"
-	"github.com/dgraph-io/badger"
 )
 
 // Store saves the target chain state
@@ -27,6 +28,7 @@ type Store struct {
 	version    uint16
 	accounter  *data.Accounter
 	transactor *data.Transactor
+	eventer    *data.Eventer
 	SeqMapLock sync.Mutex
 	SeqMap     map[common.Address]uint64
 	cache      storeCache
@@ -43,7 +45,7 @@ type storeCache struct {
 }
 
 // NewStore returns a Store
-func NewStore(path string, version uint16, act *data.Accounter, tran *data.Transactor, bRecover bool) (*Store, error) {
+func NewStore(path string, version uint16, act *data.Accounter, tran *data.Transactor, evt *data.Eventer, bRecover bool) (*Store, error) {
 	if !act.ChainCoord().Equal(tran.ChainCoord()) {
 		return nil, ErrInvalidChainCoord
 	}
@@ -88,6 +90,7 @@ func NewStore(path string, version uint16, act *data.Accounter, tran *data.Trans
 		version:    version,
 		accounter:  act,
 		transactor: tran,
+		eventer:    evt,
 		SeqMap:     map[common.Address]uint64{},
 	}, nil
 }
@@ -134,6 +137,11 @@ func (st *Store) Accounter() *data.Accounter {
 // Transactor returns the transactor of the target chain
 func (st *Store) Transactor() *data.Transactor {
 	return st.transactor
+}
+
+// Eventer returns the eventer of the target chain
+func (st *Store) Eventer() *data.Eventer {
+	return st.eventer
 }
 
 // TargetHeight returns the target height of the target chain
@@ -726,6 +734,42 @@ func (st *Store) DeleteCustomData(key string) error {
 	})
 }
 
+// Events returns all events by conditions
+func (st *Store) Events(From uint32, To uint32) ([]event.Event, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
+	list := []event.Event{}
+	if err := st.db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+		tagBegin := toEventKey(event.MarshalID(common.NewCoordinate(From, 0), 0))
+		tagEnd := toEventKey(event.MarshalID(common.NewCoordinate(To, 65535), 65535))
+		for it.Seek(tagBegin); it.ValidForPrefix(tagEnd); it.Next() {
+			item := it.Item()
+			value, err := item.ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+			acc, err := st.eventer.NewByType(event.Type(util.BytesToUint64(value[:8])))
+			if err != nil {
+				return err
+			}
+			if _, err := acc.ReadFrom(bytes.NewReader(value[8:])); err != nil {
+				return err
+			}
+			list = append(list, acc)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // StoreGenesis stores the genesis data
 func (st *Store) StoreGenesis(genHash hash.Hash256, ctd *data.ContextData, customHash map[string][]byte) error {
 	st.closeLock.RLock()
@@ -909,6 +953,18 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 	}
 	for k := range ctd.DeletedUTXOMap {
 		if err := txn.Delete(toUTXOKey(k)); err != nil {
+			return err
+		}
+	}
+	for _, v := range ctd.Events {
+		var buffer bytes.Buffer
+		if _, err := buffer.Write(util.Uint64ToBytes(uint64(v.Type()))); err != nil {
+			return err
+		}
+		if _, err := v.WriteTo(&buffer); err != nil {
+			return err
+		}
+		if err := txn.Set(toEventKey(event.MarshalID(v.Coord(), v.Index())), buffer.Bytes()); err != nil {
 			return err
 		}
 	}

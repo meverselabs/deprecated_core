@@ -43,6 +43,11 @@ func (cc *cache) Transactor() *Transactor {
 	return cc.ctx.Transactor()
 }
 
+// Eventer returns the eventer of the target chain
+func (cc *cache) Eventer() *Eventer {
+	return cc.ctx.Eventer()
+}
+
 // TargetHeight returns cached target height when context generation
 func (cc *cache) TargetHeight() uint32 {
 	return cc.ctx.TargetHeight()

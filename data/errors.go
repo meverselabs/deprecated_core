@@ -8,6 +8,7 @@ var (
 	ErrNotExistAccount        = errors.New("not exist account")
 	ErrExistUTXO              = errors.New("exist utxo")
 	ErrNotExistUTXO           = errors.New("not exist utxo")
+	ErrNotExistEvent          = errors.New("not exist event")
 	ErrDoubleSpent            = errors.New("double spent")
 	ErrUnknownAccountType     = errors.New("unknown account type")
 	ErrNotExistHandler        = errors.New("not exist handler")
@@ -16,4 +17,5 @@ var (
 	ErrUnknownTransactionType = errors.New("unknown transaction type")
 	ErrNotExistTransactor     = errors.New("not exist transactor")
 	ErrInvalidChainCoordinate = errors.New("invalid chain coordinate")
+	ErrUnknownEventType       = errors.New("unknown event type")
 )

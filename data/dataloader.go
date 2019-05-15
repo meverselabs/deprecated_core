@@ -12,6 +12,7 @@ type Loader interface {
 	ChainCoord() *common.Coordinate
 	Accounter() *Accounter
 	Transactor() *Transactor
+	Eventer() *Eventer
 	TargetHeight() uint32
 	LastHash() hash.Hash256
 	Seq(addr common.Address) uint64
@@ -28,14 +29,16 @@ type emptyLoader struct {
 	coord *common.Coordinate
 	act   *Accounter
 	tran  *Transactor
+	evt   *Eventer
 }
 
 // NewEmptyLoader is used for generating genesis state
-func NewEmptyLoader(coord *common.Coordinate, act *Accounter, tran *Transactor) Loader {
+func NewEmptyLoader(coord *common.Coordinate, act *Accounter, tran *Transactor, evt *Eventer) Loader {
 	return &emptyLoader{
 		coord: coord,
 		act:   act,
 		tran:  tran,
+		evt:   evt,
 	}
 }
 
@@ -52,6 +55,11 @@ func (st *emptyLoader) Accounter() *Accounter {
 // Transactor returns the transactor of the target chain
 func (st *emptyLoader) Transactor() *Transactor {
 	return st.tran
+}
+
+// Eventer returns the eventer of the target chain
+func (st *emptyLoader) Eventer() *Eventer {
+	return st.evt
 }
 
 // TargetHeight returns 0
