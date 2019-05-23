@@ -268,6 +268,10 @@ type ContextData struct {
 
 // NewContextData returns a ContextData
 func NewContextData(loader Loader, Parent *ContextData) *ContextData {
+	var eventIndex uint16
+	if Parent != nil {
+		eventIndex = Parent.EventIndex
+	}
 	ctd := &ContextData{
 		loader:                loader,
 		Parent:                Parent,
@@ -284,7 +288,7 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 		CreatedUTXOMap:        map[uint64]*transaction.TxOut{},
 		DeletedUTXOMap:        map[uint64]bool{},
 		Events:                []event.Event{},
-		EventIndex:            Parent.EventIndex,
+		EventIndex:            eventIndex,
 		isTop:                 true,
 	}
 	return ctd
