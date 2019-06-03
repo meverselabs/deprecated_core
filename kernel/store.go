@@ -892,6 +892,9 @@ func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 		if err := txn.Set(toAccountKey(k), buffer.Bytes()); err != nil {
 			return err
 		}
+		if err := txn.Set(toAccountNameKey(v.Name()), k[:]); err != nil {
+			return err
+		}
 	}
 	for k, v := range ctd.CreatedAccountMap {
 		var buffer bytes.Buffer

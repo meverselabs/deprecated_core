@@ -18,4 +18,5 @@ var (
 	ErrNotExistTransactor     = errors.New("not exist transactor")
 	ErrInvalidChainCoordinate = errors.New("invalid chain coordinate")
 	ErrUnknownEventType       = errors.New("unknown event type")
+	ErrInvalidAccountName     = errors.New("invalid account name")
 )

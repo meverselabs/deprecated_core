@@ -631,6 +631,9 @@ func (ctd *ContextData) IsExistAccountName(Name string) (bool, error) {
 
 // CreateAccount inserts the account
 func (ctd *ContextData) CreateAccount(acc account.Account) error {
+	if len(acc.Name()) < 4 {
+		return ErrInvalidAccountName
+	}
 	if _, err := ctd.Account(acc.Address()); err != nil {
 		if err != ErrNotExistAccount {
 			return err
