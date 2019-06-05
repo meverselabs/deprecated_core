@@ -14,18 +14,14 @@ import (
 )
 
 func init() {
-	data.RegisterTransaction("consensus.CreateFormulation", func(t transaction.Type) transaction.Transaction {
-		return &CreateFormulation{
+	data.RegisterTransaction("consensus.Staking", func(t transaction.Type) transaction.Transaction {
+		return &Staking{
 			Base: transaction.Base{
 				Type_: t,
 			},
 		}
 	}, func(loader data.Loader, t transaction.Transaction, signers []common.PublicHash) error {
-		tx := t.(*CreateFormulation)
-		if len(tx.Name) < 8 || len(tx.Name) > 16 {
-			return ErrInvalidAccountName
-		}
-
+		tx := t.(*Staking)
 		if tx.Seq() <= loader.Seq(tx.From()) {
 			return ErrInvalidSequence
 		}
@@ -40,11 +36,7 @@ func init() {
 		}
 		return nil
 	}, func(ctx *data.Context, Fee *amount.Amount, t transaction.Transaction, coord *common.Coordinate) (ret interface{}, rerr error) {
-		tx := t.(*CreateFormulation)
-		if len(tx.Name) < 8 || len(tx.Name) > 16 {
-			return nil, ErrInvalidAccountName
-		}
-
+		tx := t.(*Staking)
 		sn := ctx.Snapshot()
 		defer ctx.Revert(sn)
 
@@ -53,6 +45,21 @@ func init() {
 		}
 		ctx.AddSeq(tx.From())
 
+		acc, err := ctx.Account(tx.CommunityFormulator)
+		if err != nil {
+			return nil, err
+		}
+		commAcc, is := acc.(*CommunityFormulationAccount)
+		if !is {
+			return nil, ErrInvalidCommunityFormulationAddress
+		}
+		if !commAcc.Policy.MinimumStaking.IsZero() && tx.Amount.Less(commAcc.Policy.MinimumStaking) {
+			return nil, ErrInsufficientStakingAmount
+		}
+		if !commAcc.Policy.MaximumStaking.IsZero() && commAcc.Policy.MaximumStaking.Less(tx.Amount) {
+			return nil, ErrExceedStakingAmount
+		}
+
 		fromAcc, err := ctx.Account(tx.From())
 		if err != nil {
 			return nil, err
@@ -60,62 +67,57 @@ func init() {
 		if err := fromAcc.SubBalance(Fee); err != nil {
 			return nil, err
 		}
-
-		addr := common.NewAddress(coord, 0)
-		if is, err := ctx.IsExistAccount(addr); err != nil {
+		if err := fromAcc.SubBalance(tx.Amount); err != nil {
 			return nil, err
-		} else if is {
-			return nil, ErrExistAddress
-		} else if isn, err := ctx.IsExistAccountName(tx.Name); err != nil {
-			return nil, err
-		} else if isn {
-			return nil, ErrExistAccountName
-		} else {
-			a, err := ctx.Accounter().NewByTypeName("consensus.FormulationAccount")
-			if err != nil {
-				return nil, err
-			}
-			acc := a.(*FormulationAccount)
-			acc.Address_ = addr
-			acc.Name_ = tx.Name
-			ctx.CreateAccount(acc)
 		}
+
+		var fromStakingAmount *amount.Amount
+		if bs := ctx.AccountData(tx.CommunityFormulator, toStakingKey(tx.From())); len(bs) > 0 {
+			fromStakingAmount = amount.NewAmountFromBytes(bs)
+		} else {
+			fromStakingAmount = amount.NewCoinAmount(0, 0)
+		}
+		fromStakingAmount.Add(tx.Amount)
+		ctx.SetAccountData(tx.CommunityFormulator, toStakingKey(tx.From()), fromStakingAmount.Bytes())
+		commAcc.StakingAmount = commAcc.StakingAmount.Add(tx.Amount)
+
 		ctx.Commit(sn)
 		return nil, nil
 	})
 }
 
-// CreateFormulation is a consensus.CreateFormulation
+// Staking is a consensus.Staking
 // It is used to make formulation account
-type CreateFormulation struct {
+type Staking struct {
 	transaction.Base
-	Seq_  uint64
-	From_ common.Address
-	Name  string
+	Seq_                uint64
+	From_               common.Address
+	CommunityFormulator common.Address
+	Amount              *amount.Amount
 }
 
 // IsUTXO returns false
-func (tx *CreateFormulation) IsUTXO() bool {
+func (tx *Staking) IsUTXO() bool {
 	return false
 }
 
 // From returns the creator of the transaction
-func (tx *CreateFormulation) From() common.Address {
+func (tx *Staking) From() common.Address {
 	return tx.From_
 }
 
 // Seq returns the sequence of the transaction
-func (tx *CreateFormulation) Seq() uint64 {
+func (tx *Staking) Seq() uint64 {
 	return tx.Seq_
 }
 
 // Hash returns the hash value of it
-func (tx *CreateFormulation) Hash() hash.Hash256 {
+func (tx *Staking) Hash() hash.Hash256 {
 	return hash.DoubleHashByWriterTo(tx)
 }
 
 // WriteTo is a serialization function
-func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
+func (tx *Staking) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := tx.Base.WriteTo(w); err != nil {
 		return wrote, err
@@ -132,7 +134,12 @@ func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := util.WriteString(w, tx.Name); err != nil {
+	if n, err := tx.CommunityFormulator.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := tx.Amount.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -141,7 +148,7 @@ func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom is a deserialization function
-func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
+func (tx *Staking) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
 		return read, err
@@ -159,17 +166,21 @@ func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if v, n, err := util.ReadString(r); err != nil {
+	if n, err := tx.CommunityFormulator.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
-		tx.Name = v
+	}
+	if n, err := tx.Amount.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
 	}
 	return read, nil
 }
 
 // MarshalJSON is a marshaler function
-func (tx *CreateFormulation) MarshalJSON() ([]byte, error) {
+func (tx *Staking) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.WriteString(`{`)
 	buffer.WriteString(`"type":`)
@@ -200,8 +211,15 @@ func (tx *CreateFormulation) MarshalJSON() ([]byte, error) {
 		buffer.Write(bs)
 	}
 	buffer.WriteString(`,`)
-	buffer.WriteString(`"name":`)
-	if bs, err := json.Marshal(tx.Name); err != nil {
+	buffer.WriteString(`"community_formulator":`)
+	if bs, err := tx.CommunityFormulator.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"amount":`)
+	if bs, err := tx.Amount.MarshalJSON(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)

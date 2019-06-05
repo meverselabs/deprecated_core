@@ -12,15 +12,16 @@ import (
 )
 
 func init() {
-	data.RegisterAccount("consensus.FormulationAccount", func(t account.Type) account.Account {
-		return &FormulationAccount{
+	data.RegisterAccount("consensus.CommunityFormulationAccount", func(t account.Type) account.Account {
+		return &CommunityFormulationAccount{
 			Base: account.Base{
 				Type_:    t,
 				Balance_: amount.NewCoinAmount(0, 0),
 			},
+			StakingAmount: amount.NewCoinAmount(0, 0),
 		}
 	}, func(loader data.Loader, a account.Account, signers []common.PublicHash) error {
-		acc := a.(*FormulationAccount)
+		acc := a.(*CommunityFormulationAccount)
 		if len(signers) != 1 {
 			return ErrInvalidSignerCount
 		}
@@ -32,29 +33,33 @@ func init() {
 	})
 }
 
-// FormulationAccount is a consensus.FormulationAccount
-// It is used to indentify formulator
-type FormulationAccount struct {
+// CommunityFormulationAccount is a consensus.CommunityFormulationAccount
+// It is used to indentify community formulator that supports the staking system
+type CommunityFormulationAccount struct {
 	account.Base
-	KeyHash common.PublicHash
-	Amount  *amount.Amount
+	KeyHash       common.PublicHash
+	Policy        *CommunityPolicy
+	Amount        *amount.Amount
+	StakingAmount *amount.Amount
 }
 
 // Clone returns the clonend value of it
-func (acc *FormulationAccount) Clone() account.Account {
-	return &FormulationAccount{
+func (acc *CommunityFormulationAccount) Clone() account.Account {
+	return &CommunityFormulationAccount{
 		Base: account.Base{
 			Type_:    acc.Type_,
 			Address_: acc.Address_,
 			Balance_: acc.Balance(),
 		},
-		KeyHash: acc.KeyHash.Clone(),
-		Amount:  acc.Amount.Clone(),
+		KeyHash:       acc.KeyHash.Clone(),
+		Policy:        acc.Policy.Clone(),
+		Amount:        acc.Amount.Clone(),
+		StakingAmount: acc.StakingAmount.Clone(),
 	}
 }
 
 // WriteTo is a serialization function
-func (acc *FormulationAccount) WriteTo(w io.Writer) (int64, error) {
+func (acc *CommunityFormulationAccount) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := acc.Base.WriteTo(w); err != nil {
 		return wrote, err
@@ -66,7 +71,17 @@ func (acc *FormulationAccount) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := acc.Policy.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := acc.Amount.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := acc.StakingAmount.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -75,7 +90,7 @@ func (acc *FormulationAccount) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom is a deserialization function
-func (acc *FormulationAccount) ReadFrom(r io.Reader) (int64, error) {
+func (acc *CommunityFormulationAccount) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := acc.Base.ReadFrom(r); err != nil {
 		return read, err
@@ -87,7 +102,17 @@ func (acc *FormulationAccount) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
+	if n, err := acc.Policy.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
 	if n, err := acc.Amount.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if n, err := acc.StakingAmount.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -96,7 +121,7 @@ func (acc *FormulationAccount) ReadFrom(r io.Reader) (int64, error) {
 }
 
 // MarshalJSON is a marshaler function
-func (acc *FormulationAccount) MarshalJSON() ([]byte, error) {
+func (acc *CommunityFormulationAccount) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.WriteString(`{`)
 	buffer.WriteString(`"address":`)
@@ -120,8 +145,22 @@ func (acc *FormulationAccount) MarshalJSON() ([]byte, error) {
 		buffer.Write(bs)
 	}
 	buffer.WriteString(`,`)
+	buffer.WriteString(`"policy":`)
+	if bs, err := acc.Policy.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
 	buffer.WriteString(`"amount":`)
-	if bs, err := acc.Amount.MarshalJSON(); err != nil {
+	if bs, err := acc.StakingAmount.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"staking_amount":`)
+	if bs, err := acc.StakingAmount.MarshalJSON(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)

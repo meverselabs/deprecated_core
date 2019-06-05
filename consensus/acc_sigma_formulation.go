@@ -12,15 +12,15 @@ import (
 )
 
 func init() {
-	data.RegisterAccount("consensus.FormulationAccount", func(t account.Type) account.Account {
-		return &FormulationAccount{
+	data.RegisterAccount("consensus.SigmaFormulationAccount", func(t account.Type) account.Account {
+		return &SigmaFormulationAccount{
 			Base: account.Base{
 				Type_:    t,
 				Balance_: amount.NewCoinAmount(0, 0),
 			},
 		}
 	}, func(loader data.Loader, a account.Account, signers []common.PublicHash) error {
-		acc := a.(*FormulationAccount)
+		acc := a.(*SigmaFormulationAccount)
 		if len(signers) != 1 {
 			return ErrInvalidSignerCount
 		}
@@ -32,17 +32,17 @@ func init() {
 	})
 }
 
-// FormulationAccount is a consensus.FormulationAccount
+// SigmaFormulationAccount is a consensus.SigmaFormulationAccount
 // It is used to indentify formulator
-type FormulationAccount struct {
+type SigmaFormulationAccount struct {
 	account.Base
 	KeyHash common.PublicHash
 	Amount  *amount.Amount
 }
 
 // Clone returns the clonend value of it
-func (acc *FormulationAccount) Clone() account.Account {
-	return &FormulationAccount{
+func (acc *SigmaFormulationAccount) Clone() account.Account {
+	return &SigmaFormulationAccount{
 		Base: account.Base{
 			Type_:    acc.Type_,
 			Address_: acc.Address_,
@@ -54,7 +54,7 @@ func (acc *FormulationAccount) Clone() account.Account {
 }
 
 // WriteTo is a serialization function
-func (acc *FormulationAccount) WriteTo(w io.Writer) (int64, error) {
+func (acc *SigmaFormulationAccount) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := acc.Base.WriteTo(w); err != nil {
 		return wrote, err
@@ -75,7 +75,7 @@ func (acc *FormulationAccount) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom is a deserialization function
-func (acc *FormulationAccount) ReadFrom(r io.Reader) (int64, error) {
+func (acc *SigmaFormulationAccount) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := acc.Base.ReadFrom(r); err != nil {
 		return read, err
@@ -96,7 +96,7 @@ func (acc *FormulationAccount) ReadFrom(r io.Reader) (int64, error) {
 }
 
 // MarshalJSON is a marshaler function
-func (acc *FormulationAccount) MarshalJSON() ([]byte, error) {
+func (acc *SigmaFormulationAccount) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.WriteString(`{`)
 	buffer.WriteString(`"address":`)

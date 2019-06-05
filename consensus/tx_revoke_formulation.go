@@ -25,9 +25,6 @@ func init() {
 		if tx.Seq() <= loader.Seq(tx.From()) {
 			return ErrInvalidSequence
 		}
-		if tx.Heritor.Equal(tx.From()) {
-			return ErrInvalidToAddress
-		}
 
 		fromAcc, err := loader.Account(tx.From())
 		if err != nil {
@@ -52,18 +49,54 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-
 		if err := fromAcc.SubBalance(Fee); err != nil {
 			return nil, err
 		}
 
-		heritorAcc, err := ctx.Account(tx.Heritor)
+		acc, err := ctx.Account(tx.Formulator)
 		if err != nil {
 			return nil, err
 		}
+		switch frAcc := acc.(type) {
+		case *FormulationAccount:
+			fromAcc.AddBalance(frAcc.Amount)
+			fromAcc.AddBalance(fromAcc.Balance())
+		case *OmegaFormulationAccount:
+			fromAcc.AddBalance(frAcc.Amount)
+			fromAcc.AddBalance(fromAcc.Balance())
+		case *SigmaFormulationAccount:
+			fromAcc.AddBalance(frAcc.Amount)
+			fromAcc.AddBalance(fromAcc.Balance())
+		case *CommunityFormulationAccount:
+			fromAcc.AddBalance(frAcc.Amount)
+			keys, err := ctx.AccountDataKeys(tx.Formulator)
+			if err != nil {
+				return nil, err
+			}
+			for _, k := range keys {
+				bs := ctx.AccountData(tx.Formulator, k)
+				if len(bs) == 0 {
+					return nil, ErrInvalidStakingAddress
+				}
+				StakingAmount := amount.NewAmountFromBytes(bs)
+				if frAcc.StakingAmount.Less(StakingAmount) {
+					return nil, ErrCriticalStakingAmount
+				}
+				frAcc.StakingAmount.Sub(StakingAmount)
 
-		heritorAcc.AddBalance(fromAcc.Balance())
-		ctx.DeleteAccount(fromAcc)
+				StakingAccount, err := ctx.Account(fromStakingKey(bs))
+				if err != nil {
+					return nil, err
+				}
+				StakingAccount.AddBalance(StakingAmount)
+			}
+			if !frAcc.StakingAmount.IsZero() {
+				return nil, ErrCriticalStakingAmount
+			}
+		default:
+			return nil, ErrInvalidAccountType
+		}
+		ctx.DeleteAccount(acc)
 
 		ctx.Commit(sn)
 		return nil, nil
@@ -74,9 +107,9 @@ func init() {
 // It is used to remove formulation account and get back staked coin
 type RevokeFormulation struct {
 	transaction.Base
-	Seq_    uint64
-	From_   common.Address
-	Heritor common.Address
+	Seq_       uint64
+	From_      common.Address
+	Formulator common.Address
 }
 
 // IsUTXO returns false
@@ -117,7 +150,7 @@ func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := tx.Heritor.WriteTo(w); err != nil {
+	if n, err := tx.Formulator.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -144,7 +177,7 @@ func (tx *RevokeFormulation) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if n, err := tx.Heritor.ReadFrom(r); err != nil {
+	if n, err := tx.Formulator.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -179,13 +212,6 @@ func (tx *RevokeFormulation) MarshalJSON() ([]byte, error) {
 	buffer.WriteString(`,`)
 	buffer.WriteString(`"from":`)
 	if bs, err := tx.From_.MarshalJSON(); err != nil {
-		return nil, err
-	} else {
-		buffer.Write(bs)
-	}
-	buffer.WriteString(`,`)
-	buffer.WriteString(`"to":`)
-	if bs, err := tx.Heritor.MarshalJSON(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)
