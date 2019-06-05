@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/fletaio/common"
 	"github.com/fletaio/common/hash"
@@ -130,6 +131,11 @@ func (ctx *Context) CreateAccount(acc account.Account) error {
 func (ctx *Context) DeleteAccount(acc account.Account) error {
 	ctx.isLatestHash = false
 	return ctx.Top().DeleteAccount(acc)
+}
+
+// AccountDataKeys returns all data keys of the account in the context
+func (ctx *Context) AccountDataKeys(addr common.Address) ([][]byte, error) {
+	return ctx.Top().AccountDataKeys(addr)
 }
 
 // AccountData returns the account data from the top snapshot
@@ -663,6 +669,47 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 	delete(ctd.AccountMap, acc.Address())
 	delete(ctd.AccountNameMap, acc.Name())
 	return nil
+}
+
+// AccountDataKeys returns all data keys of the account in the context
+func (ctd *ContextData) AccountDataKeys(addr common.Address) ([][]byte, error) {
+	if _, err := ctd.Account(addr); err != nil {
+		return nil, err
+	}
+	keyMap := map[string]bool{}
+	if ctd.Parent != nil {
+		keys, err := ctd.Parent.AccountDataKeys(addr)
+		if err != nil {
+			return nil, err
+		}
+		for _, k := range keys {
+			keyMap[string(k)] = true
+		}
+	} else {
+		ctd.loader.AccountDataKeys(addr)
+		keys, err := ctd.loader.AccountDataKeys(addr)
+		if err != nil {
+			return nil, err
+		}
+		for _, k := range keys {
+			keyMap[string(k)] = true
+		}
+	}
+	for k := range ctd.AccountDataMap {
+		if strings.HasPrefix(k, string(addr[:])) {
+			keyMap[k[len(addr):]] = true
+		}
+	}
+	for k := range ctd.DeletedAccountDataMap {
+		if strings.HasPrefix(k, string(addr[:])) {
+			delete(keyMap, k[len(addr):])
+		}
+	}
+	keys := [][]byte{}
+	for k := range keyMap {
+		keys = append(keys, []byte(k))
+	}
+	return keys, nil
 }
 
 // AccountData returns the account data

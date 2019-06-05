@@ -538,7 +538,8 @@ func (st *Store) AccountDataKeys(addr common.Address) ([][]byte, error) {
 		prefix := toAccountDataKey(string(addr[:]))
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
-			list = append(list, item.Key())
+			key := item.Key()
+			list = append(list, key[len(prefix):])
 		}
 		return nil
 	}); err != nil {

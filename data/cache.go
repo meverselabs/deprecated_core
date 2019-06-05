@@ -8,23 +8,25 @@ import (
 )
 
 type cache struct {
-	ctx            *Context
-	SeqMap         map[common.Address]uint64
-	AccountMap     map[common.Address]account.Account
-	AccountNameMap map[string]common.Address
-	AccountDataMap map[string][]byte
-	UTXOMap        map[uint64]*transaction.UTXO
+	ctx                *Context
+	SeqMap             map[common.Address]uint64
+	AccountMap         map[common.Address]account.Account
+	AccountNameMap     map[string]common.Address
+	AccountDataMap     map[string][]byte
+	AccountDataKeysMap map[common.Address][][]byte
+	UTXOMap            map[uint64]*transaction.UTXO
 }
 
 // NewCache is used for generating genesis state
 func newCache(ctx *Context) *cache {
 	return &cache{
-		ctx:            ctx,
-		SeqMap:         map[common.Address]uint64{},
-		AccountMap:     map[common.Address]account.Account{},
-		AccountNameMap: map[string]common.Address{},
-		AccountDataMap: map[string][]byte{},
-		UTXOMap:        map[uint64]*transaction.UTXO{},
+		ctx:                ctx,
+		SeqMap:             map[common.Address]uint64{},
+		AccountMap:         map[common.Address]account.Account{},
+		AccountNameMap:     map[string]common.Address{},
+		AccountDataMap:     map[string][]byte{},
+		AccountDataKeysMap: map[common.Address][][]byte{},
+		UTXOMap:            map[uint64]*transaction.UTXO{},
 	}
 }
 
@@ -112,6 +114,20 @@ func (cc *cache) IsExistAccountName(Name string) (bool, error) {
 		return true, nil
 	} else {
 		return cc.ctx.loader.IsExistAccountName(Name)
+	}
+}
+
+// AccountDataKeys returns all data keys of the account in the context
+func (cc *cache) AccountDataKeys(addr common.Address) ([][]byte, error) {
+	if keys, has := cc.AccountDataKeysMap[addr]; has {
+		return keys, nil
+	} else {
+		keys, err := cc.ctx.loader.AccountDataKeys(addr)
+		if err != nil {
+			return nil, err
+		}
+		cc.AccountDataKeysMap[addr] = keys
+		return keys, nil
 	}
 }
 
