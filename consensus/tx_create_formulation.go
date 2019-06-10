@@ -19,6 +19,14 @@ func SetFormulatorPolicy(chainCoord *common.Coordinate, pc *FormulatorPolicy) {
 	gFormulatorPolicyMap[chainCoord.ID()] = pc
 }
 
+func GetFormulatorPolicy(chainCoord *common.Coordinate) (*FormulatorPolicy, error) {
+	pc, has := gFormulatorPolicyMap[chainCoord.ID()]
+	if !has {
+		return nil, ErrNotExistFormulatorPolicy
+	}
+	return pc, nil
+}
+
 func init() {
 	data.RegisterTransaction("consensus.CreateFormulation", func(t transaction.Type) transaction.Transaction {
 		return &CreateFormulation{

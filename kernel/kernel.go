@@ -91,6 +91,15 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 	if _, err := kn.Config.ChainCoord.WriteTo(&buffer); err != nil {
 		return nil, err
 	}
+	buffer.WriteString("FormulatorPolicy")
+	pc, err := consensus.GetFormulatorPolicy(kn.store.Accounter().ChainCoord())
+	if err != nil {
+		return nil, err
+	}
+	if _, err := pc.WriteTo(&buffer); err != nil {
+		return nil, err
+	}
+	buffer.WriteString("ObserverKeys")
 	keys := []string{}
 	for pubhash := range Config.ObserverKeyMap {
 		keys = append(keys, pubhash.String())
