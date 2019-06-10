@@ -13,6 +13,12 @@ import (
 	"github.com/fletaio/core/transaction"
 )
 
+var gFormulatorPolicyMap = map[uint64]*FormulatorPolicy{}
+
+func SetFormulatorPolicy(chainCoord *common.Coordinate, pc *FormulatorPolicy) {
+	gFormulatorPolicyMap[chainCoord.ID()] = pc
+}
+
 func init() {
 	data.RegisterTransaction("consensus.CreateFormulation", func(t transaction.Type) transaction.Transaction {
 		return &CreateFormulation{
@@ -45,6 +51,11 @@ func init() {
 			return nil, ErrInvalidAccountName
 		}
 
+		policy, has := gFormulatorPolicyMap[ctx.ChainCoord().ID()]
+		if !has {
+			return nil, ErrNotExistFormulatorPolicy
+		}
+
 		sn := ctx.Snapshot()
 		defer ctx.Revert(sn)
 
@@ -58,6 +69,9 @@ func init() {
 			return nil, err
 		}
 		if err := fromAcc.SubBalance(Fee); err != nil {
+			return nil, err
+		}
+		if err := fromAcc.SubBalance(policy.CreateFormulationAmount); err != nil {
 			return nil, err
 		}
 
@@ -78,6 +92,8 @@ func init() {
 			acc := a.(*FormulationAccount)
 			acc.Address_ = addr
 			acc.Name_ = tx.Name
+			acc.KeyHash = tx.KeyHash
+			acc.Amount = policy.CreateFormulationAmount
 			ctx.CreateAccount(acc)
 		}
 		ctx.Commit(sn)
@@ -89,9 +105,10 @@ func init() {
 // It is used to make formulation account
 type CreateFormulation struct {
 	transaction.Base
-	Seq_  uint64
-	From_ common.Address
-	Name  string
+	Seq_    uint64
+	From_   common.Address
+	Name    string
+	KeyHash common.PublicHash
 }
 
 // IsUTXO returns false
@@ -137,6 +154,11 @@ func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := tx.KeyHash.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	return wrote, nil
 }
 
@@ -164,6 +186,11 @@ func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 		tx.Name = v
+	}
+	if n, err := tx.KeyHash.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
 	}
 	return read, nil
 }
@@ -202,6 +229,13 @@ func (tx *CreateFormulation) MarshalJSON() ([]byte, error) {
 	buffer.WriteString(`,`)
 	buffer.WriteString(`"name":`)
 	if bs, err := json.Marshal(tx.Name); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"from":`)
+	if bs, err := tx.KeyHash.MarshalJSON(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)

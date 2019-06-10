@@ -18,6 +18,11 @@ func init() {
 				Type_:    t,
 				Balance_: amount.NewCoinAmount(0, 0),
 			},
+			Policy: &CommunityPolicy{
+				MinimumStaking: amount.NewCoinAmount(0, 0),
+				MaximumStaking: amount.NewCoinAmount(0, 0),
+			},
+			Amount:        amount.NewCoinAmount(0, 0),
 			StakingAmount: amount.NewCoinAmount(0, 0),
 		}
 	}, func(loader data.Loader, a account.Account, signers []common.PublicHash) error {

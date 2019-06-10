@@ -19,6 +19,7 @@ func init() {
 			Base: transaction.Base{
 				Type_: t,
 			},
+			Amount: amount.NewCoinAmount(0, 0),
 		}
 	}, func(loader data.Loader, t transaction.Transaction, signers []common.PublicHash) error {
 		tx := t.(*Staking)

@@ -26,13 +26,29 @@ func init() {
 			return ErrInvalidSequence
 		}
 
-		fromAcc, err := loader.Account(tx.From())
+		acc, err := loader.Account(tx.From())
 		if err != nil {
 			return err
 		}
-
-		if err := loader.Accounter().Validate(loader, fromAcc, signers); err != nil {
-			return err
+		switch frAcc := acc.(type) {
+		case *FormulationAccount:
+			if err := loader.Accounter().Validate(loader, frAcc, signers); err != nil {
+				return err
+			}
+		case *OmegaFormulationAccount:
+			if err := loader.Accounter().Validate(loader, frAcc, signers); err != nil {
+				return err
+			}
+		case *SigmaFormulationAccount:
+			if err := loader.Accounter().Validate(loader, frAcc, signers); err != nil {
+				return err
+			}
+		case *CommunityFormulationAccount:
+			if err := loader.Accounter().Validate(loader, frAcc, signers); err != nil {
+				return err
+			}
+		default:
+			return ErrInvalidAccountType
 		}
 		return nil
 	}, func(ctx *data.Context, Fee *amount.Amount, t transaction.Transaction, coord *common.Coordinate) (ret interface{}, rerr error) {
@@ -45,36 +61,47 @@ func init() {
 		}
 		ctx.AddSeq(tx.From())
 
-		fromAcc, err := ctx.Account(tx.From())
+		heritorAcc, err := ctx.Account(tx.From())
 		if err != nil {
 			return nil, err
 		}
-		if err := fromAcc.SubBalance(Fee); err != nil {
-			return nil, err
-		}
 
-		acc, err := ctx.Account(tx.Formulator)
+		acc, err := ctx.Account(tx.From())
 		if err != nil {
 			return nil, err
 		}
 		switch frAcc := acc.(type) {
 		case *FormulationAccount:
-			fromAcc.AddBalance(frAcc.Amount)
-			fromAcc.AddBalance(fromAcc.Balance())
+			if err := frAcc.SubBalance(Fee); err != nil {
+				return nil, err
+			}
+			heritorAcc.AddBalance(frAcc.Amount)
+			heritorAcc.AddBalance(frAcc.Balance())
 		case *OmegaFormulationAccount:
-			fromAcc.AddBalance(frAcc.Amount)
-			fromAcc.AddBalance(fromAcc.Balance())
+			if err := frAcc.SubBalance(Fee); err != nil {
+				return nil, err
+			}
+			heritorAcc.AddBalance(frAcc.Amount)
+			heritorAcc.AddBalance(frAcc.Balance())
 		case *SigmaFormulationAccount:
-			fromAcc.AddBalance(frAcc.Amount)
-			fromAcc.AddBalance(fromAcc.Balance())
+			if err := frAcc.SubBalance(Fee); err != nil {
+				return nil, err
+			}
+			heritorAcc.AddBalance(frAcc.Amount)
+			heritorAcc.AddBalance(frAcc.Balance())
 		case *CommunityFormulationAccount:
-			fromAcc.AddBalance(frAcc.Amount)
-			keys, err := ctx.AccountDataKeys(tx.Formulator)
+			if err := frAcc.SubBalance(Fee); err != nil {
+				return nil, err
+			}
+			heritorAcc.AddBalance(frAcc.Amount)
+			heritorAcc.AddBalance(frAcc.Balance())
+
+			keys, err := ctx.AccountDataKeys(tx.From())
 			if err != nil {
 				return nil, err
 			}
 			for _, k := range keys {
-				bs := ctx.AccountData(tx.Formulator, k)
+				bs := ctx.AccountData(tx.From(), k)
 				if len(bs) == 0 {
 					return nil, ErrInvalidStakingAddress
 				}
@@ -84,11 +111,13 @@ func init() {
 				}
 				frAcc.StakingAmount.Sub(StakingAmount)
 
-				StakingAccount, err := ctx.Account(fromStakingKey(bs))
-				if err != nil {
-					return nil, err
+				if StakingAccount, err := ctx.Account(fromKeyToAddress(bs)); err != nil {
+					if err != data.ErrNotExistAccount {
+						return nil, err
+					}
+				} else {
+					StakingAccount.AddBalance(StakingAmount)
 				}
-				StakingAccount.AddBalance(StakingAmount)
 			}
 			if !frAcc.StakingAmount.IsZero() {
 				return nil, ErrCriticalStakingAmount
@@ -107,9 +136,9 @@ func init() {
 // It is used to remove formulation account and get back staked coin
 type RevokeFormulation struct {
 	transaction.Base
-	Seq_       uint64
-	From_      common.Address
-	Formulator common.Address
+	Seq_    uint64
+	From_   common.Address
+	Heritor common.Address
 }
 
 // IsUTXO returns false
@@ -150,7 +179,7 @@ func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := tx.Formulator.WriteTo(w); err != nil {
+	if n, err := tx.Heritor.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -177,7 +206,7 @@ func (tx *RevokeFormulation) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if n, err := tx.Formulator.ReadFrom(r); err != nil {
+	if n, err := tx.Heritor.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -212,6 +241,13 @@ func (tx *RevokeFormulation) MarshalJSON() ([]byte, error) {
 	buffer.WriteString(`,`)
 	buffer.WriteString(`"from":`)
 	if bs, err := tx.From_.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"heritor":`)
+	if bs, err := tx.Heritor.MarshalJSON(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)
