@@ -40,14 +40,6 @@ func init() {
 			return ErrInvalidAccountName
 		}
 
-		policy, has := gConsensusPolicyMap[loader.ChainCoord().ID()]
-		if !has {
-			return ErrNotExistConsensusPolicy
-		}
-		if loader.TargetHeight() < policy.FormulatorCreationLimitHeight {
-			return ErrFormulatorCreationLimited
-		}
-
 		switch tx.FormulationType {
 		case AlphaFormulatorType:
 		case HyperFormulatorType:
