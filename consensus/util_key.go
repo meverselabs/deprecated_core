@@ -1,6 +1,8 @@
 package consensus
 
-import "github.com/fletaio/common"
+import (
+	"github.com/fletaio/common"
+)
 
 var (
 	tagStaking     = []byte{1, 0}
@@ -14,7 +16,8 @@ func toStakingKey(addr common.Address) []byte {
 	return bs
 }
 
-func fromKeyToAddress(bs []byte) common.Address {
+// FromKeyToAddress returns the address from the staking key
+func FromKeyToAddress(bs []byte) common.Address {
 	var addr common.Address
 	copy(addr[:], bs[2:])
 	return addr

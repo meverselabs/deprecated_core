@@ -94,7 +94,7 @@ func init() {
 				}
 				frAcc.StakingAmount.Sub(StakingAmount)
 
-				if StakingAccount, err := ctx.Account(fromKeyToAddress(bs)); err != nil {
+				if StakingAccount, err := ctx.Account(FromKeyToAddress(bs)); err != nil {
 					if err != data.ErrNotExistAccount {
 						return nil, err
 					}

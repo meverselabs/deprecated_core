@@ -124,10 +124,24 @@ func (am *Amount) Sub(b *Amount) *Amount {
 	return c
 }
 
+// Div returns a / b (*immutable)
+func (am *Amount) Div(b *Amount) *Amount {
+	c := newAmount(0)
+	c.Int.Div(am.Int, b.Int)
+	return c
+}
+
 // DivC returns a / b (*immutable)
 func (am *Amount) DivC(b int64) *Amount {
 	c := newAmount(0)
 	c.Int.Div(am.Int, big.NewInt(b))
+	return c
+}
+
+// Mul returns a * b (*immutable)
+func (am *Amount) Mul(b *Amount) *Amount {
+	c := newAmount(0)
+	c.Int.Mul(am.Int, b.Int)
 	return c
 }
 
