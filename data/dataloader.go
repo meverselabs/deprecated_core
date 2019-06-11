@@ -5,6 +5,7 @@ import (
 	"github.com/fletaio/common/hash"
 	"github.com/fletaio/core/account"
 	"github.com/fletaio/core/transaction"
+	"github.com/fletaio/framework/chain"
 )
 
 // Loader is an interface to provide data from the target chain
@@ -12,6 +13,7 @@ type Loader interface {
 	ChainCoord() *common.Coordinate
 	Accounter() *Accounter
 	Transactor() *Transactor
+	Provider() chain.Provider
 	Eventer() *Eventer
 	TargetHeight() uint32
 	LastHash() hash.Hash256
@@ -56,6 +58,11 @@ func (st *emptyLoader) Accounter() *Accounter {
 // Transactor returns the transactor of the target chain
 func (st *emptyLoader) Transactor() *Transactor {
 	return st.tran
+}
+
+// Provider returns nil
+func (st *emptyLoader) Provider() chain.Provider {
+	return nil
 }
 
 // Eventer returns the eventer of the target chain

@@ -13,16 +13,16 @@ import (
 	"github.com/fletaio/core/transaction"
 )
 
-var gFormulatorPolicyMap = map[uint64]*FormulatorPolicy{}
+var gConsensusPolicyMap = map[uint64]*ConsensusPolicy{}
 
-func SetFormulatorPolicy(chainCoord *common.Coordinate, pc *FormulatorPolicy) {
-	gFormulatorPolicyMap[chainCoord.ID()] = pc
+func SetConsensusPolicy(chainCoord *common.Coordinate, pc *ConsensusPolicy) {
+	gConsensusPolicyMap[chainCoord.ID()] = pc
 }
 
-func GetFormulatorPolicy(chainCoord *common.Coordinate) (*FormulatorPolicy, error) {
-	pc, has := gFormulatorPolicyMap[chainCoord.ID()]
+func GetConsensusPolicy(chainCoord *common.Coordinate) (*ConsensusPolicy, error) {
+	pc, has := gConsensusPolicyMap[chainCoord.ID()]
 	if !has {
-		return nil, ErrNotExistFormulatorPolicy
+		return nil, ErrNotExistConsensusPolicy
 	}
 	return pc, nil
 }
@@ -40,9 +40,9 @@ func init() {
 			return ErrInvalidAccountName
 		}
 
-		policy, has := gFormulatorPolicyMap[loader.ChainCoord().ID()]
+		policy, has := gConsensusPolicyMap[loader.ChainCoord().ID()]
 		if !has {
-			return ErrNotExistFormulatorPolicy
+			return ErrNotExistConsensusPolicy
 		}
 		if loader.TargetHeight() < policy.FormulatorCreationLimitHeight {
 			return ErrFormulatorCreationLimited
@@ -74,9 +74,9 @@ func init() {
 			return nil, ErrInvalidAccountName
 		}
 
-		policy, has := gFormulatorPolicyMap[ctx.ChainCoord().ID()]
+		policy, has := gConsensusPolicyMap[ctx.ChainCoord().ID()]
 		if !has {
-			return nil, ErrNotExistFormulatorPolicy
+			return nil, ErrNotExistConsensusPolicy
 		}
 		if ctx.TargetHeight() < policy.FormulatorCreationLimitHeight {
 			return nil, ErrFormulatorCreationLimited

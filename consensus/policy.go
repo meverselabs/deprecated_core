@@ -9,8 +9,10 @@ import (
 	"github.com/fletaio/core/amount"
 )
 
-// FormulatorPolicy defines a staking policy user
-type FormulatorPolicy struct {
+// ConsensusPolicy defines a staking policy user
+type ConsensusPolicy struct {
+	RewardPerBlock                *amount.Amount
+	PayRewardEveryBlocks          uint32
 	FormulatorCreationLimitHeight uint32
 	AlphaFormulationAmount        *amount.Amount
 	AlphaEfficiency1000           uint32
@@ -30,8 +32,18 @@ type FormulatorPolicy struct {
 }
 
 // WriteTo is a serialization function
-func (pc *FormulatorPolicy) WriteTo(w io.Writer) (int64, error) {
+func (pc *ConsensusPolicy) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
+	if n, err := pc.RewardPerBlock.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.PayRewardEveryBlocks); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := util.WriteUint32(w, pc.FormulatorCreationLimitHeight); err != nil {
 		return wrote, err
 	} else {
@@ -116,8 +128,19 @@ func (pc *FormulatorPolicy) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom is a deserialization function
-func (pc *FormulatorPolicy) ReadFrom(r io.Reader) (int64, error) {
+func (pc *ConsensusPolicy) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
+	if n, err := pc.RewardPerBlock.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.PayRewardEveryBlocks = v
+	}
 	if v, n, err := util.ReadUint32(r); err != nil {
 		return read, err
 	} else {
@@ -216,9 +239,23 @@ func (pc *FormulatorPolicy) ReadFrom(r io.Reader) (int64, error) {
 }
 
 // MarshalJSON is a marshaler function
-func (pc *FormulatorPolicy) MarshalJSON() ([]byte, error) {
+func (pc *ConsensusPolicy) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.WriteString(`{`)
+	buffer.WriteString(`"reward_per_block":`)
+	if bs, err := pc.RewardPerBlock.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"pay_reward_every_blocks":`)
+	if bs, err := json.Marshal(pc.PayRewardEveryBlocks); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
 	buffer.WriteString(`"formulator_creation_limit_height":`)
 	if bs, err := json.Marshal(pc.FormulatorCreationLimitHeight); err != nil {
 		return nil, err

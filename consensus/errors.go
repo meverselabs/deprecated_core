@@ -25,6 +25,6 @@ var (
 	ErrCriticalStakingAmount          = errors.New("critical staking amount")
 	ErrInvalidStakingAddress          = errors.New("invalid staking address")
 	ErrInvalidStakingAmount           = errors.New("invalid staking amount")
-	ErrNotExistFormulatorPolicy       = errors.New("not exist formulator policy")
+	ErrNotExistConsensusPolicy        = errors.New("not exist formulator policy")
 	ErrFormulatorCreationLimited      = errors.New("formulator creation limited")
 )

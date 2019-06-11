@@ -12,6 +12,7 @@ import (
 	"github.com/fletaio/core/account"
 	"github.com/fletaio/core/event"
 	"github.com/fletaio/core/transaction"
+	"github.com/fletaio/framework/chain"
 )
 
 // Context is an intermediate in-memory state using the context data stack between blocks
@@ -67,6 +68,11 @@ func (ctx *Context) Accounter() *Accounter {
 // Transactor returns the transactor of the target chain
 func (ctx *Context) Transactor() *Transactor {
 	return ctx.loader.Transactor()
+}
+
+// Provider returns the provider of the target chain
+func (ctx *Context) Provider() chain.Provider {
+	return ctx.loader.Provider()
 }
 
 // Eventer returns the eventer of the target chain
