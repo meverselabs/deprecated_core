@@ -29,6 +29,7 @@ type ConsensusPolicy struct {
 	HyperEfficiency1000           uint32
 	HyperUnlockRequiredBlocks     uint32
 	StakingEfficiency1000         uint32
+	StakingUnlockRequiredBlocks   uint32
 }
 
 // WriteTo is a serialization function
@@ -120,6 +121,11 @@ func (pc *ConsensusPolicy) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 	if n, err := util.WriteUint32(w, pc.StakingEfficiency1000); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.StakingUnlockRequiredBlocks); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -234,6 +240,12 @@ func (pc *ConsensusPolicy) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 		pc.StakingEfficiency1000 = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.StakingUnlockRequiredBlocks = v
 	}
 	return read, nil
 }
@@ -363,6 +375,13 @@ func (pc *ConsensusPolicy) MarshalJSON() ([]byte, error) {
 	buffer.WriteString(`,`)
 	buffer.WriteString(`"staking_efficiency_1000":`)
 	if bs, err := json.Marshal(pc.StakingEfficiency1000); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"staking_unlock_required_blocks":`)
+	if bs, err := json.Marshal(pc.StakingUnlockRequiredBlocks); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)

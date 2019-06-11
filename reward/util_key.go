@@ -17,7 +17,7 @@ func toPowerSumKey(addr common.Address) []byte {
 	return bs
 }
 
-func getPowerSumKey(bs []byte) (common.Address, bool) {
+func FromPowerSumKey(bs []byte) (common.Address, bool) {
 	if bytes.HasPrefix(bs, tagPowerSum) {
 		var addr common.Address
 		copy(addr[:], bs[2:])

@@ -1,6 +1,8 @@
 package consensus
 
 import (
+	"bytes"
+
 	"github.com/fletaio/common"
 )
 
@@ -16,11 +18,15 @@ func toStakingKey(addr common.Address) []byte {
 	return bs
 }
 
-// FromKeyToAddress returns the address from the staking key
-func FromKeyToAddress(bs []byte) common.Address {
-	var addr common.Address
-	copy(addr[:], bs[2:])
-	return addr
+// FromStakingKey returns staking address if it is staking key
+func FromStakingKey(bs []byte) (common.Address, bool) {
+	if bytes.HasPrefix(bs, tagStaking) {
+		var addr common.Address
+		copy(addr[:], bs[2:])
+		return addr, true
+	} else {
+		return common.Address{}, false
+	}
 }
 
 func toAutoStakingKey(addr common.Address) []byte {

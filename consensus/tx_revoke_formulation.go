@@ -48,6 +48,11 @@ func init() {
 		}
 		ctx.AddSeq(tx.From())
 
+		policy, has := gConsensusPolicyMap[ctx.ChainCoord().ID()]
+		if !has {
+			return nil, ErrNotExistConsensusPolicy
+		}
+
 		heritorAcc, err := ctx.Account(tx.From())
 		if err != nil {
 			return nil, err
@@ -63,50 +68,50 @@ func init() {
 		}
 		switch frAcc.FormulationType {
 		case AlphaFormulatorType:
-			fallthrough
+			if err := frAcc.SubBalance(Fee); err != nil {
+				return nil, err
+			}
+			ctx.AddLockedBalance(heritorAcc.Address(), frAcc.Amount.Add(frAcc.Balance()), ctx.TargetHeight()+policy.AlphaUnlockRequiredBlocks)
 		case SigmaFormulatorType:
-			fallthrough
+			if err := frAcc.SubBalance(Fee); err != nil {
+				return nil, err
+			}
+			ctx.AddLockedBalance(heritorAcc.Address(), frAcc.Amount.Add(frAcc.Balance()), ctx.TargetHeight()+policy.SigmaUnlockRequiredBlocks)
 		case OmegaFormulatorType:
 			if err := frAcc.SubBalance(Fee); err != nil {
 				return nil, err
 			}
-			heritorAcc.AddBalance(frAcc.Amount)
-			heritorAcc.AddBalance(frAcc.Balance())
+			ctx.AddLockedBalance(heritorAcc.Address(), frAcc.Amount.Add(frAcc.Balance()), ctx.TargetHeight()+policy.OmegaUnlockRequiredBlocks)
 		case HyperFormulatorType:
 			if err := frAcc.SubBalance(Fee); err != nil {
 				return nil, err
 			}
-			heritorAcc.AddBalance(frAcc.Amount)
-			heritorAcc.AddBalance(frAcc.Balance())
+			ctx.AddLockedBalance(heritorAcc.Address(), frAcc.Amount.Add(frAcc.Balance()), ctx.TargetHeight()+policy.HyperUnlockRequiredBlocks)
 
 			keys, err := ctx.AccountDataKeys(tx.From())
 			if err != nil {
 				return nil, err
 			}
 			for _, k := range keys {
-				bs := ctx.AccountData(tx.From(), k)
-				if len(bs) == 0 {
-					return nil, ErrInvalidStakingAddress
-				}
-				StakingAmount := amount.NewAmountFromBytes(bs)
-				if frAcc.StakingAmount.Less(StakingAmount) {
-					return nil, ErrCriticalStakingAmount
-				}
-				frAcc.StakingAmount.Sub(StakingAmount)
-
-				if StakingAccount, err := ctx.Account(FromKeyToAddress(bs)); err != nil {
-					if err != data.ErrNotExistAccount {
-						return nil, err
+				if addr, is := FromStakingKey(k); is {
+					bs := ctx.AccountData(tx.From(), k)
+					if len(bs) == 0 {
+						return nil, ErrInvalidStakingAddress
 					}
-				} else {
-					StakingAccount.AddBalance(StakingAmount)
+					StakingAmount := amount.NewAmountFromBytes(bs)
+					if frAcc.StakingAmount.Less(StakingAmount) {
+						return nil, ErrCriticalStakingAmount
+					}
+					frAcc.StakingAmount.Sub(StakingAmount)
+
+					ctx.AddLockedBalance(addr, StakingAmount, ctx.TargetHeight()+policy.StakingUnlockRequiredBlocks)
 				}
 			}
 			if !frAcc.StakingAmount.IsZero() {
 				return nil, ErrCriticalStakingAmount
 			}
 		default:
-
+			return nil, ErrInvalidAccountType
 		}
 		ctx.DeleteAccount(acc)
 

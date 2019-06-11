@@ -66,6 +66,14 @@ func init() {
 			return nil, ErrInvalidStakingAmount
 		}
 
+		fromAcc, err := ctx.Account(tx.From())
+		if err != nil {
+			return nil, err
+		}
+		if err := fromAcc.SubBalance(Fee); err != nil {
+			return nil, err
+		}
+
 		acc, err := ctx.Account(tx.HyperFormulator)
 		if err != nil {
 			return nil, err
@@ -98,14 +106,12 @@ func init() {
 		}
 		frAcc.StakingAmount = frAcc.StakingAmount.Sub(tx.Amount)
 
-		fromAcc, err := ctx.Account(tx.From())
-		if err != nil {
-			return nil, err
+		policy, has := gConsensusPolicyMap[ctx.ChainCoord().ID()]
+		if !has {
+			return nil, ErrNotExistConsensusPolicy
 		}
-		if err := fromAcc.SubBalance(Fee); err != nil {
-			return nil, err
-		}
-		fromAcc.AddBalance(tx.Amount)
+
+		ctx.AddLockedBalance(fromAcc.Address(), tx.Amount, ctx.TargetHeight()+policy.StakingUnlockRequiredBlocks)
 
 		ctx.Commit(sn)
 		return nil, nil

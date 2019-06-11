@@ -524,6 +524,21 @@ func (kn *Kernel) contextByBlock(b *block.Block) (*data.Context, error) {
 	if !b.Header.ChainCoord.Equal(ctx.ChainCoord()) {
 		return nil, ErrInvalidChainCoord
 	}
+	lockedBalances, err := kn.store.LockedBalancesByHeight(b.Header.Height())
+	if err != nil {
+		return nil, err
+	}
+	for _, lb := range lockedBalances {
+		acc, err := ctx.Account(lb.Address)
+		if err != nil {
+			if err != data.ErrNotExistAccount {
+				return nil, err
+			}
+		} else {
+			acc.AddBalance(lb.Amount)
+		}
+		ctx.RemoveLockedBalance(lb)
+	}
 	for i, tx := range b.Body.Transactions {
 		if _, err := ctx.Transactor().Execute(ctx, tx, &common.Coordinate{Height: b.Header.Height(), Index: uint16(i)}); err != nil {
 			return nil, err

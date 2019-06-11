@@ -10,6 +10,7 @@ import (
 	"github.com/fletaio/common/hash"
 	"github.com/fletaio/common/util"
 	"github.com/fletaio/core/account"
+	"github.com/fletaio/core/amount"
 	"github.com/fletaio/core/event"
 	"github.com/fletaio/core/transaction"
 	"github.com/fletaio/framework/chain"
@@ -104,6 +105,25 @@ func (ctx *Context) Seq(addr common.Address) uint64 {
 func (ctx *Context) AddSeq(addr common.Address) {
 	ctx.isLatestHash = false
 	ctx.Top().AddSeq(addr)
+}
+
+// AddLockedBalance adds locked balance until the unlock height to the account of the address
+func (ctx *Context) AddLockedBalance(Address common.Address, Amount *amount.Amount, UnlockHeight uint32) {
+	ctx.isLatestHash = false
+	if UnlockHeight <= ctx.TargetHeight() {
+		acc, err := ctx.Top().Account(Address)
+		if err == nil {
+			acc.AddBalance(Amount)
+		}
+	} else {
+		ctx.Top().AddLockedBalance(Address, Amount, UnlockHeight)
+	}
+}
+
+// RemoveLockedBalance removes locked balance to the account of the address
+func (ctx *Context) RemoveLockedBalance(lb *LockedBalance) {
+	ctx.isLatestHash = false
+	ctx.Top().RemoveLockedBalance(lb)
 }
 
 // Account returns the account instance of the address
@@ -262,6 +282,8 @@ type ContextData struct {
 	loader                Loader
 	Parent                *ContextData
 	SeqMap                map[common.Address]uint64
+	LockedBalances        []*LockedBalance
+	DeletedLockedBalances []*LockedBalance
 	AccountMap            map[common.Address]account.Account
 	CreatedAccountMap     map[common.Address]account.Account
 	DeletedAccountMap     map[common.Address]account.Account
@@ -288,6 +310,7 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 		loader:                loader,
 		Parent:                Parent,
 		SeqMap:                map[common.Address]uint64{},
+		LockedBalances:        []*LockedBalance{},
 		AccountMap:            map[common.Address]account.Account{},
 		CreatedAccountMap:     map[common.Address]account.Account{},
 		DeletedAccountMap:     map[common.Address]account.Account{},
@@ -304,207 +327,6 @@ func NewContextData(loader Loader, Parent *ContextData) *ContextData {
 		isTop:                 true,
 	}
 	return ctd
-}
-
-// Hash returns the hash value of it
-func (ctd *ContextData) Hash() hash.Hash256 {
-	var buffer bytes.Buffer
-
-	buffer.WriteString("ChainCoord")
-	if _, err := ctd.loader.ChainCoord().WriteTo(&buffer); err != nil {
-		panic(err)
-	}
-	buffer.WriteString("SeqMap")
-	if len(ctd.SeqMap) > 0 {
-		keys := []common.Address{}
-		for k := range ctd.SeqMap {
-			keys = append(keys, k)
-		}
-		sort.Sort(addressSlice(keys))
-		for _, k := range keys {
-			v := ctd.SeqMap[k]
-			if _, err := k.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-			if _, err := util.WriteUint64(&buffer, v); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("AccountMap")
-	if len(ctd.AccountMap) > 0 {
-		keys := []common.Address{}
-		for k := range ctd.AccountMap {
-			keys = append(keys, k)
-		}
-		sort.Sort(addressSlice(keys))
-		for _, k := range keys {
-			v := ctd.AccountMap[k]
-			if _, err := k.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-			if _, err := v.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("CreatedAccountMap")
-	if len(ctd.CreatedAccountMap) > 0 {
-		keys := []common.Address{}
-		for k := range ctd.CreatedAccountMap {
-			keys = append(keys, k)
-		}
-		sort.Sort(addressSlice(keys))
-		for _, k := range keys {
-			v := ctd.CreatedAccountMap[k]
-			if _, err := k.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-			if _, err := v.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("DeletedAccountMap")
-	if len(ctd.DeletedAccountMap) > 0 {
-		keys := []common.Address{}
-		for k := range ctd.DeletedAccountMap {
-			keys = append(keys, k)
-		}
-		sort.Sort(addressSlice(keys))
-		for _, k := range keys {
-			if _, err := k.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("AccountNameMap")
-	if len(ctd.AccountNameMap) > 0 {
-		keys := []string{}
-		for k := range ctd.AccountNameMap {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			v := ctd.AccountNameMap[k]
-			if _, err := buffer.WriteString(k); err != nil {
-				panic(err)
-			}
-			if _, err := v.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("CreatedAccountNameMap")
-	if len(ctd.CreatedAccountNameMap) > 0 {
-		keys := []string{}
-		for k := range ctd.CreatedAccountNameMap {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			v := ctd.CreatedAccountNameMap[k]
-			if _, err := buffer.WriteString(k); err != nil {
-				panic(err)
-			}
-			if _, err := v.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("DeletedAccountNameMap")
-	if len(ctd.DeletedAccountNameMap) > 0 {
-		keys := []string{}
-		for k := range ctd.DeletedAccountNameMap {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			if _, err := buffer.WriteString(k); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("AccountDataMap")
-	if len(ctd.AccountDataMap) > 0 {
-		keys := []string{}
-		for k := range ctd.AccountDataMap {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			v := ctd.AccountDataMap[k]
-			buffer.WriteString(k)
-			buffer.Write(v)
-		}
-	}
-	buffer.WriteString("DeletedAccountDataMap")
-	if len(ctd.DeletedAccountDataMap) > 0 {
-		keys := []string{}
-		for k := range ctd.DeletedAccountDataMap {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			buffer.WriteString(k)
-		}
-	}
-	buffer.WriteString("UTXOMap")
-	if len(ctd.UTXOMap) > 0 {
-		keys := []uint64{}
-		for k := range ctd.UTXOMap {
-			keys = append(keys, k)
-		}
-		sort.Sort(uint64Slice(keys))
-		for _, k := range keys {
-			v := ctd.UTXOMap[k]
-			if _, err := util.WriteUint64(&buffer, k); err != nil {
-				panic(err)
-			}
-			if _, err := v.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("CreatedUTXOMap")
-	if len(ctd.CreatedUTXOMap) > 0 {
-		keys := []uint64{}
-		for k := range ctd.CreatedUTXOMap {
-			keys = append(keys, k)
-		}
-		sort.Sort(uint64Slice(keys))
-		for _, k := range keys {
-			v := ctd.CreatedUTXOMap[k]
-			if _, err := util.WriteUint64(&buffer, k); err != nil {
-				panic(err)
-			}
-			if _, err := v.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("DeletedUTXOMap")
-	if len(ctd.DeletedUTXOMap) > 0 {
-		keys := []uint64{}
-		for k := range ctd.DeletedUTXOMap {
-			keys = append(keys, k)
-		}
-		sort.Sort(uint64Slice(keys))
-		for _, k := range keys {
-			if _, err := util.WriteUint64(&buffer, k); err != nil {
-				panic(err)
-			}
-		}
-	}
-	buffer.WriteString("Events")
-	if len(ctd.Events) > 0 {
-		for _, e := range ctd.Events {
-			if _, err := e.WriteTo(&buffer); err != nil {
-				panic(err)
-			}
-		}
-	}
-	return hash.DoubleHash(buffer.Bytes())
 }
 
 // Seq returns the sequence of the account
@@ -535,6 +357,23 @@ func (ctd *ContextData) AddSeq(addr common.Address) {
 		return
 	}
 	ctd.SeqMap[addr] = ctd.Seq(addr) + 1
+}
+
+// AddLockedBalance adds locked balance until the unlock height to the account of the address
+func (ctd *ContextData) AddLockedBalance(Address common.Address, Amount *amount.Amount, UnlockHeight uint32) {
+	if _, has := ctd.DeletedAccountMap[Address]; has {
+		return
+	}
+	ctd.LockedBalances = append(ctd.LockedBalances, &LockedBalance{
+		Address:      Address,
+		Amount:       Amount,
+		UnlockHeight: UnlockHeight,
+	})
+}
+
+// RemoveLockedBalance removes locked balance to the account of the address
+func (ctd *ContextData) RemoveLockedBalance(lb *LockedBalance) {
+	ctd.DeletedLockedBalances = append(ctd.DeletedLockedBalances, lb)
 }
 
 // Account returns the account instance of the address
@@ -849,6 +688,223 @@ func (ctd *ContextData) EmitEvent(e event.Event) error {
 	return nil
 }
 
+// Hash returns the hash value of it
+func (ctd *ContextData) Hash() hash.Hash256 {
+	var buffer bytes.Buffer
+
+	buffer.WriteString("ChainCoord")
+	if _, err := ctd.loader.ChainCoord().WriteTo(&buffer); err != nil {
+		panic(err)
+	}
+	buffer.WriteString("SeqMap")
+	if len(ctd.SeqMap) > 0 {
+		keys := []common.Address{}
+		for k := range ctd.SeqMap {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			v := ctd.SeqMap[k]
+			if _, err := k.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+			if _, err := util.WriteUint64(&buffer, v); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("LockedBalances")
+	if len(ctd.LockedBalances) > 0 {
+		for _, v := range ctd.LockedBalances {
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("DeletedLockedBalances")
+	if len(ctd.DeletedLockedBalances) > 0 {
+		for _, v := range ctd.DeletedLockedBalances {
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("AccountMap")
+	if len(ctd.AccountMap) > 0 {
+		keys := []common.Address{}
+		for k := range ctd.AccountMap {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			v := ctd.AccountMap[k]
+			if _, err := k.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("CreatedAccountMap")
+	if len(ctd.CreatedAccountMap) > 0 {
+		keys := []common.Address{}
+		for k := range ctd.CreatedAccountMap {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			v := ctd.CreatedAccountMap[k]
+			if _, err := k.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("DeletedAccountMap")
+	if len(ctd.DeletedAccountMap) > 0 {
+		keys := []common.Address{}
+		for k := range ctd.DeletedAccountMap {
+			keys = append(keys, k)
+		}
+		sort.Sort(addressSlice(keys))
+		for _, k := range keys {
+			if _, err := k.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("AccountNameMap")
+	if len(ctd.AccountNameMap) > 0 {
+		keys := []string{}
+		for k := range ctd.AccountNameMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := ctd.AccountNameMap[k]
+			if _, err := buffer.WriteString(k); err != nil {
+				panic(err)
+			}
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("CreatedAccountNameMap")
+	if len(ctd.CreatedAccountNameMap) > 0 {
+		keys := []string{}
+		for k := range ctd.CreatedAccountNameMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := ctd.CreatedAccountNameMap[k]
+			if _, err := buffer.WriteString(k); err != nil {
+				panic(err)
+			}
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("DeletedAccountNameMap")
+	if len(ctd.DeletedAccountNameMap) > 0 {
+		keys := []string{}
+		for k := range ctd.DeletedAccountNameMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if _, err := buffer.WriteString(k); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("AccountDataMap")
+	if len(ctd.AccountDataMap) > 0 {
+		keys := []string{}
+		for k := range ctd.AccountDataMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := ctd.AccountDataMap[k]
+			buffer.WriteString(k)
+			buffer.Write(v)
+		}
+	}
+	buffer.WriteString("DeletedAccountDataMap")
+	if len(ctd.DeletedAccountDataMap) > 0 {
+		keys := []string{}
+		for k := range ctd.DeletedAccountDataMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			buffer.WriteString(k)
+		}
+	}
+	buffer.WriteString("UTXOMap")
+	if len(ctd.UTXOMap) > 0 {
+		keys := []uint64{}
+		for k := range ctd.UTXOMap {
+			keys = append(keys, k)
+		}
+		sort.Sort(uint64Slice(keys))
+		for _, k := range keys {
+			v := ctd.UTXOMap[k]
+			if _, err := util.WriteUint64(&buffer, k); err != nil {
+				panic(err)
+			}
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("CreatedUTXOMap")
+	if len(ctd.CreatedUTXOMap) > 0 {
+		keys := []uint64{}
+		for k := range ctd.CreatedUTXOMap {
+			keys = append(keys, k)
+		}
+		sort.Sort(uint64Slice(keys))
+		for _, k := range keys {
+			v := ctd.CreatedUTXOMap[k]
+			if _, err := util.WriteUint64(&buffer, k); err != nil {
+				panic(err)
+			}
+			if _, err := v.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("DeletedUTXOMap")
+	if len(ctd.DeletedUTXOMap) > 0 {
+		keys := []uint64{}
+		for k := range ctd.DeletedUTXOMap {
+			keys = append(keys, k)
+		}
+		sort.Sort(uint64Slice(keys))
+		for _, k := range keys {
+			if _, err := util.WriteUint64(&buffer, k); err != nil {
+				panic(err)
+			}
+		}
+	}
+	buffer.WriteString("Events")
+	if len(ctd.Events) > 0 {
+		for _, e := range ctd.Events {
+			if _, err := e.WriteTo(&buffer); err != nil {
+				panic(err)
+			}
+		}
+	}
+	return hash.DoubleHash(buffer.Bytes())
+}
+
 // Dump prints the context data
 func (ctd *ContextData) Dump() string {
 	var buffer bytes.Buffer
@@ -864,6 +920,30 @@ func (ctd *ContextData) Dump() string {
 			buffer.WriteString(k.String())
 			buffer.WriteString(": ")
 			buffer.WriteString(strconv.FormatInt(int64(v), 10))
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("LockedBalances\n")
+	{
+		for _, v := range ctd.LockedBalances {
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+	buffer.WriteString("DeletedLockedBalances\n")
+	{
+		for _, v := range ctd.DeletedLockedBalances {
+			var hb bytes.Buffer
+			if _, err := v.WriteTo(&hb); err != nil {
+				panic(err)
+			}
+			buffer.WriteString(hash.Hash(hb.Bytes()).String())
 			buffer.WriteString("\n")
 		}
 	}

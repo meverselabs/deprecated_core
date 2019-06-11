@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fletaio/core/amount"
+
 	"github.com/dgraph-io/badger"
 	"github.com/fletaio/common"
 	"github.com/fletaio/common/hash"
@@ -390,6 +392,72 @@ func (st *Store) Seq(addr common.Address) uint64 {
 		st.SeqMap[addr] = seq
 		return seq
 	}
+}
+
+// LockedBalances returns locked balances of the address
+func (st *Store) LockedBalances(addr common.Address) ([]*data.LockedBalance, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
+	list := []*data.LockedBalance{}
+	if err := st.db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+		prefix := toLockedBalancePrefix(addr)
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			value, err := item.ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+			Address, UnlockHeight := fromLockedBalanceKey(item.Key())
+			list = append(list, &data.LockedBalance{
+				Address:      Address,
+				Amount:       amount.NewAmountFromBytes(value),
+				UnlockHeight: UnlockHeight,
+			})
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+// LockedBalancesByHeight returns locked balances of the height
+func (st *Store) LockedBalancesByHeight(Height uint32) ([]*data.LockedBalance, error) {
+	st.closeLock.RLock()
+	defer st.closeLock.RUnlock()
+	if st.isClose {
+		return nil, ErrStoreClosed
+	}
+
+	list := []*data.LockedBalance{}
+	if err := st.db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+		prefix := toLockedBalanceHeightPrefix(Height)
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			value, err := item.ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+			Address, UnlockHeight := fromLockedBalanceHeightKey(item.Key())
+			list = append(list, &data.LockedBalance{
+				Address:      Address,
+				Amount:       amount.NewAmountFromBytes(value),
+				UnlockHeight: UnlockHeight,
+			})
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 // Account returns the account instance of the address from the store
@@ -886,6 +954,36 @@ func (st *Store) StoreData(cd *chain.Data, ctd *data.ContextData, customHash map
 func applyContextData(txn *badger.Txn, ctd *data.ContextData) error {
 	for k, v := range ctd.SeqMap {
 		if err := txn.Set(toAccountSeqKey(k), util.Uint64ToBytes(v)); err != nil {
+			return err
+		}
+	}
+	for _, v := range ctd.LockedBalances {
+		var AmountSum *amount.Amount
+		item, err := txn.Get(toLockedBalanceKey(v.Address, v.UnlockHeight))
+		if err != nil {
+			if err != badger.ErrKeyNotFound {
+				return err
+			}
+			AmountSum = amount.NewCoinAmount(0, 0)
+		} else {
+			value, err := item.ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+			AmountSum = amount.NewAmountFromBytes(value)
+		}
+		if err := txn.Set(toLockedBalanceKey(v.Address, v.UnlockHeight), AmountSum.Add(v.Amount).Bytes()); err != nil {
+			return err
+		}
+		if err := txn.Set(toLockedBalanceHeightKey(v.UnlockHeight, v.Address), AmountSum.Add(v.Amount).Bytes()); err != nil {
+			return err
+		}
+	}
+	for _, v := range ctd.DeletedLockedBalances {
+		if err := txn.Delete(toLockedBalanceKey(v.Address, v.UnlockHeight)); err != nil {
+			return err
+		}
+		if err := txn.Delete(toLockedBalanceHeightKey(v.UnlockHeight, v.Address)); err != nil {
 			return err
 		}
 	}

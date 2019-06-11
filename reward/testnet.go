@@ -44,19 +44,21 @@ func (rd *TestNetRewarder) ProcessReward(addr common.Address, ctx *data.Context)
 				return err
 			}
 			for _, k := range keys {
-				bs := ctx.AccountData(addr, k)
-				if len(bs) == 0 {
-					return consensus.ErrInvalidStakingAddress
-				}
-				StakingAmount := amount.NewAmountFromBytes(bs)
-
-				if _, err := ctx.Account(consensus.FromKeyToAddress(bs)); err != nil {
-					if err != data.ErrNotExistAccount {
-						return err
+				if addr, is := consensus.FromStakingKey(k); is {
+					bs := ctx.AccountData(addr, k)
+					if len(bs) == 0 {
+						return consensus.ErrInvalidStakingAddress
 					}
-					rd.removeRewardPower(addr, ctx)
-				} else {
-					rd.addRewardPower(addr, ctx, StakingAmount.MulC(int64(policy.StakingEfficiency1000)).DivC(1000))
+					StakingAmount := amount.NewAmountFromBytes(bs)
+
+					if _, err := ctx.Account(addr); err != nil {
+						if err != data.ErrNotExistAccount {
+							return err
+						}
+						rd.removeRewardPower(addr, ctx)
+					} else {
+						rd.addRewardPower(addr, ctx, StakingAmount.MulC(int64(policy.StakingEfficiency1000)).DivC(1000))
+					}
 				}
 			}
 		default:
@@ -78,7 +80,7 @@ func (rd *TestNetRewarder) ProcessReward(addr common.Address, ctx *data.Context)
 		TotalPower := amount.NewCoinAmount(0, 0)
 		PowerMap := map[common.Address]*amount.Amount{}
 		for _, k := range keys {
-			if addr, is := getPowerSumKey(k); is {
+			if addr, is := FromPowerSumKey(k); is {
 				PowerSum := rd.getRewardPower(addr, ctx)
 				if !PowerSum.IsZero() {
 					TotalPower = TotalPower.Add(PowerSum)
