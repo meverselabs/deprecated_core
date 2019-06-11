@@ -117,8 +117,8 @@ func (rank *Rank) Equal(b *Rank) bool {
 
 // IsZero returns a == 0
 func (rank *Rank) IsZero() bool {
-	var empty common.Address
-	return rank.score == 0 && bytes.Compare(rank.Address[:], empty[:]) == 0
+	var zeroAddr common.Address
+	return rank.score == 0 && bytes.Compare(rank.Address[:], zeroAddr[:]) == 0
 }
 
 // Set updates rank's properties and update the score

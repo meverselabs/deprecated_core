@@ -5,6 +5,7 @@ import (
 	"github.com/fletaio/common/hash"
 	"github.com/fletaio/core/account"
 	"github.com/fletaio/core/transaction"
+	"github.com/fletaio/framework/chain"
 )
 
 type cache struct {
@@ -43,6 +44,11 @@ func (cc *cache) Accounter() *Accounter {
 // Transactor returns the transactor of the target chain
 func (cc *cache) Transactor() *Transactor {
 	return cc.ctx.Transactor()
+}
+
+// Provider returns the provider of the target chain
+func (cc *cache) Provider() chain.Provider {
+	return cc.ctx.Provider()
 }
 
 // Eventer returns the eventer of the target chain

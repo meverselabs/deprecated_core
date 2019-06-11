@@ -91,8 +91,8 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 	if _, err := kn.Config.ChainCoord.WriteTo(&buffer); err != nil {
 		return nil, err
 	}
-	buffer.WriteString("FormulatorPolicy")
-	pc, err := consensus.GetFormulatorPolicy(kn.store.Accounter().ChainCoord())
+	buffer.WriteString("ConsensusPolicy")
+	pc, err := consensus.GetConsensusPolicy(kn.store.Accounter().ChainCoord())
 	if err != nil {
 		return nil, err
 	}
