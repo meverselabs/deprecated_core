@@ -139,6 +139,11 @@ func (st *Store) Transactor() *data.Transactor {
 	return st.transactor
 }
 
+// Provider returns the provider of the kernel
+func (st *Store) Provider() chain.Provider {
+	return st
+}
+
 // Eventer returns the eventer of the target chain
 func (st *Store) Eventer() *data.Eventer {
 	return st.eventer
