@@ -30,25 +30,12 @@ func init() {
 		if err != nil {
 			return err
 		}
-		switch frAcc := acc.(type) {
-		case *FormulationAccount:
-			if err := loader.Accounter().Validate(loader, frAcc, signers); err != nil {
-				return err
-			}
-		case *OmegaFormulationAccount:
-			if err := loader.Accounter().Validate(loader, frAcc, signers); err != nil {
-				return err
-			}
-		case *SigmaFormulationAccount:
-			if err := loader.Accounter().Validate(loader, frAcc, signers); err != nil {
-				return err
-			}
-		case *CommunityFormulationAccount:
-			if err := loader.Accounter().Validate(loader, frAcc, signers); err != nil {
-				return err
-			}
-		default:
+		frAcc, is := acc.(*FormulationAccount)
+		if !is {
 			return ErrInvalidAccountType
+		}
+		if err := loader.Accounter().Validate(loader, frAcc, signers); err != nil {
+			return err
 		}
 		return nil
 	}, func(ctx *data.Context, Fee *amount.Amount, t transaction.Transaction, coord *common.Coordinate) (ret interface{}, rerr error) {
@@ -70,26 +57,22 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		switch frAcc := acc.(type) {
-		case *FormulationAccount:
+		frAcc, is := acc.(*FormulationAccount)
+		if !is {
+			return nil, ErrInvalidAccountType
+		}
+		switch frAcc.FormulationType {
+		case AlphaFormulatorType:
+			fallthrough
+		case SigmaFormulatorType:
+			fallthrough
+		case OmegaFormulatorType:
 			if err := frAcc.SubBalance(Fee); err != nil {
 				return nil, err
 			}
 			heritorAcc.AddBalance(frAcc.Amount)
 			heritorAcc.AddBalance(frAcc.Balance())
-		case *OmegaFormulationAccount:
-			if err := frAcc.SubBalance(Fee); err != nil {
-				return nil, err
-			}
-			heritorAcc.AddBalance(frAcc.Amount)
-			heritorAcc.AddBalance(frAcc.Balance())
-		case *SigmaFormulationAccount:
-			if err := frAcc.SubBalance(Fee); err != nil {
-				return nil, err
-			}
-			heritorAcc.AddBalance(frAcc.Amount)
-			heritorAcc.AddBalance(frAcc.Balance())
-		case *CommunityFormulationAccount:
+		case HyperFormulatorType:
 			if err := frAcc.SubBalance(Fee); err != nil {
 				return nil, err
 			}
@@ -123,7 +106,7 @@ func init() {
 				return nil, ErrCriticalStakingAmount
 			}
 		default:
-			return nil, ErrInvalidAccountType
+
 		}
 		ctx.DeleteAccount(acc)
 

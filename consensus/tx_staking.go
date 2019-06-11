@@ -27,6 +27,28 @@ func init() {
 			return ErrInvalidSequence
 		}
 
+		if tx.Amount.Less(amount.COIN.DivC(10)) {
+			return ErrInvalidStakingAmount
+		}
+
+		acc, err := loader.Account(tx.HyperFormulator)
+		if err != nil {
+			return err
+		}
+		frAcc, is := acc.(*FormulationAccount)
+		if !is {
+			return ErrInvalidAccountType
+		}
+		if frAcc.FormulationType != HyperFormulatorType {
+			return ErrInvalidAccountType
+		}
+		if !frAcc.Policy.MinimumStaking.IsZero() && tx.Amount.Less(frAcc.Policy.MinimumStaking) {
+			return ErrInvalidStakingAmount
+		}
+		if !frAcc.Policy.MaximumStaking.IsZero() && frAcc.Policy.MaximumStaking.Less(tx.Amount) {
+			return ErrInvalidStakingAmount
+		}
+
 		fromAcc, err := loader.Account(tx.From())
 		if err != nil {
 			return err
@@ -46,18 +68,25 @@ func init() {
 		}
 		ctx.AddSeq(tx.From())
 
-		acc, err := ctx.Account(tx.CommunityFormulator)
+		if tx.Amount.Less(amount.COIN.DivC(10)) {
+			return nil, ErrInvalidStakingAmount
+		}
+
+		acc, err := ctx.Account(tx.HyperFormulator)
 		if err != nil {
 			return nil, err
 		}
-		commAcc, is := acc.(*CommunityFormulationAccount)
+		frAcc, is := acc.(*FormulationAccount)
 		if !is {
-			return nil, ErrInvalidCommunityFormulationAddress
+			return nil, ErrInvalidAccountType
 		}
-		if !commAcc.Policy.MinimumStaking.IsZero() && tx.Amount.Less(commAcc.Policy.MinimumStaking) {
+		if frAcc.FormulationType != HyperFormulatorType {
+			return nil, ErrInvalidAccountType
+		}
+		if !frAcc.Policy.MinimumStaking.IsZero() && tx.Amount.Less(frAcc.Policy.MinimumStaking) {
 			return nil, ErrInsufficientStakingAmount
 		}
-		if !commAcc.Policy.MaximumStaking.IsZero() && commAcc.Policy.MaximumStaking.Less(tx.Amount) {
+		if !frAcc.Policy.MaximumStaking.IsZero() && frAcc.Policy.MaximumStaking.Less(tx.Amount) {
 			return nil, ErrExceedStakingAmount
 		}
 
@@ -73,14 +102,14 @@ func init() {
 		}
 
 		var fromStakingAmount *amount.Amount
-		if bs := ctx.AccountData(tx.CommunityFormulator, toStakingKey(tx.From())); len(bs) > 0 {
+		if bs := ctx.AccountData(tx.HyperFormulator, toStakingKey(tx.From())); len(bs) > 0 {
 			fromStakingAmount = amount.NewAmountFromBytes(bs)
 		} else {
 			fromStakingAmount = amount.NewCoinAmount(0, 0)
 		}
 		fromStakingAmount.Add(tx.Amount)
-		ctx.SetAccountData(tx.CommunityFormulator, toStakingKey(tx.From()), fromStakingAmount.Bytes())
-		commAcc.StakingAmount = commAcc.StakingAmount.Add(tx.Amount)
+		ctx.SetAccountData(tx.HyperFormulator, toStakingKey(tx.From()), fromStakingAmount.Bytes())
+		frAcc.StakingAmount = frAcc.StakingAmount.Add(tx.Amount)
 
 		ctx.Commit(sn)
 		return nil, nil
@@ -91,10 +120,10 @@ func init() {
 // It is used to make formulation account
 type Staking struct {
 	transaction.Base
-	Seq_                uint64
-	From_               common.Address
-	CommunityFormulator common.Address
-	Amount              *amount.Amount
+	Seq_            uint64
+	From_           common.Address
+	HyperFormulator common.Address
+	Amount          *amount.Amount
 }
 
 // IsUTXO returns false
@@ -135,7 +164,7 @@ func (tx *Staking) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := tx.CommunityFormulator.WriteTo(w); err != nil {
+	if n, err := tx.HyperFormulator.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -167,7 +196,7 @@ func (tx *Staking) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if n, err := tx.CommunityFormulator.ReadFrom(r); err != nil {
+	if n, err := tx.HyperFormulator.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -212,8 +241,8 @@ func (tx *Staking) MarshalJSON() ([]byte, error) {
 		buffer.Write(bs)
 	}
 	buffer.WriteString(`,`)
-	buffer.WriteString(`"community_formulator":`)
-	if bs, err := tx.CommunityFormulator.MarshalJSON(); err != nil {
+	buffer.WriteString(`"Hyper_formulator":`)
+	if bs, err := tx.HyperFormulator.MarshalJSON(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)

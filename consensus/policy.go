@@ -11,25 +11,103 @@ import (
 
 // FormulatorPolicy defines a staking policy user
 type FormulatorPolicy struct {
-	CreateFormulationAmount *amount.Amount
-	SigmaRequiredLockBlocks uint32
-	OmegaRequiredLockBlocks uint32
+	FormulatorCreationLimitHeight uint32
+	AlphaFormulationAmount        *amount.Amount
+	AlphaEfficiency1000           uint32
+	AlphaUnlockRequiredBlocks     uint32
+	SigmaRequiredAlphaBlocks      uint32
+	SigmaRequiredAlphaCount       uint32
+	SigmaEfficiency1000           uint32
+	SigmaUnlockRequiredBlocks     uint32
+	OmegaRequiredSigmaBlocks      uint32
+	OmegaRequiredSigmaCount       uint32
+	OmegaEfficiency1000           uint32
+	OmegaUnlockRequiredBlocks     uint32
+	HyperFormulationAmount        *amount.Amount
+	HyperEfficiency1000           uint32
+	HyperUnlockRequiredBlocks     uint32
+	StakingEfficiency1000         uint32
 }
 
 // WriteTo is a serialization function
 func (pc *FormulatorPolicy) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
-	if n, err := pc.CreateFormulationAmount.WriteTo(w); err != nil {
+	if n, err := util.WriteUint32(w, pc.FormulatorCreationLimitHeight); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
-	if n, err := util.WriteUint32(w, pc.SigmaRequiredLockBlocks); err != nil {
+	if n, err := pc.AlphaFormulationAmount.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
 	}
-	if n, err := util.WriteUint32(w, pc.OmegaRequiredLockBlocks); err != nil {
+	if n, err := util.WriteUint32(w, pc.AlphaEfficiency1000); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.AlphaUnlockRequiredBlocks); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.SigmaRequiredAlphaBlocks); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.SigmaRequiredAlphaCount); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.SigmaEfficiency1000); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.SigmaUnlockRequiredBlocks); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.OmegaRequiredSigmaBlocks); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.OmegaRequiredSigmaCount); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.OmegaEfficiency1000); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.OmegaUnlockRequiredBlocks); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := pc.HyperFormulationAmount.WriteTo(w); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.HyperEfficiency1000); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.HyperUnlockRequiredBlocks); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
+	if n, err := util.WriteUint32(w, pc.StakingEfficiency1000); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -40,7 +118,13 @@ func (pc *FormulatorPolicy) WriteTo(w io.Writer) (int64, error) {
 // ReadFrom is a deserialization function
 func (pc *FormulatorPolicy) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
-	if n, err := pc.CreateFormulationAmount.ReadFrom(r); err != nil {
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.FormulatorCreationLimitHeight = v
+	}
+	if n, err := pc.AlphaFormulationAmount.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -49,13 +133,84 @@ func (pc *FormulatorPolicy) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
-		pc.SigmaRequiredLockBlocks = v
+		pc.AlphaEfficiency1000 = v
 	}
 	if v, n, err := util.ReadUint32(r); err != nil {
 		return read, err
 	} else {
 		read += n
-		pc.OmegaRequiredLockBlocks = v
+		pc.AlphaUnlockRequiredBlocks = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.SigmaRequiredAlphaBlocks = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.SigmaRequiredAlphaCount = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.SigmaEfficiency1000 = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.SigmaUnlockRequiredBlocks = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.OmegaRequiredSigmaBlocks = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.OmegaRequiredSigmaCount = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.OmegaEfficiency1000 = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.OmegaUnlockRequiredBlocks = v
+	}
+	if n, err := pc.HyperFormulationAmount.ReadFrom(r); err != nil {
+		return read, err
+	} else {
+		read += n
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.HyperEfficiency1000 = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.HyperUnlockRequiredBlocks = v
+	}
+	if v, n, err := util.ReadUint32(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		pc.StakingEfficiency1000 = v
 	}
 	return read, nil
 }
@@ -64,8 +219,113 @@ func (pc *FormulatorPolicy) ReadFrom(r io.Reader) (int64, error) {
 func (pc *FormulatorPolicy) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.WriteString(`{`)
-	buffer.WriteString(`"CreateFormulationAmount":`)
-	if bs, err := pc.CreateFormulationAmount.MarshalJSON(); err != nil {
+	buffer.WriteString(`"formulator_creation_limit_height":`)
+	if bs, err := json.Marshal(pc.FormulatorCreationLimitHeight); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"alpha_formulation_amount":`)
+	if bs, err := pc.AlphaFormulationAmount.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"alpha_efficiency_1000":`)
+	if bs, err := json.Marshal(pc.AlphaEfficiency1000); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"alpha_unlock_required_blocks":`)
+	if bs, err := json.Marshal(pc.AlphaUnlockRequiredBlocks); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"sigma_required_alpha_blocks":`)
+	if bs, err := json.Marshal(pc.SigmaRequiredAlphaBlocks); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"sigma_required_alpha_count":`)
+	if bs, err := json.Marshal(pc.SigmaRequiredAlphaCount); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"sigma_efficiency_1000":`)
+	if bs, err := json.Marshal(pc.SigmaEfficiency1000); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"sigma_unlock_required_blocks":`)
+	if bs, err := json.Marshal(pc.SigmaUnlockRequiredBlocks); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"omega_required_sigma_blocks":`)
+	if bs, err := json.Marshal(pc.OmegaRequiredSigmaBlocks); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"omega_required_sigma_count":`)
+	if bs, err := json.Marshal(pc.OmegaRequiredSigmaCount); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"omega_efficiency_1000":`)
+	if bs, err := json.Marshal(pc.OmegaEfficiency1000); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"omega_unlock_required_blocks":`)
+	if bs, err := json.Marshal(pc.OmegaUnlockRequiredBlocks); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"hyper_formulation_amount":`)
+	if bs, err := pc.HyperFormulationAmount.MarshalJSON(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"hyper_efficiency_1000":`)
+	if bs, err := json.Marshal(pc.HyperEfficiency1000); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"hyper_unlock_required_blocks":`)
+	if bs, err := json.Marshal(pc.HyperUnlockRequiredBlocks); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(bs)
+	}
+	buffer.WriteString(`,`)
+	buffer.WriteString(`"staking_efficiency_1000":`)
+	if bs, err := json.Marshal(pc.StakingEfficiency1000); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)
@@ -74,16 +334,16 @@ func (pc *FormulatorPolicy) MarshalJSON() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// CommunityPolicy defines a policy of community formulator
-type CommunityPolicy struct {
+// HyperPolicy defines a policy of Hyper formulator
+type HyperPolicy struct {
 	CommissionRatio1000 uint32
 	MinimumStaking      *amount.Amount
 	MaximumStaking      *amount.Amount
 }
 
 // Clone returns the clonend value of it
-func (pc *CommunityPolicy) Clone() *CommunityPolicy {
-	return &CommunityPolicy{
+func (pc *HyperPolicy) Clone() *HyperPolicy {
+	return &HyperPolicy{
 		CommissionRatio1000: pc.CommissionRatio1000,
 		MinimumStaking:      pc.MinimumStaking.Clone(),
 		MaximumStaking:      pc.MaximumStaking.Clone(),
@@ -91,7 +351,7 @@ func (pc *CommunityPolicy) Clone() *CommunityPolicy {
 }
 
 // WriteTo is a serialization function
-func (pc *CommunityPolicy) WriteTo(w io.Writer) (int64, error) {
+func (pc *HyperPolicy) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := util.WriteUint32(w, pc.CommissionRatio1000); err != nil {
 		return wrote, err
@@ -112,7 +372,7 @@ func (pc *CommunityPolicy) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom is a deserialization function
-func (pc *CommunityPolicy) ReadFrom(r io.Reader) (int64, error) {
+func (pc *HyperPolicy) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if v, n, err := util.ReadUint32(r); err != nil {
 		return read, err
@@ -134,7 +394,7 @@ func (pc *CommunityPolicy) ReadFrom(r io.Reader) (int64, error) {
 }
 
 // MarshalJSON is a marshaler function
-func (pc *CommunityPolicy) MarshalJSON() ([]byte, error) {
+func (pc *HyperPolicy) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.WriteString(`{`)
 	buffer.WriteString(`"commission_ratio_1000":`)

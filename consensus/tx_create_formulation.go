@@ -40,6 +40,21 @@ func init() {
 			return ErrInvalidAccountName
 		}
 
+		policy, has := gFormulatorPolicyMap[loader.ChainCoord().ID()]
+		if !has {
+			return ErrNotExistFormulatorPolicy
+		}
+		if loader.TargetHeight() < policy.FormulatorCreationLimitHeight {
+			return ErrFormulatorCreationLimited
+		}
+
+		switch tx.FormulationType {
+		case AlphaFormulatorType:
+		case HyperFormulatorType:
+		default:
+			return ErrInvalidAccountType
+		}
+
 		if tx.Seq() <= loader.Seq(tx.From()) {
 			return ErrInvalidSequence
 		}
@@ -63,6 +78,9 @@ func init() {
 		if !has {
 			return nil, ErrNotExistFormulatorPolicy
 		}
+		if ctx.TargetHeight() < policy.FormulatorCreationLimitHeight {
+			return nil, ErrFormulatorCreationLimited
+		}
 
 		sn := ctx.Snapshot()
 		defer ctx.Revert(sn)
@@ -79,7 +97,17 @@ func init() {
 		if err := fromAcc.SubBalance(Fee); err != nil {
 			return nil, err
 		}
-		if err := fromAcc.SubBalance(policy.CreateFormulationAmount); err != nil {
+
+		var Amount *amount.Amount
+		switch tx.FormulationType {
+		case AlphaFormulatorType:
+			Amount = policy.AlphaFormulationAmount
+		case HyperFormulatorType:
+			Amount = policy.HyperFormulationAmount
+		default:
+			return nil, ErrInvalidAccountType
+		}
+		if err := fromAcc.SubBalance(Amount); err != nil {
 			return nil, err
 		}
 
@@ -100,8 +128,9 @@ func init() {
 			acc := a.(*FormulationAccount)
 			acc.Address_ = addr
 			acc.Name_ = tx.Name
+			acc.FormulationType = tx.FormulationType
 			acc.KeyHash = tx.KeyHash
-			acc.Amount = policy.CreateFormulationAmount
+			acc.Amount = Amount
 			ctx.CreateAccount(acc)
 		}
 		ctx.Commit(sn)
@@ -113,10 +142,11 @@ func init() {
 // It is used to make formulation account
 type CreateFormulation struct {
 	transaction.Base
-	Seq_    uint64
-	From_   common.Address
-	Name    string
-	KeyHash common.PublicHash
+	Seq_            uint64
+	From_           common.Address
+	FormulationType FormulationType
+	Name            string
+	KeyHash         common.PublicHash
 }
 
 // IsUTXO returns false
@@ -157,6 +187,11 @@ func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
+	if n, err := util.WriteUint8(w, uint8(tx.FormulationType)); err != nil {
+		return wrote, err
+	} else {
+		wrote += n
+	}
 	if n, err := util.WriteString(w, tx.Name); err != nil {
 		return wrote, err
 	} else {
@@ -188,6 +223,12 @@ func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
 		return read, err
 	} else {
 		read += n
+	}
+	if v, n, err := util.ReadUint8(r); err != nil {
+		return read, err
+	} else {
+		read += n
+		tx.FormulationType = FormulationType(v)
 	}
 	if v, n, err := util.ReadString(r); err != nil {
 		return read, err
