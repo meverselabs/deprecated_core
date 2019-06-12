@@ -173,7 +173,7 @@ func (am *Amount) String() string {
 		return "0"
 	}
 	str := am.Int.String()
-	if len(str) < FractionalCount {
+	if len(str) <= FractionalCount {
 		return "0." + formatFractional(str)
 	} else {
 		si := str[:len(str)-FractionalCount]
