@@ -50,7 +50,7 @@ func (ctx *Context) NextContext(NextHash hash.Hash256) *Context {
 // Hash returns the hash value of it
 func (ctx *Context) Hash() hash.Hash256 {
 	if !ctx.isLatestHash {
-		ctx.dataHash = ctx.Top().Hash()
+		ctx.dataHash = hash.TwoHash(ctx.genLastHash, ctx.Top().Hash())
 		ctx.isLatestHash = true
 	}
 	return ctx.dataHash
@@ -160,8 +160,8 @@ func (ctx *Context) DeleteAccount(acc account.Account) error {
 }
 
 // AccountDataKeys returns all data keys of the account in the context
-func (ctx *Context) AccountDataKeys(addr common.Address) ([][]byte, error) {
-	return ctx.Top().AccountDataKeys(addr)
+func (ctx *Context) AccountDataKeys(addr common.Address, Prefix []byte) ([][]byte, error) {
+	return ctx.Top().AccountDataKeys(addr, Prefix)
 }
 
 // AccountData returns the account data from the top snapshot
@@ -517,13 +517,10 @@ func (ctd *ContextData) DeleteAccount(acc account.Account) error {
 }
 
 // AccountDataKeys returns all data keys of the account in the context
-func (ctd *ContextData) AccountDataKeys(addr common.Address) ([][]byte, error) {
-	if _, err := ctd.Account(addr); err != nil {
-		return nil, err
-	}
+func (ctd *ContextData) AccountDataKeys(addr common.Address, Prefix []byte) ([][]byte, error) {
 	keyMap := map[string]bool{}
 	if ctd.Parent != nil {
-		keys, err := ctd.Parent.AccountDataKeys(addr)
+		keys, err := ctd.Parent.AccountDataKeys(addr, Prefix)
 		if err != nil {
 			return nil, err
 		}
@@ -531,8 +528,7 @@ func (ctd *ContextData) AccountDataKeys(addr common.Address) ([][]byte, error) {
 			keyMap[string(k)] = true
 		}
 	} else {
-		ctd.loader.AccountDataKeys(addr)
-		keys, err := ctd.loader.AccountDataKeys(addr)
+		keys, err := ctd.loader.AccountDataKeys(addr, Prefix)
 		if err != nil {
 			return nil, err
 		}

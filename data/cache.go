@@ -124,17 +124,8 @@ func (cc *cache) IsExistAccountName(Name string) (bool, error) {
 }
 
 // AccountDataKeys returns all data keys of the account in the context
-func (cc *cache) AccountDataKeys(addr common.Address) ([][]byte, error) {
-	if keys, has := cc.AccountDataKeysMap[addr]; has {
-		return keys, nil
-	} else {
-		keys, err := cc.ctx.loader.AccountDataKeys(addr)
-		if err != nil {
-			return nil, err
-		}
-		cc.AccountDataKeysMap[addr] = keys
-		return keys, nil
-	}
+func (cc *cache) AccountDataKeys(addr common.Address, Prefix []byte) ([][]byte, error) {
+	return cc.ctx.loader.AccountDataKeys(addr, Prefix)
 }
 
 // AccountData returns the account data

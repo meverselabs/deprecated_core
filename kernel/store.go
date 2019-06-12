@@ -597,7 +597,7 @@ func (st *Store) IsExistAccountName(Name string) (bool, error) {
 }
 
 // AccountDataKeys returns all data keys of the account in the store
-func (st *Store) AccountDataKeys(addr common.Address) ([][]byte, error) {
+func (st *Store) AccountDataKeys(addr common.Address, Prefix []byte) ([][]byte, error) {
 	st.closeLock.RLock()
 	defer st.closeLock.RUnlock()
 	if st.isClose {
@@ -608,11 +608,14 @@ func (st *Store) AccountDataKeys(addr common.Address) ([][]byte, error) {
 	if err := st.db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
-		prefix := toAccountDataKey(string(addr[:]))
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		pre := toAccountDataKey(string(addr[:]))
+		if len(Prefix) > 0 {
+			pre = append(pre, Prefix...)
+		}
+		for it.Seek(pre); it.ValidForPrefix(pre); it.Next() {
 			item := it.Item()
 			key := item.Key()
-			list = append(list, key[len(prefix):])
+			list = append(list, key[len(pre):])
 		}
 		return nil
 	}); err != nil {
