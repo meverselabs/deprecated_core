@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	tagPowerSum = []byte{1, 0}
+	tagPowerSum = []byte("conensus.power:")
 )
 
 func toPowerSumKey(addr common.Address) []byte {

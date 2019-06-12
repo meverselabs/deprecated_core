@@ -1,6 +1,8 @@
 package reward
 
 import (
+	"bytes"
+
 	"github.com/fletaio/common"
 	"github.com/fletaio/common/util"
 	"github.com/fletaio/core/amount"
@@ -9,123 +11,174 @@ import (
 )
 
 type TestNetRewarder struct {
+	LastPaidHeight uint32
+	PowerMap       map[common.Address]*amount.Amount
+}
+
+func NewTestNetRewarder() *TestNetRewarder {
+	rd := &TestNetRewarder{
+		PowerMap: map[common.Address]*amount.Amount{},
+	}
+	return rd
+}
+
+// ApplyGenesis init genesis data
+func (rd *TestNetRewarder) ApplyGenesis(ctx *data.ContextData) ([]byte, error) {
+	SaveData, err := rd.buildSaveData()
+	if err != nil {
+		return nil, err
+	}
+	return SaveData, nil
 }
 
 // ProcessReward gives a reward to the block generator address
-func (rd *TestNetRewarder) ProcessReward(addr common.Address, ctx *data.Context) error {
-	var zeroAddr common.Address
+func (rd *TestNetRewarder) ProcessReward(addr common.Address, ctx *data.Context) ([]byte, error) {
 	policy, err := consensus.GetConsensusPolicy(ctx.ChainCoord())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if true {
 		acc, err := ctx.Account(addr)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		frAcc, is := acc.(*consensus.FormulationAccount)
 		if !is {
-			return consensus.ErrInvalidAccountType
+			return nil, consensus.ErrInvalidAccountType
 		}
 		switch frAcc.FormulationType {
 		case consensus.AlphaFormulatorType:
-			rd.addRewardPower(addr, ctx, frAcc.Amount.MulC(int64(policy.AlphaEfficiency1000)).DivC(1000))
+			rd.addRewardPower(addr, frAcc.Amount.MulC(int64(policy.AlphaEfficiency1000)).DivC(1000))
 		case consensus.SigmaFormulatorType:
-			rd.addRewardPower(addr, ctx, frAcc.Amount.MulC(int64(policy.SigmaEfficiency1000)).DivC(1000))
+			rd.addRewardPower(addr, frAcc.Amount.MulC(int64(policy.SigmaEfficiency1000)).DivC(1000))
 		case consensus.OmegaFormulatorType:
-			rd.addRewardPower(addr, ctx, frAcc.Amount.MulC(int64(policy.OmegaEfficiency1000)).DivC(1000))
+			rd.addRewardPower(addr, frAcc.Amount.MulC(int64(policy.OmegaEfficiency1000)).DivC(1000))
 		case consensus.HyperFormulatorType:
-			rd.addRewardPower(addr, ctx, frAcc.Amount.MulC(int64(policy.HyperEfficiency1000)).DivC(1000))
+			PowerSum := frAcc.Amount.MulC(int64(policy.HyperEfficiency1000)).DivC(1000)
 
-			keys, err := ctx.AccountDataKeys(addr)
+			keys, err := ctx.AccountDataKeys(addr, consensus.TagStaking)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			for _, k := range keys {
-				if addr, is := consensus.FromStakingKey(k); is {
+				if StakingAddress, is := consensus.FromStakingKey(k); is {
 					bs := ctx.AccountData(addr, k)
 					if len(bs) == 0 {
-						return consensus.ErrInvalidStakingAddress
+						return nil, consensus.ErrInvalidStakingAddress
 					}
 					StakingAmount := amount.NewAmountFromBytes(bs)
 
-					if _, err := ctx.Account(addr); err != nil {
+					if _, err := ctx.Account(StakingAddress); err != nil {
 						if err != data.ErrNotExistAccount {
-							return err
+							return nil, err
 						}
-						rd.removeRewardPower(addr, ctx)
+						rd.removeRewardPower(StakingAddress)
 					} else {
-						rd.addRewardPower(addr, ctx, StakingAmount.MulC(int64(policy.StakingEfficiency1000)).DivC(1000))
+						StakingPower := StakingAmount.MulC(int64(policy.StakingEfficiency1000)).DivC(1000)
+						ComissionPower := StakingPower.MulC(int64(frAcc.Policy.CommissionRatio1000)).DivC(1000)
+						rd.addRewardPower(StakingAddress, StakingPower.Sub(ComissionPower))
+						PowerSum = PowerSum.Add(ComissionPower)
 					}
 				}
 			}
+			rd.addRewardPower(addr, PowerSum)
 		default:
-			return consensus.ErrInvalidAccountType
+			return nil, consensus.ErrInvalidAccountType
 		}
 	}
 
-	var LastPaidHeight uint32
-	if bs := ctx.AccountData(zeroAddr, []byte("consensus:last_paid_height")); len(bs) > 0 {
-		LastPaidHeight = util.BytesToUint32(bs)
-	}
-
-	if ctx.TargetHeight() >= LastPaidHeight+policy.PayRewardEveryBlocks {
-		keys, err := ctx.AccountDataKeys(zeroAddr)
-		if err != nil {
-			return err
-		}
-
+	if ctx.TargetHeight() >= rd.LastPaidHeight+policy.PayRewardEveryBlocks {
 		TotalPower := amount.NewCoinAmount(0, 0)
-		PowerMap := map[common.Address]*amount.Amount{}
-		for _, k := range keys {
-			if addr, is := FromPowerSumKey(k); is {
-				PowerSum := rd.getRewardPower(addr, ctx)
-				if !PowerSum.IsZero() {
-					TotalPower = TotalPower.Add(PowerSum)
-					PowerMap[addr] = PowerSum
-				}
-			}
+		for _, PowerSum := range rd.PowerMap {
+			TotalPower = TotalPower.Add(PowerSum)
 		}
-
-		TotalReward := policy.RewardPerBlock.MulC(int64(ctx.TargetHeight() - LastPaidHeight))
+		TotalReward := policy.RewardPerBlock.MulC(int64(ctx.TargetHeight() - rd.LastPaidHeight))
 		Ratio := TotalReward.Mul(amount.COIN).Div(TotalPower)
-		for addr, PowerSum := range PowerMap {
+		for addr, PowerSum := range rd.PowerMap {
 			acc, err := ctx.Account(addr)
 			if err != nil {
 				if err != data.ErrNotExistAccount {
-					return err
+					return nil, err
 				}
 			} else {
 				frAcc := acc.(*consensus.FormulationAccount)
 				frAcc.AddBalance(PowerSum.Mul(Ratio).Div(amount.COIN))
+				//log.Println("AddBalance", frAcc.Address().String(), PowerSum.Mul(Ratio).Div(amount.COIN).String())
 			}
-			rd.removeRewardPower(addr, ctx)
+			rd.removeRewardPower(addr)
 		}
 
-		ctx.SetAccountData(zeroAddr, []byte("consensus:last_paid_height"), util.Uint32ToBytes(ctx.TargetHeight()))
+		//log.Println("Paid at", ctx.TargetHeight())
+		rd.LastPaidHeight = ctx.TargetHeight()
+	}
+	SaveData, err := rd.buildSaveData()
+	if err != nil {
+		return nil, err
+	}
+	return SaveData, nil
+}
+
+func (rd *TestNetRewarder) addRewardPower(addr common.Address, Power *amount.Amount) {
+	//log.Println("addRewardPower", addr.String(), rd.getRewardPower(addr).Add(Power).String())
+	rd.PowerMap[addr] = rd.getRewardPower(addr).Add(Power)
+}
+
+func (rd *TestNetRewarder) removeRewardPower(addr common.Address) {
+	//log.Println("removeRewardPower", addr.String(), nil)
+	delete(rd.PowerMap, addr)
+}
+
+func (rd *TestNetRewarder) getRewardPower(addr common.Address) *amount.Amount {
+	if PowerSum, has := rd.PowerMap[addr]; has {
+		return PowerSum
+	} else {
+		return amount.NewCoinAmount(0, 0)
+	}
+}
+
+func (rd *TestNetRewarder) buildSaveData() ([]byte, error) {
+	var buffer bytes.Buffer
+	if _, err := util.WriteUint32(&buffer, rd.LastPaidHeight); err != nil {
+		return nil, err
+	}
+	if _, err := util.WriteUint32(&buffer, uint32(len(rd.PowerMap))); err != nil {
+		return nil, err
+	}
+	for addr, PowerSum := range rd.PowerMap {
+		if _, err := addr.WriteTo(&buffer); err != nil {
+			return nil, err
+		}
+		if _, err := PowerSum.WriteTo(&buffer); err != nil {
+			return nil, err
+		}
+	}
+	return buffer.Bytes(), nil
+}
+
+// LoadFromSaveData recover the status using the save data
+func (rd *TestNetRewarder) LoadFromSaveData(SaveData []byte) error {
+	r := bytes.NewReader(SaveData)
+	if v, _, err := util.ReadUint32(r); err != nil {
+		return err
+	} else {
+		rd.LastPaidHeight = v
+	}
+	if Len, _, err := util.ReadUint32(r); err != nil {
+		return err
+	} else {
+		rd.PowerMap = map[common.Address]*amount.Amount{}
+		for i := 0; i < int(Len); i++ {
+			var addr common.Address
+			if _, err := addr.ReadFrom(r); err != nil {
+				return err
+			}
+			Amount := amount.NewCoinAmount(0, 0)
+			if _, err := Amount.ReadFrom(r); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
-}
-
-func (rd *TestNetRewarder) addRewardPower(addr common.Address, ctx *data.Context, Power *amount.Amount) {
-	var zeroAddr common.Address
-	ctx.SetAccountData(zeroAddr, toPowerSumKey(addr), rd.getRewardPower(addr, ctx).Add(Power).Bytes())
-}
-
-func (rd *TestNetRewarder) removeRewardPower(addr common.Address, ctx *data.Context) {
-	var zeroAddr common.Address
-	ctx.SetAccountData(zeroAddr, toPowerSumKey(addr), nil)
-}
-
-func (rd *TestNetRewarder) getRewardPower(addr common.Address, ctx *data.Context) *amount.Amount {
-	var zeroAddr common.Address
-	var PowerSum *amount.Amount
-	if bs := ctx.AccountData(zeroAddr, toPowerSumKey(addr)); len(bs) > 0 {
-		PowerSum = amount.NewAmountFromBytes(bs)
-	} else {
-		PowerSum = amount.NewCoinAmount(0, 0)
-	}
-	return PowerSum
 }

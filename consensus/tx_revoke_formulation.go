@@ -88,7 +88,7 @@ func init() {
 			}
 			ctx.AddLockedBalance(heritorAcc.Address(), frAcc.Amount.Add(frAcc.Balance()), ctx.TargetHeight()+policy.HyperUnlockRequiredBlocks)
 
-			keys, err := ctx.AccountDataKeys(tx.From())
+			keys, err := ctx.AccountDataKeys(tx.From(), TagStaking)
 			if err != nil {
 				return nil, err
 			}

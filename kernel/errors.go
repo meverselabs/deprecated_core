@@ -12,6 +12,7 @@ var (
 	ErrDirtyContext              = errors.New("dirty context")
 	ErrInvalidLevelRootHash      = errors.New("invalid level root hash")
 	ErrNotExistConsensusSaveData = errors.New("invalid consensus save data")
+	ErrNotExistRewardSaveData    = errors.New("invalid reward save data")
 	ErrExpiredContextHeight      = errors.New("expired context height")
 	ErrExpiredContextBlockHash   = errors.New("expired context block hash")
 	ErrInvalidAppendBlockHeight  = errors.New("invalid append block height")

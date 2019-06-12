@@ -38,7 +38,7 @@ type Kernel struct {
 	txWorkingMap       map[hash.Hash256]bool
 	txSignersMap       map[hash.Hash256][]common.PublicHash
 	genesisContextData *data.ContextData
-	rewarder           reward.Rewarder
+	rd                 reward.Rewarder
 	eventHandlers      []EventHandler
 	processBlockLock   sync.Mutex
 	closeLock          sync.RWMutex
@@ -46,7 +46,7 @@ type Kernel struct {
 }
 
 // NewKernel returns a Kernel
-func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisContextData *data.ContextData) (*Kernel, error) {
+func NewKernel(Config *Config, st *Store, rd reward.Rewarder, genesisContextData *data.ContextData) (*Kernel, error) {
 	FormulationAccountType, err := st.Accounter().TypeByName("consensus.FormulationAccount")
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		Config:             Config,
 		store:              st,
 		genesisContextData: genesisContextData,
-		rewarder:           rewarder,
+		rd:                 rd,
 		cs:                 consensus.NewConsensus(Config.ObserverKeyMap, Config.MaxBlocksPerFormulator, FormulationAccountType),
 		txPool:             txpool.NewTransactionPool(),
 		txQueue:            queue.NewExpireQueue(),
@@ -120,6 +120,11 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 			} else {
 				CustomData["consensus"] = SaveData
 			}
+			if SaveData, err := kn.rd.ApplyGenesis(kn.genesisContextData); err != nil {
+				return nil, err
+			} else {
+				CustomData["reward"] = SaveData
+			}
 			if err := kn.store.StoreGenesis(GenesisHash, kn.genesisContextData, CustomData); err != nil {
 				return nil, err
 			}
@@ -131,6 +136,11 @@ func NewKernel(Config *Config, st *Store, rewarder reward.Rewarder, genesisConte
 		if SaveData := kn.store.CustomData("consensus"); SaveData == nil {
 			return nil, ErrNotExistConsensusSaveData
 		} else if err := kn.cs.LoadFromSaveData(SaveData); err != nil {
+			return nil, err
+		}
+		if SaveData := kn.store.CustomData("reward"); SaveData == nil {
+			return nil, ErrNotExistRewardSaveData
+		} else if err := kn.rd.LoadFromSaveData(SaveData); err != nil {
 			return nil, err
 		}
 	}
@@ -413,6 +423,11 @@ func (kn *Kernel) Process(cd *chain.Data, UserData interface{}) error {
 	} else {
 		CustomMap["consensus"] = SaveData
 	}
+	if SaveData, err := kn.rd.ProcessReward(b.Header.Formulator, ctx); err != nil {
+		return err
+	} else {
+		CustomMap["reward"] = SaveData
+	}
 	if err := kn.store.StoreData(cd, top, CustomMap); err != nil {
 		return err
 	}
@@ -544,14 +559,10 @@ func (kn *Kernel) contextByBlock(b *block.Block) (*data.Context, error) {
 			return nil, err
 		}
 	}
-	if err := kn.rewarder.ProcessReward(b.Header.Formulator, ctx); err != nil {
-		return nil, err
-	}
 
 	if ctx.StackSize() > 1 {
 		return nil, ErrDirtyContext
 	}
-
 	if !b.Header.ContextHash.Equal(ctx.Hash()) {
 		return nil, ErrInvalidAppendContextHash
 	}
@@ -619,9 +630,6 @@ TxLoop:
 	}
 	kn.txPool.Unlock() // Prevent delaying from TxPool.Push
 
-	if err := kn.rewarder.ProcessReward(b.Header.Formulator, ctx); err != nil {
-		return nil, err
-	}
 	if ctx.StackSize() > 1 {
 		return nil, ErrDirtyContext
 	}
