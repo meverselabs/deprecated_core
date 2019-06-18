@@ -29,4 +29,5 @@ var (
 	ErrInsufficientFormulatorBlocks   = errors.New("insufficient formulator blocks")
 	ErrNotExistConsensusPolicy        = errors.New("not exist formulator policy")
 	ErrFormulatorCreationLimited      = errors.New("formulator creation limited")
+	ErrUnauthorizedTransaction        = errors.New("unauthorized transaction")
 )

@@ -13,38 +13,17 @@ import (
 	"github.com/fletaio/core/transaction"
 )
 
-var gConsensusPolicyMap = map[uint64]*ConsensusPolicy{}
-
-func SetConsensusPolicy(chainCoord *common.Coordinate, pc *ConsensusPolicy) {
-	gConsensusPolicyMap[chainCoord.ID()] = pc
-}
-
-func GetConsensusPolicy(chainCoord *common.Coordinate) (*ConsensusPolicy, error) {
-	pc, has := gConsensusPolicyMap[chainCoord.ID()]
-	if !has {
-		return nil, ErrNotExistConsensusPolicy
-	}
-	return pc, nil
-}
-
 func init() {
-	data.RegisterTransaction("consensus.CreateFormulation", func(t transaction.Type) transaction.Transaction {
-		return &CreateFormulation{
+	data.RegisterTransaction("consensus.CreateAlpha", func(t transaction.Type) transaction.Transaction {
+		return &CreateAlpha{
 			Base: transaction.Base{
 				Type_: t,
 			},
 		}
 	}, func(loader data.Loader, t transaction.Transaction, signers []common.PublicHash) error {
-		tx := t.(*CreateFormulation)
+		tx := t.(*CreateAlpha)
 		if len(tx.Name) < 8 || len(tx.Name) > 16 {
 			return ErrInvalidAccountName
-		}
-
-		switch tx.FormulationType {
-		case AlphaFormulatorType:
-		case HyperFormulatorType:
-		default:
-			return ErrInvalidAccountType
 		}
 
 		if tx.Seq() <= loader.Seq(tx.From()) {
@@ -61,7 +40,7 @@ func init() {
 		}
 		return nil
 	}, func(ctx *data.Context, Fee *amount.Amount, t transaction.Transaction, coord *common.Coordinate) (ret interface{}, rerr error) {
-		tx := t.(*CreateFormulation)
+		tx := t.(*CreateAlpha)
 		if len(tx.Name) < 8 || len(tx.Name) > 16 {
 			return nil, ErrInvalidAccountName
 		}
@@ -89,17 +68,7 @@ func init() {
 		if err := fromAcc.SubBalance(Fee); err != nil {
 			return nil, err
 		}
-
-		var Amount *amount.Amount
-		switch tx.FormulationType {
-		case AlphaFormulatorType:
-			Amount = policy.AlphaFormulationAmount
-		case HyperFormulatorType:
-			Amount = policy.HyperFormulationAmount
-		default:
-			return nil, ErrInvalidAccountType
-		}
-		if err := fromAcc.SubBalance(Amount); err != nil {
+		if err := fromAcc.SubBalance(policy.AlphaCreationAmount); err != nil {
 			return nil, err
 		}
 
@@ -120,9 +89,9 @@ func init() {
 			acc := a.(*FormulationAccount)
 			acc.Address_ = addr
 			acc.Name_ = tx.Name
-			acc.FormulationType = tx.FormulationType
+			acc.FormulationType = AlphaFormulatorType
 			acc.KeyHash = tx.KeyHash
-			acc.Amount = Amount
+			acc.Amount = policy.AlphaCreationAmount
 			ctx.CreateAccount(acc)
 		}
 		ctx.Commit(sn)
@@ -130,39 +99,38 @@ func init() {
 	})
 }
 
-// CreateFormulation is a consensus.CreateFormulation
+// CreateAlpha is a consensus.CreateAlpha
 // It is used to make formulation account
-type CreateFormulation struct {
+type CreateAlpha struct {
 	transaction.Base
-	Seq_            uint64
-	From_           common.Address
-	FormulationType FormulationType
-	Name            string
-	KeyHash         common.PublicHash
+	Seq_    uint64
+	From_   common.Address
+	Name    string
+	KeyHash common.PublicHash
 }
 
 // IsUTXO returns false
-func (tx *CreateFormulation) IsUTXO() bool {
+func (tx *CreateAlpha) IsUTXO() bool {
 	return false
 }
 
 // From returns the creator of the transaction
-func (tx *CreateFormulation) From() common.Address {
+func (tx *CreateAlpha) From() common.Address {
 	return tx.From_
 }
 
 // Seq returns the sequence of the transaction
-func (tx *CreateFormulation) Seq() uint64 {
+func (tx *CreateAlpha) Seq() uint64 {
 	return tx.Seq_
 }
 
 // Hash returns the hash value of it
-func (tx *CreateFormulation) Hash() hash.Hash256 {
+func (tx *CreateAlpha) Hash() hash.Hash256 {
 	return hash.DoubleHashByWriterTo(tx)
 }
 
 // WriteTo is a serialization function
-func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
+func (tx *CreateAlpha) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := tx.Base.WriteTo(w); err != nil {
 		return wrote, err
@@ -175,11 +143,6 @@ func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
 		wrote += n
 	}
 	if n, err := tx.From_.WriteTo(w); err != nil {
-		return wrote, err
-	} else {
-		wrote += n
-	}
-	if n, err := util.WriteUint8(w, uint8(tx.FormulationType)); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -198,7 +161,7 @@ func (tx *CreateFormulation) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom is a deserialization function
-func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
+func (tx *CreateAlpha) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
 		return read, err
@@ -216,12 +179,6 @@ func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
 	} else {
 		read += n
 	}
-	if v, n, err := util.ReadUint8(r); err != nil {
-		return read, err
-	} else {
-		read += n
-		tx.FormulationType = FormulationType(v)
-	}
 	if v, n, err := util.ReadString(r); err != nil {
 		return read, err
 	} else {
@@ -237,7 +194,7 @@ func (tx *CreateFormulation) ReadFrom(r io.Reader) (int64, error) {
 }
 
 // MarshalJSON is a marshaler function
-func (tx *CreateFormulation) MarshalJSON() ([]byte, error) {
+func (tx *CreateAlpha) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.WriteString(`{`)
 	buffer.WriteString(`"type":`)

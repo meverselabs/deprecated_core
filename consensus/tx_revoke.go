@@ -14,14 +14,14 @@ import (
 )
 
 func init() {
-	data.RegisterTransaction("consensus.RevokeFormulation", func(t transaction.Type) transaction.Transaction {
-		return &RevokeFormulation{
+	data.RegisterTransaction("consensus.Revoke", func(t transaction.Type) transaction.Transaction {
+		return &Revoke{
 			Base: transaction.Base{
 				Type_: t,
 			},
 		}
 	}, func(loader data.Loader, t transaction.Transaction, signers []common.PublicHash) error {
-		tx := t.(*RevokeFormulation)
+		tx := t.(*Revoke)
 		if tx.Seq() <= loader.Seq(tx.From()) {
 			return ErrInvalidSequence
 		}
@@ -39,7 +39,7 @@ func init() {
 		}
 		return nil
 	}, func(ctx *data.Context, Fee *amount.Amount, t transaction.Transaction, coord *common.Coordinate) (ret interface{}, rerr error) {
-		tx := t.(*RevokeFormulation)
+		tx := t.(*Revoke)
 		sn := ctx.Snapshot()
 		defer ctx.Revert(sn)
 
@@ -120,9 +120,9 @@ func init() {
 	})
 }
 
-// RevokeFormulation is a consensus.RevokeFormulation
+// Revoke is a consensus.Revoke
 // It is used to remove formulation account and get back staked coin
-type RevokeFormulation struct {
+type Revoke struct {
 	transaction.Base
 	Seq_    uint64
 	From_   common.Address
@@ -130,27 +130,27 @@ type RevokeFormulation struct {
 }
 
 // IsUTXO returns false
-func (tx *RevokeFormulation) IsUTXO() bool {
+func (tx *Revoke) IsUTXO() bool {
 	return false
 }
 
 // From returns the creator of the transaction
-func (tx *RevokeFormulation) From() common.Address {
+func (tx *Revoke) From() common.Address {
 	return tx.From_
 }
 
 // Seq returns the sequence of the transaction
-func (tx *RevokeFormulation) Seq() uint64 {
+func (tx *Revoke) Seq() uint64 {
 	return tx.Seq_
 }
 
 // Hash returns the hash value of it
-func (tx *RevokeFormulation) Hash() hash.Hash256 {
+func (tx *Revoke) Hash() hash.Hash256 {
 	return hash.DoubleHashByWriterTo(tx)
 }
 
 // WriteTo is a serialization function
-func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
+func (tx *Revoke) WriteTo(w io.Writer) (int64, error) {
 	var wrote int64
 	if n, err := tx.Base.WriteTo(w); err != nil {
 		return wrote, err
@@ -176,7 +176,7 @@ func (tx *RevokeFormulation) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom is a deserialization function
-func (tx *RevokeFormulation) ReadFrom(r io.Reader) (int64, error) {
+func (tx *Revoke) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	if n, err := tx.Base.ReadFrom(r); err != nil {
 		return read, err
@@ -203,7 +203,7 @@ func (tx *RevokeFormulation) ReadFrom(r io.Reader) (int64, error) {
 }
 
 // MarshalJSON is a marshaler function
-func (tx *RevokeFormulation) MarshalJSON() ([]byte, error) {
+func (tx *Revoke) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.WriteString(`{`)
 	buffer.WriteString(`"type":`)

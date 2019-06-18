@@ -5,16 +5,31 @@ import (
 	"encoding/json"
 	"io"
 
+	"github.com/fletaio/common"
 	"github.com/fletaio/common/util"
 	"github.com/fletaio/core/amount"
 )
+
+var gConsensusPolicyMap = map[uint64]*ConsensusPolicy{}
+
+func SetConsensusPolicy(chainCoord *common.Coordinate, pc *ConsensusPolicy) {
+	gConsensusPolicyMap[chainCoord.ID()] = pc
+}
+
+func GetConsensusPolicy(chainCoord *common.Coordinate) (*ConsensusPolicy, error) {
+	pc, has := gConsensusPolicyMap[chainCoord.ID()]
+	if !has {
+		return nil, ErrNotExistConsensusPolicy
+	}
+	return pc, nil
+}
 
 // ConsensusPolicy defines a staking policy user
 type ConsensusPolicy struct {
 	RewardPerBlock                *amount.Amount
 	PayRewardEveryBlocks          uint32
 	FormulatorCreationLimitHeight uint32
-	AlphaFormulationAmount        *amount.Amount
+	AlphaCreationAmount           *amount.Amount
 	AlphaEfficiency1000           uint32
 	AlphaUnlockRequiredBlocks     uint32
 	SigmaRequiredAlphaBlocks      uint32
@@ -25,7 +40,7 @@ type ConsensusPolicy struct {
 	OmegaRequiredSigmaCount       uint32
 	OmegaEfficiency1000           uint32
 	OmegaUnlockRequiredBlocks     uint32
-	HyperFormulationAmount        *amount.Amount
+	HyperCreationAmount           *amount.Amount
 	HyperEfficiency1000           uint32
 	HyperUnlockRequiredBlocks     uint32
 	StakingEfficiency1000         uint32
@@ -50,7 +65,7 @@ func (pc *ConsensusPolicy) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := pc.AlphaFormulationAmount.WriteTo(w); err != nil {
+	if n, err := pc.AlphaCreationAmount.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -105,7 +120,7 @@ func (pc *ConsensusPolicy) WriteTo(w io.Writer) (int64, error) {
 	} else {
 		wrote += n
 	}
-	if n, err := pc.HyperFormulationAmount.WriteTo(w); err != nil {
+	if n, err := pc.HyperCreationAmount.WriteTo(w); err != nil {
 		return wrote, err
 	} else {
 		wrote += n
@@ -153,7 +168,7 @@ func (pc *ConsensusPolicy) ReadFrom(r io.Reader) (int64, error) {
 		read += n
 		pc.FormulatorCreationLimitHeight = v
 	}
-	if n, err := pc.AlphaFormulationAmount.ReadFrom(r); err != nil {
+	if n, err := pc.AlphaCreationAmount.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -218,7 +233,7 @@ func (pc *ConsensusPolicy) ReadFrom(r io.Reader) (int64, error) {
 		read += n
 		pc.OmegaUnlockRequiredBlocks = v
 	}
-	if n, err := pc.HyperFormulationAmount.ReadFrom(r); err != nil {
+	if n, err := pc.HyperCreationAmount.ReadFrom(r); err != nil {
 		return read, err
 	} else {
 		read += n
@@ -276,7 +291,7 @@ func (pc *ConsensusPolicy) MarshalJSON() ([]byte, error) {
 	}
 	buffer.WriteString(`,`)
 	buffer.WriteString(`"alpha_formulation_amount":`)
-	if bs, err := pc.AlphaFormulationAmount.MarshalJSON(); err != nil {
+	if bs, err := pc.AlphaCreationAmount.MarshalJSON(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)
@@ -353,7 +368,7 @@ func (pc *ConsensusPolicy) MarshalJSON() ([]byte, error) {
 	}
 	buffer.WriteString(`,`)
 	buffer.WriteString(`"hyper_formulation_amount":`)
-	if bs, err := pc.HyperFormulationAmount.MarshalJSON(); err != nil {
+	if bs, err := pc.HyperCreationAmount.MarshalJSON(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(bs)
