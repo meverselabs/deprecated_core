@@ -11,13 +11,15 @@ import (
 )
 
 type TestNetRewarder struct {
-	LastPaidHeight uint32
-	PowerMap       map[common.Address]*amount.Amount
+	LastPaidHeight  uint32
+	PowerMap        map[common.Address]*amount.Amount
+	StakingPowerMap map[common.Address]map[common.Address]*amount.Amount
 }
 
 func NewTestNetRewarder() *TestNetRewarder {
 	rd := &TestNetRewarder{
-		PowerMap: map[common.Address]*amount.Amount{},
+		PowerMap:        map[common.Address]*amount.Amount{},
+		StakingPowerMap: map[common.Address]map[common.Address]*amount.Amount{},
 	}
 	return rd
 }
@@ -78,8 +80,14 @@ func (rd *TestNetRewarder) ProcessReward(addr common.Address, ctx *data.Context)
 					} else {
 						StakingPower := StakingAmount.MulC(int64(policy.StakingEfficiency1000)).DivC(1000)
 						ComissionPower := StakingPower.MulC(int64(frAcc.Policy.CommissionRatio1000)).DivC(1000)
-						rd.addRewardPower(StakingAddress, StakingPower.Sub(ComissionPower))
-						PowerSum = PowerSum.Add(ComissionPower)
+
+						if bs := ctx.AccountData(addr, consensus.ToAutoStakingKey(StakingAddress)); len(bs) > 0 && bs[0] == 1 {
+							rd.addStakingPower(addr, StakingAddress, StakingPower.Sub(ComissionPower))
+							PowerSum = PowerSum.Add(StakingPower)
+						} else {
+							rd.addRewardPower(StakingAddress, StakingPower.Sub(ComissionPower))
+							PowerSum = PowerSum.Add(ComissionPower)
+						}
 					}
 				}
 			}
@@ -96,8 +104,8 @@ func (rd *TestNetRewarder) ProcessReward(addr common.Address, ctx *data.Context)
 		}
 		TotalReward := policy.RewardPerBlock.MulC(int64(ctx.TargetHeight() - rd.LastPaidHeight))
 		Ratio := TotalReward.Mul(amount.COIN).Div(TotalPower)
-		for addr, PowerSum := range rd.PowerMap {
-			acc, err := ctx.Account(addr)
+		for RewardAddress, PowerSum := range rd.PowerMap {
+			acc, err := ctx.Account(RewardAddress)
 			if err != nil {
 				if err != data.ErrNotExistAccount {
 					return nil, err
@@ -107,8 +115,20 @@ func (rd *TestNetRewarder) ProcessReward(addr common.Address, ctx *data.Context)
 				frAcc.AddBalance(PowerSum.Mul(Ratio).Div(amount.COIN))
 				//log.Println("AddBalance", frAcc.Address().String(), PowerSum.Mul(Ratio).Div(amount.COIN).String())
 			}
-			rd.removeRewardPower(addr)
+			rd.removeRewardPower(RewardAddress)
 		}
+
+		for HyperAddress, PowerMap := range rd.StakingPowerMap {
+			for StakingAddress, PowerSum := range PowerMap {
+				bs := ctx.AccountData(HyperAddress, consensus.ToStakingKey(StakingAddress))
+				if len(bs) == 0 {
+					return nil, consensus.ErrInvalidStakingAddress
+				}
+				StakingAmount := amount.NewAmountFromBytes(bs)
+				ctx.SetAccountData(HyperAddress, consensus.ToStakingKey(StakingAddress), StakingAmount.Add(PowerSum.Mul(Ratio).Div(amount.COIN)).Bytes())
+			}
+		}
+		rd.StakingPowerMap = map[common.Address]map[common.Address]*amount.Amount{}
 
 		//log.Println("Paid at", ctx.TargetHeight())
 		rd.LastPaidHeight = ctx.TargetHeight()
@@ -130,9 +150,31 @@ func (rd *TestNetRewarder) removeRewardPower(addr common.Address) {
 	delete(rd.PowerMap, addr)
 }
 
+func (rd *TestNetRewarder) addStakingPower(addr common.Address, StakingAddress common.Address, Power *amount.Amount) {
+	//log.Println("addRewardPower", addr.String(), rd.getRewardPower(addr).Add(Power).String())
+	PowerMap, has := rd.StakingPowerMap[addr]
+	if !has {
+		PowerMap = map[common.Address]*amount.Amount{}
+		rd.StakingPowerMap[addr] = PowerMap
+	}
+	PowerMap[StakingAddress] = rd.getRewardPower(addr).Add(Power)
+}
+
 func (rd *TestNetRewarder) getRewardPower(addr common.Address) *amount.Amount {
 	if PowerSum, has := rd.PowerMap[addr]; has {
 		return PowerSum
+	} else {
+		return amount.NewCoinAmount(0, 0)
+	}
+}
+
+func (rd *TestNetRewarder) getStakingPower(addr common.Address, StakingAddress common.Address) *amount.Amount {
+	if PowerMap, has := rd.StakingPowerMap[addr]; has {
+		if PowerSum, has := PowerMap[StakingAddress]; has {
+			return PowerSum
+		} else {
+			return amount.NewCoinAmount(0, 0)
+		}
 	} else {
 		return amount.NewCoinAmount(0, 0)
 	}
@@ -145,13 +187,35 @@ func (rd *TestNetRewarder) buildSaveData() ([]byte, error) {
 	}
 	if _, err := util.WriteUint32(&buffer, uint32(len(rd.PowerMap))); err != nil {
 		return nil, err
-	}
-	for addr, PowerSum := range rd.PowerMap {
-		if _, err := addr.WriteTo(&buffer); err != nil {
-			return nil, err
+	} else {
+		for addr, PowerSum := range rd.PowerMap {
+			if _, err := addr.WriteTo(&buffer); err != nil {
+				return nil, err
+			}
+			if _, err := PowerSum.WriteTo(&buffer); err != nil {
+				return nil, err
+			}
 		}
-		if _, err := PowerSum.WriteTo(&buffer); err != nil {
-			return nil, err
+	}
+	if _, err := util.WriteUint32(&buffer, uint32(len(rd.StakingPowerMap))); err != nil {
+		return nil, err
+	} else {
+		for addr, PowerMap := range rd.StakingPowerMap {
+			if _, err := addr.WriteTo(&buffer); err != nil {
+				return nil, err
+			}
+			if _, err := util.WriteUint32(&buffer, uint32(len(PowerMap))); err != nil {
+				return nil, err
+			} else {
+				for StakingAddress, PowerSum := range PowerMap {
+					if _, err := StakingAddress.WriteTo(&buffer); err != nil {
+						return nil, err
+					}
+					if _, err := PowerSum.WriteTo(&buffer); err != nil {
+						return nil, err
+					}
+				}
+			}
 		}
 	}
 	return buffer.Bytes(), nil
@@ -177,6 +241,35 @@ func (rd *TestNetRewarder) LoadFromSaveData(SaveData []byte) error {
 			Amount := amount.NewCoinAmount(0, 0)
 			if _, err := Amount.ReadFrom(r); err != nil {
 				return err
+			}
+			rd.PowerMap[addr] = Amount
+		}
+	}
+	if Len, _, err := util.ReadUint32(r); err != nil {
+		return err
+	} else {
+		rd.StakingPowerMap = map[common.Address]map[common.Address]*amount.Amount{}
+		for i := 0; i < int(Len); i++ {
+			var addr common.Address
+			if _, err := addr.ReadFrom(r); err != nil {
+				return err
+			}
+			if Len2, _, err := util.ReadUint32(r); err != nil {
+				return err
+			} else {
+				PowerMap := map[common.Address]*amount.Amount{}
+				for j := 0; j < int(Len2); i++ {
+					var StakingAddress common.Address
+					if _, err := StakingAddress.ReadFrom(r); err != nil {
+						return err
+					}
+					Amount := amount.NewCoinAmount(0, 0)
+					if _, err := Amount.ReadFrom(r); err != nil {
+						return err
+					}
+					PowerMap[StakingAddress] = Amount
+				}
+				rd.StakingPowerMap[addr] = PowerMap
 			}
 		}
 	}

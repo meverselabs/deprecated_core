@@ -6,19 +6,21 @@ import (
 	"github.com/fletaio/common"
 )
 
+// tags
 var (
 	TagStaking     = []byte{1, 0}
 	tagAutoStaking = []byte{1, 1}
 )
 
-func toStakingKey(addr common.Address) []byte {
+// ToStakingKey returns the staking key of the staking address
+func ToStakingKey(addr common.Address) []byte {
 	bs := make([]byte, 2+common.AddressSize)
 	copy(bs, TagStaking)
 	copy(bs[2:], addr[:])
 	return bs
 }
 
-// FromStakingKey returns staking address if it is staking key
+// FromStakingKey returns the staking address if it is staking key
 func FromStakingKey(bs []byte) (common.Address, bool) {
 	if bytes.HasPrefix(bs, TagStaking) {
 		var addr common.Address
@@ -29,7 +31,8 @@ func FromStakingKey(bs []byte) (common.Address, bool) {
 	}
 }
 
-func toAutoStakingKey(addr common.Address) []byte {
+// ToAutoStakingKey returns the auto staking key of the staking address
+func ToAutoStakingKey(addr common.Address) []byte {
 	bs := make([]byte, 2+common.AddressSize)
 	copy(bs, tagAutoStaking)
 	copy(bs[2:], addr[:])

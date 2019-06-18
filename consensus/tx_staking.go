@@ -102,13 +102,13 @@ func init() {
 		}
 
 		var fromStakingAmount *amount.Amount
-		if bs := ctx.AccountData(tx.HyperFormulator, toStakingKey(tx.From())); len(bs) > 0 {
+		if bs := ctx.AccountData(tx.HyperFormulator, ToStakingKey(tx.From())); len(bs) > 0 {
 			fromStakingAmount = amount.NewAmountFromBytes(bs)
 		} else {
 			fromStakingAmount = amount.NewCoinAmount(0, 0)
 		}
 		fromStakingAmount.Add(tx.Amount)
-		ctx.SetAccountData(tx.HyperFormulator, toStakingKey(tx.From()), fromStakingAmount.Bytes())
+		ctx.SetAccountData(tx.HyperFormulator, ToStakingKey(tx.From()), fromStakingAmount.Bytes())
 		frAcc.StakingAmount = frAcc.StakingAmount.Add(tx.Amount)
 
 		ctx.Commit(sn)
